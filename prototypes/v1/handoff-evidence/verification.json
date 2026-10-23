@@ -1,0 +1,40 @@
+{
+  "audit_date": "2026-10-23",
+  "node": "v26.0.0",
+  "npm": "11.12.1",
+  "tests": {
+    "passed": 39,
+    "files": 4,
+    "result": "pass"
+  },
+  "production_build": "pass",
+  "fresh_clean_install_repeated": false,
+  "npm_audit_reported_vulnerabilities": 0,
+  "browser_checks": {
+    "node_plan_steps": 6,
+    "invalid_runtime_blocks_approval": true,
+    "node_ci_failure_statuses": [
+      "success",
+      "failed",
+      "skipped",
+      "skipped",
+      "skipped",
+      "skipped"
+    ],
+    "node_retry_successes": 6,
+    "ledger_incompatible_stack_and_publishing_blocked": true,
+    "java_default_plan_steps": 2,
+    "java_simulation_successes": 2,
+    "empty_evidence_incomplete": true,
+    "sample_evidence_explicitly_simulated": true,
+    "ledger_contextual_setup_uses_maven": true
+  },
+  "not_verified": [
+    "clipboard delivery",
+    "download delivery",
+    "all placeholder pages",
+    "real Backstage execution",
+    "real integrations"
+  ],
+  "application_source_modified": false
+}

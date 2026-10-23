@@ -1,0 +1,53 @@
+{
+  "simulated": true,
+  "description": "Fictional V1 inputs, not live Backstage execution",
+  "scenarios": [
+    {
+      "id": "node-launch",
+      "teamId": "orbit",
+      "request": {
+        "problem": "Launch a Node.js microservice with CI/CD, monitoring and documentation.",
+        "needs": [
+          "service",
+          "ci",
+          "monitoring",
+          "docs"
+        ],
+        "stack": "node",
+        "name": "demo-api",
+        "repo": "github.com?owner=example-org&repo=demo-api"
+      },
+      "expectedStepIds": [
+        "node",
+        "ci",
+        "monitoring",
+        "docs",
+        "publish",
+        "register"
+      ]
+    },
+    {
+      "id": "java-onboarding",
+      "teamId": "ledger",
+      "request": {
+        "problem": "Help a Java developer onboard to the ledger API.",
+        "needs": [
+          "onboarding",
+          "docs"
+        ],
+        "stack": "java",
+        "name": "ledger-onboarding",
+        "repo": "",
+        "targetService": "ledger-api"
+      },
+      "expectedStepIds": [
+        "onboard",
+        "docs"
+      ],
+      "forbiddenActions": [
+        "publish:github",
+        "catalog:register"
+      ]
+    }
+  ]
+}

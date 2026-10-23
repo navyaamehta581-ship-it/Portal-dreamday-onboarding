@@ -1,0 +1,8 @@
+import {stringify} from 'yaml';
+import type {Request,Step,Team} from '../domain/models';
+import {validate,resolveCapability} from './engine';
+export function generate(team:Team,r:Request,steps:Step[]):string{
+ const errors=validate(team,r,steps);if(errors.length)throw new Error(errors.join('\n'));
+ const publish=steps.some(s=>s.id==='publish');
+ return '# DEMONSTRATION ONLY. Local skeleton fixtures must be authored before use in Backstage.\n# No real integration, deployment, or credentials are included.\n'+stringify({apiVersion:'scaffolder.backstage.io/v1beta3',kind:'Template',metadata:{name:r.name,title:`${r.name} workflow`,description:'Generated simulation artifact; requires platform review.'},spec:{owner:`group:default/${team.id}`,type:'service',parameters:[{title:'Repository settings',required:publish?['name','owner','repoUrl']:['name','owner'],properties:{name:{type:'string',default:r.name},owner:{type:'string',default:`group:default/${team.id}`},...(publish?{repoUrl:{type:'string',default:r.repo}}:{})}}],steps:steps.map(s=>({id:s.id,name:s.title,action:resolveCapability(team,r,s.id)!.action,input:s.id==='publish'?{repoUrl:'${{ parameters.repoUrl }}',defaultBranch:'main',repoVisibility:'private'}:s.id==='register'?{repoContentsUrl:'${{ steps.publish.output.repoContentsUrl }}',catalogInfoPath:'/catalog-info.yaml'}:{url:resolveCapability(team,r,s.id)!.template,targetPath:s.id===r.stack?'.':`./${s.id}`,values:{name:'${{ parameters.name }}',owner:'${{ parameters.owner }}',...s.config}}})),output:{text:[{title:'Review required',content:team.canPublish?'Validate skeletons and installed action schemas in your own Backstage instance.':'Onboarding files are prepared in the task workspace only. No existing service is modified.'}]}}});
+}

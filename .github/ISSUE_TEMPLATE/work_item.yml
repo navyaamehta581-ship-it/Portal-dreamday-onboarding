@@ -1,0 +1,36 @@
+name: Module work item
+description: Plan a focused V2 change with dependencies and verifiable completion.
+title: "[Module] "
+body:
+  - type: dropdown
+    id: module
+    attributes:
+      label: Module
+      options:
+        - Catalog and context
+        - Planning and constraints
+        - Scaffolder and CI
+        - Frontend and testing
+        - Host setup and shared contracts
+        - Documentation and research
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Developer problem and proposed scope
+      description: Include what is implemented versus simulated. Use fictional examples.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria and validation
+      description: Describe observable completion and tests to run.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and contract reviewers
+      description: Link blocking issues and affected module interfaces. Claim an owner in the issue.
