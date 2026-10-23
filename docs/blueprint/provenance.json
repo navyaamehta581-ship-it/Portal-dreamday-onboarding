@@ -1,0 +1,13 @@
+{
+  "referenceFilename": "workflow_architect_micro_atomic_register(5).md",
+  "referenceSHA256": "e2a6374354b135d18700e7c7978131289c6422862be2be4fece5c7947f927636",
+  "createdDate": "2026-10-23",
+  "originalAtoms": 355,
+  "totalAtoms": 516,
+  "uniqueIDs": 516,
+  "dependencyDAG": "ACYCLIC",
+  "missingDependencies": [],
+  "repositoryModified": false,
+  "implementationStatus": "PLAN_ONLY",
+  "sourceIDCoverage": "COMPLETE"
+}

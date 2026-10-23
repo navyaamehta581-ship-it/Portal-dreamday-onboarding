@@ -1,5 +1,5 @@
-# Native frontend plugin — planned
+# portal-assistant — planned
 
-Plugin page, contextual drawer/entity entry, requirements, context review, workflow editor and task status. Use host UI/routes and authorized backend APIs. Do not port the fake portal shell or perform privileged actions in the browser.
+Thin dashboard/contextual interaction surfaces using the shared engine and authorized backend.
 
-This is a scope marker, not an implemented Backstage package. Generate the real package only after the host contract is agreed. Reuse V1 concepts selectively; see [architecture](../../docs/architecture.md) and [V1 feature matrix](../../docs/v1/V1_FEATURE_MATRIX.md).
+This directory contains no implemented plugin package. Generate only after the [managed Portal compatibility gate](../../docs/setup.md) and reviewed architecture decision. Package names and APIs must match the verified runtime. Preserve V1 regression behavior selectively; no tenant compatibility is established by this scope marker.

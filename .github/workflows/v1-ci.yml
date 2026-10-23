@@ -32,6 +32,9 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: prototypes/v1/package-lock.json
+      - name: Validate blueprint and backlog
+        working-directory: .
+        run: python3 scripts/validate_blueprint.py
       - name: Install locked dependencies
         run: npm ci
       - name: Run V1 unit tests
