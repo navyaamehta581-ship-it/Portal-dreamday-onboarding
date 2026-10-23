@@ -1,29 +1,20 @@
-# Collaboration architecture and module contracts
+# Architecture and reuse boundary
 
-## Current implementation
+The [blueprint](blueprint/spotify_portal_workflow_architect_micro_atomic_register.md) controls implementation scope. Architecture A/B/C remains undecided until tenant capabilities and runtime contracts are verified. No generic Backstage application is selected as the deployment target.
 
-`prototypes/v1/` is the audited V1 snapshot, unpacked without application source changes. Its domain/planning/generation/simulation are local pure TypeScript functions; its portal UI is React with in-memory state. All customer identities, policies, tools and external effects are fictional. See [V1 handoff](v1/V1_HANDOFF.md).
+## Proposed boundaries
 
-## Planned V2 layout
+- Domain/contracts: durable sessions, scoped context snapshots, requirements, deterministic policy, versioned plans and compiler outputs; independent of React and credentials.
+- Backend: authoritative authorization, persistence, approvals bound to exact revisions, attempts, reconciliation, evidence and analytics.
+- Adapters: permission-filtered catalog/docs, approved SCM/model, supported template/action/task interfaces. Each capability has explicit status, provenance and expiry.
+- Thin surfaces: dashboard and contextual assistance share the same engine. AiKA/MCP and digest remain conditional on proven entitlement and reviewed contracts.
 
-`packages/app` and `packages/backend` will compose the real host. `plugins/portal-assistant` will supply native UI; `plugins/portal-assistant-backend` will handle context, policy and orchestration; `plugins/portal-assistant-common` will hold portable types/rules. Current folders contain planning notes only, not manifests or a runnable native plugin. Follow the chosen host version rather than guessing API compatibility.
+These are intended modules, not existing manifests or endpoints. Existing `plugins/portal-assistant*` paths are planning markers; final package names and composition follow the verified Portal runtime. `packages/` does not commit the team to a self-hosted app/backend.
 
-[Backstage project conventions](https://backstage.io/docs/contribute/project-structure/) separate host packages and plugins. [Frontend plugin guidance](https://backstage.io/docs/frontend-system/building-plugins/index/) assumes a Backstage workspace; generator output/frontend APIs must be checked against the target host.
+## V1 reuse
 
-## Proposed contract boundary (not an API already implemented)
+Preserve `prototypes/v1/src/logic/` and its tests as reference behavior: structured intake, constraint/dependency validation, YAML serialization, conversations and simulated failure/retry. Extract pure rules only with reviewed contracts and regression tests. Replace static fixture discovery, browser policy decisions, in-memory execution and regex/self-reported evidence before claiming real integration. Do not copy the fake Portal shell into a production plugin.
 
-1. Context discovery returns an authorized context snapshot: subject/team entityRefs, visible service entityRefs, source references, allowed capabilities/actions, restrictions, version and timestamp. A selected team is never proof of permission.
-2. Planning consumes a structured request and that snapshot, returning ordered steps, dependencies, configuration schemas, coverage, explanations and blockers. Prose/model output proposes fields; deterministic validation decides eligibility.
-3. Compilation consumes a validated versioned plan and reviewed template/action registry, returning a review artifact or explicit errors. It must not invent action IDs, missing templates or unsupported capabilities.
-4. Approval binds actor and exact plan/context versions. Execution rechecks server-side authorization and submits a supported reviewed template through the host's task infrastructure.
-5. Task events and evidence retain provenance. Simulated, self-reported and independently verified results remain distinct. Retrying requires explicit idempotency/task semantics.
+## Contract review
 
-Agree on serializable schemas, error codes and fixtures in a contract PR before parallel module implementation. Do not create actual HTTP endpoints until identity, permissions and host routing are understood. Optional model requests belong on the backend with bounded tools and no browser secrets.
-
-## Ownership
-
-Context discovery and workflow planning review each other's request/context contracts. The compiler/task workstream reviews planner configuration/dependency semantics. Frontend/testing reviews user correction, approval invalidation and error display across all contracts. Host wiring and shared contracts need a second module's review. People claim work through issues; no individual is assigned by this proposal.
-
-## V1 boundary
-
-Keep V1 runnable with its own npm lockfile. Do not move V1 React components into native plugin folders wholesale. Reuse pure rules after removing fixture coupling and adding runtime schemas/cycle handling. Replace browser authorization, regex evidence verification, mock task events, absent skeletons and static tool discovery before real execution.
+Agree typed inputs/outputs, failure states, ACL rules, freshness, revision hashes and recovery before implementing adapters. A changed plan or context invalidates approval. Server-side policy remains authoritative; model text and retrieved documentation never grant permissions. Independently verify provider outcomes before marking deliverables successful.

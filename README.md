@@ -1,32 +1,18 @@
-# Portal Assistant — Spotify Portal workflow concept
+# Spotify Portal AI Workflow Architect
 
-A collaboration repository for evolving the **V1 Portal Assistant prototype** (formerly AI Workflow Architect) into a **V2 native Backstage plugin**. Tell Portal what you are trying to accomplish, then review a workflow grounded in your team's approved tools and constraints.
+Team workspace for implementing the [516-atom Portal blueprint](docs/blueprint/spotify_portal_workflow_architect_micro_atomic_register.md). The target is **Spotify-managed Portal**. Backstage examples alone do not establish managed deployment, API access or tenant compatibility.
 
-**Current status:** V1 is runnable React/TypeScript/Vite software with fictional customer data, deterministic planning and simulated execution. V2 plugin packages and Backstage host have not been generated. No real Spotify connection, AI provider, Scaffolder execution or deployment is included.
+**Implemented today:** a runnable V1 React/TypeScript prototype with fictional data, deterministic planning and simulated execution. Plugin folders contain scope notes only. There is no implemented Portal backend, authenticated tenant integration, production execution or certified plugin artifact.
 
-## Repository map
+## Start in VS Code
 
-```text
-packages/                  Planned Backstage host app/backend wiring
-plugins/
-  portal-assistant/        Planned native frontend plugin
-  portal-assistant-backend/ Planned backend context, policy and orchestration
-  portal-assistant-common/  Planned shared contracts and pure planning rules
-prototypes/v1/             Preserved, runnable V1 source with its own npm lockfile
-docs/                      Architecture, roadmap, research and audited V1 handoff
-examples/                  Fictional requests and illustrative template YAML
-tests/                     Integration and end-to-end acceptance plans
-.github/                   V1 CI, issue forms and pull request template
-CONTRIBUTING.md            Branch, review, ownership and validation process
-.env.example               Comments explaining future configuration boundaries
-V1_SOURCE_HANDOFF.zip      Original immutable V1 transfer archive
+```sh
+git clone https://github.com/navyaamehta581-ship-it/Spotify-portal-solution.git
+cd Spotify-portal-solution
+code .
 ```
 
-`packages/` and `plugins/` contain planning notes only. This follows [Backstage's monorepo conventions](https://backstage.io/docs/contribute/project-structure/); the final scaffold must match the actual host version and frontend/backend APIs.
-
-## Run V1 locally
-
-Use Node **24** and npm (the audit also passed on Node 26). Initial installation requires registry access. From the repository root:
+Use Node 24 and npm for V1; installation requires registry access. In a VS Code terminal:
 
 ```sh
 cd prototypes/v1
@@ -34,27 +20,35 @@ npm ci
 npm run dev -- --port 5173 --strictPort
 ```
 
-Open http://127.0.0.1:5173/ and leave the server running. No `.env`, API keys, database or external infrastructure is required. Reloading resets in-memory tasks and conversations.
+Open http://127.0.0.1:5173/. No credentials or environment file are required. Reload resets local tasks and conversations. In another terminal from the same directory:
 
 ```sh
 npm test
 npm run build
 ```
 
-The 23 October 2026 V1 audit passed **39 tests across four files** and a production build. The PR workflow repeats those commands from `prototypes/v1/`; it does not test native Backstage functionality. CI results belong to each GitHub run and must be checked before merging.
+These checks validate the prototype only. There is no root npm workspace or Portal plugin start command yet. See [setup and compatibility gates](docs/setup.md) before generating packages.
 
-## Demo paths
+## Team workflow
 
-- Orbit: Node.js service, CI/CD, monitoring and documentation; six simulated steps including publishing and registration.
-- Ledger: Java onboarding for an existing service; repository creation is prohibited; Java setup and documentation use fetch actions only.
-- Ask Portal: open a catalog service and request local setup guidance; continue into a contextual tracked task.
+Read [CONTRIBUTING.md](CONTRIBUTING.md), claim an atom from the [backlog](docs/backlog.md), and work on a separate branch and PR. Each atom needs an owner, reviewer, explicit dependencies, acceptance checks and evidence. Do not mark an atom complete from a mock, screenshot or written plan alone. [Repository inventory](docs/repository-inventory.md) explains retained V1 code and the setup guidance replaced by this change.
 
-All integrations, permissions, artifacts and execution are simulated. Generated YAML references missing illustrative skeletons; it is not ready for real execution. Task evidence is self-reported or explicitly simulated.
+## Repository map
 
-## Collaborate
+| Path | Role |
+| --- | --- |
+| `docs/blueprint/` | Unmodified blueprint, dependency ledger and original provenance |
+| `docs/backlog/atoms.json` | Editable team tracking for all 516 atoms; initially NOT_STARTED |
+| `docs/architecture.md` | Domain boundaries and architecture selection gate |
+| `docs/roadmap.md` | Dependency-led implementation order |
+| `plugins/` | Proposed frontend, backend and common scope markers; no packages yet |
+| `packages/` | Reserved integration composition; no generic host scaffold promised |
+| `prototypes/v1/` | Runnable source, lockfile, 39 existing unit tests and audit records |
+| `examples/` | Fictional scenarios and illustrative YAML with missing skeletons |
+| `tests/` | Integration/E2E acceptance plans, not automated suites |
+| `.github/` | V1 CI, issue form and PR review template |
+| `V1_SOURCE_HANDOFF.zip` | Preserved original transfer archive |
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md), [module boundaries](docs/architecture.md) and the [roadmap](docs/roadmap.md). Use an issue, a separate branch and a pull request. Do not merge your own unreviewed work or push directly to `main`. Repository rules require a separate maintainer settings change; this documentation alone does not enforce them.
+The Orbit launch and Ledger onboarding demos simulate all permissions, integrations and external effects. V1's fake Portal shell, fixture authorization and text-based evidence checks are not production integration components. Preserve useful rules and regression cases while replacing those boundaries.
 
-Start a V2 development chat with [the handoff](docs/v1/V1_HANDOFF.md), [feature matrix](docs/v1/V1_FEATURE_MATRIX.md), this repository, and the actual target Backstage host/version. The source archive is retained for comparison. Do not independently scaffold multiple incompatible Backstage apps in this repository.
-
-No project source license has been selected. Obtain approval before public redistribution, including the screenshot-derived logo. See the handoff for dependency and branding considerations.
+No project source license has been selected. Branding and redistribution considerations remain in the [V1 handoff](docs/v1/V1_HANDOFF.md).

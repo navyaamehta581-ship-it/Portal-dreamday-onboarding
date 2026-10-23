@@ -1,19 +1,15 @@
 ## Problem and resulting behavior
 
-Explain the developer problem and what changes. Link the issue and affected module.
+Link atom IDs, issues and reviewed dependency/applicability decisions. Describe the resulting behavior.
 
-## Implemented versus simulated
+## Evidence and boundaries
 
-State which context, integrations, actions, artifacts and evidence are real, simulated or still missing.
+State implemented versus simulated behavior, managed Portal capability assumptions and unresolved gates. Include the REP-008 scope amendment when relevant.
 
 ## Validation
 
-List commands actually run and their results. Include relevant UI screenshots with fictional data. Do not claim integration/E2E checks that do not exist.
+Record exact commands, runtime, commit, positive/negative results and limitations. A V1 build is not tenant compatibility proof.
 
-## Review
+## Review and tracking
 
-- [ ] Focused branch/PR; no direct main changes
-- [ ] Shared contract/permission changes reviewed by the affected module
-- [ ] No credentials, private customer data or unintended dependency/build artifacts
-- [ ] Source/docs/lockfiles reflect the final change
-- [ ] Current CI checked and relevant failures explained
+Link proof and reviewer decision; update docs/backlog/atoms.json. Explain removals and preserve uncertain files. Do not merge or publish as part of preparing this PR.
