@@ -52,3 +52,5 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md), claim an atom from the [backlog](docs/b
 The Orbit launch and Ledger onboarding demos simulate all permissions, integrations and external effects. V1's fake Portal shell, fixture authorization and text-based evidence checks are not production integration components. Preserve useful rules and regression cases while replacing those boundaries.
 
 No project source license has been selected. Branding and redistribution considerations remain in the [V1 handoff](docs/v1/V1_HANDOFF.md).
+
+The [cleanup audit](docs/cleanup-audit.md) records the current pinned inventory, deletion evidence and items requiring review.
