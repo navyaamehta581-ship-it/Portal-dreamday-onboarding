@@ -1,0 +1,22 @@
+name: Bug report
+description: Report a reproducible prototype or plugin failure.
+title: "[Bug] "
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Include branch/commit, team, service, selected requirements and environment. No secrets.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected versus actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized evidence and checks
+      description: Logs/screenshots using fictional data, commands run, and known limitations.

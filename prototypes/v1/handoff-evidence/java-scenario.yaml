@@ -1,0 +1,51 @@
+# DEMONSTRATION ONLY. Local skeleton fixtures must be authored before use in Backstage.
+# No real integration, deployment, or credentials are included.
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: ledger-onboarding
+  title: ledger-onboarding workflow
+  description: Generated simulation artifact; requires platform review.
+spec:
+  owner: group:default/ledger
+  type: service
+  parameters:
+    - title: Repository settings
+      required:
+        - name
+        - owner
+      properties:
+        name:
+          type: string
+          default: ledger-onboarding
+        owner:
+          type: string
+          default: group:default/ledger
+  steps:
+    - id: onboard
+      name: Existing-service onboarding pack
+      action: fetch:template
+      input:
+        url: ./skeletons/onboarding-java
+        targetPath: ./onboard
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          existingService: ledger-api
+          runtime: Java 21
+          setupProcedure: Approved Maven wrapper setup
+    - id: docs
+      name: Documentation & ownership
+      action: fetch:template
+      input:
+        url: ./skeletons/docs
+        targetPath: ./docs
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          docOwner: ledger
+  output:
+    text:
+      - title: Review required
+        content: Onboarding files are prepared in the task workspace only. No existing
+          service is modified.

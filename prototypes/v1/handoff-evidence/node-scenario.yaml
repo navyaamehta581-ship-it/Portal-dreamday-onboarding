@@ -1,0 +1,86 @@
+# DEMONSTRATION ONLY. Local skeleton fixtures must be authored before use in Backstage.
+# No real integration, deployment, or credentials are included.
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: discovery-gateway
+  title: discovery-gateway workflow
+  description: Generated simulation artifact; requires platform review.
+spec:
+  owner: group:default/orbit
+  type: service
+  parameters:
+    - title: Repository settings
+      required:
+        - name
+        - owner
+        - repoUrl
+      properties:
+        name:
+          type: string
+          default: discovery-gateway
+        owner:
+          type: string
+          default: group:default/orbit
+        repoUrl:
+          type: string
+          default: github.com?owner=example-org&repo=discovery-gateway
+  steps:
+    - id: node
+      name: Node.js service skeleton
+      action: fetch:template
+      input:
+        url: ./skeletons/node
+        targetPath: .
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          runtime: Node.js 22 LTS
+    - id: ci
+      name: CI/CD configuration
+      action: fetch:template
+      input:
+        url: ./skeletons/ci-node
+        targetPath: ./ci
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          testCommand: npm test
+    - id: monitoring
+      name: Observability baseline
+      action: fetch:template
+      input:
+        url: ./skeletons/monitoring
+        targetPath: ./monitoring
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          alertOwner: orbit
+    - id: docs
+      name: Documentation & ownership
+      action: fetch:template
+      input:
+        url: ./skeletons/docs
+        targetPath: ./docs
+        values:
+          name: ${{ parameters.name }}
+          owner: ${{ parameters.owner }}
+          docOwner: orbit
+    - id: publish
+      name: Publish repository
+      action: publish:github
+      input:
+        repoUrl: ${{ parameters.repoUrl }}
+        defaultBranch: main
+        repoVisibility: private
+    - id: register
+      name: Register in catalog
+      action: catalog:register
+      input:
+        repoContentsUrl: ${{ steps.publish.output.repoContentsUrl }}
+        catalogInfoPath: /catalog-info.yaml
+  output:
+    text:
+      - title: Review required
+        content: Validate skeletons and installed action schemas in your own Backstage
+          instance.

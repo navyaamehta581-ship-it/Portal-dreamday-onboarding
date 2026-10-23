@@ -1,0 +1,22 @@
+# Dependencies/builds (all workspace directories)
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.env
+.env.*
+!.env.example
+app-config.local.yaml
+app-config.*.local.yaml
+playwright-report/
+test-results/
+*.pem
+*.key
+# Future Yarn Berry workspace: retain releases/plugins/config and the chosen lockfile
+.yarn/cache/
+.yarn/install-state.gz
