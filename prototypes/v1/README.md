@@ -73,3 +73,7 @@ Reference: [Official Backstage template documentation](https://backstage.io/docs
 ## Contextual assistance
 
 Catalog, service detail, Docs, Create, My Group and APIs offer a small “Ask Portal” chat button. It uses the current page, selected service, fixture ownership, guides and team policy. Answers name their fixture sources and can open documentation or continue a concrete setup/service-planning task in the same Portal Assistant, with context preselected. This is deterministic local retrieval, not a live Claude/ChatGPT integration. It does not execute commands.
+
+## Historical audit
+
+The canonical [V1 handoff](../../docs/v1/V1_HANDOFF.md) and [feature matrix](../../docs/v1/V1_FEATURE_MATRIX.md) are kept in `docs/v1/`. Redundant copies formerly in this directory were removed; the original transfer archive and audit evidence remain preserved.
