@@ -1,5 +1,7 @@
 # Portal Assistant — integrated portal prototype
 
+The new **GitHub workflow diagnosis** panel reads repository evidence through a local backend. See [setup, two-contributor branches, document review and limitations](../../docs/v1/github-inspection.md). Start it with `npm run start:inspector` in a separate terminal, then `npm run dev`. The original workflow demo below continues to use fixtures.
+
 A local React + TypeScript + Vite + Tailwind application demonstrating a proposed Portal workflow feature. The screenshot-referenced shell is representative, **not a Backstage installation or a production Spotify Portal integration**. All customer records, permissions, APIs, templates and execution outputs are simulated. No API keys, credentials, backend, external infrastructure or deployments are required.
 
 ## Run

@@ -36,5 +36,7 @@ jobs:
         run: npm ci
       - name: Run V1 unit tests
         run: npm test
+      - name: Check read-only GitHub inspector
+        run: npm run test:inspector
       - name: Check types and build V1
         run: npm run build

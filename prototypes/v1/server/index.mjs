@@ -4,6 +4,8 @@ const server = createServer(async (req,res) => {
   res.setHeader('Content-Type','application/json');
   res.setHeader('Cache-Control','no-store');
   if (req.method !== 'POST' || req.url !== '/api/diagnose') {res.writeHead(404);res.end('{}');return;}
+  if (req.headers.host !== '127.0.0.1:8787' && req.headers.host !== '127.0.0.1:5173') {res.writeHead(403);res.end('{}');return;}
+  if (!req.headers['content-type']?.startsWith('application/json')) {res.writeHead(415);res.end('{}');return;}
   if (req.headers.origin && req.headers.origin !== 'http://127.0.0.1:5173') {res.writeHead(403);res.end('{}');return;}
   try {
     let body = '';
