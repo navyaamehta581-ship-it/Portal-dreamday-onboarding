@@ -16,6 +16,10 @@ Inspected the uncommitted previous-session implementation, `phase-a-handoff.md`,
 | Backend development integration support | Real no-model API existed; no fixture endpoint | Added read-only GET `/api/conversations/v1/fixtures`, tested without a model/token. |
 | Automated checks | Existing frontend and in-process backend tests | Added HTTP/error cases, contract boundary checks and Phase A CI step. |
 
+## GitHub and VS Code handoff
+
+The team will work from GitHub in VS Code. No local Backstage installation is required or configured. After checking out `feat/checkpoint-1-foundation`, open the repository in VS Code. Frontend work can begin directly with the fixture imports below; running the V1 prototype is optional. The temporary preview servers used for acceptance verification have been stopped.
+
 ## Teammate integration
 
 Canonical contract: `prototypes/v1/src/phase-a/contract.ts`, version `1.0.0`. Runtime imports in shared fixture/controller modules use `.ts` extensions so both Vite and Node's native TypeScript support can consume the same files. No new dependencies or lockfile changes.
@@ -50,6 +54,9 @@ Actual final results:
 - `npm run test:inspector`: **13 passed**, existing injected GitHub-provider suite.
 - `npm run test:phase-a`: **3 passed** (durability/concurrency plus two real HTTP integration scenarios with multiple assertions).
 - `npm run build`: **passed**, including compile-time negative checks for read-only boundaries, evidence statuses, capability statuses and non-execution artifacts.
+- Existing integration goal API: **9 tests passed on Node 24.22.1**, including separate-process restart persistence; `npm run check` **passed**.
+- Inspector and conversation suites also passed on Node 24.22.1 (16 combined backend tests); V1 tests/build used installed Node 26.0.0.
+- Blueprint/backlog validation: **passed**, 516 unique atoms with consistent dependency tracking.
 - `git diff --check`: **passed**.
 - Backstage V2 before/after porcelain statuses: **identical**; no V2 files were written.
 
