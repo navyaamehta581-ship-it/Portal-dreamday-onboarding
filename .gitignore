@@ -20,3 +20,6 @@ test-results/
 # Future Yarn Berry workspace: retain releases/plugins/config and the chosen lockfile
 .yarn/cache/
 .yarn/install-state.gz
+
+# Local Phase A conversations (may contain developer context)
+prototypes/v1/server/phase-a/.data/
