@@ -1,1 +1,30 @@
-{"name":"workflow-architect","version":"1.0.0","private":true,"type":"module","scripts":{"dev":"vite --host 127.0.0.1","build":"tsc -b && vite build","test":"vitest run"},"dependencies":{"lucide-react":"^0.468.0","react":"^19.1.0","react-dom":"^19.1.0","yaml":"^2.8.0"},"devDependencies":{"@tailwindcss/vite":"^4.1.0","@types/react":"^19.1.0","@types/react-dom":"^19.1.0","@vitejs/plugin-react":"^4.5.0","tailwindcss":"^4.1.0","typescript":"~5.8.3","vite":"^6.3.0","vitest":"^5.0.5"}}
+{
+  "name": "workflow-architect",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "start:inspector": "node server/index.mjs",
+    "test:inspector": "node --test server/diagnose.node-test.mjs",
+    "test:phase-a": "node --test server/phase-a/*.node-test.mjs"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "yaml": "^2.8.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.5.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.0",
+    "vitest": "^5.0.5"
+  }
+}
