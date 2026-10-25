@@ -1,19 +1,8 @@
 import {createServer} from 'node:http';
-import {diagnose, validateInput} from './diagnose.mjs';
-const server = createServer(async (req,res) => {
-  res.setHeader('Content-Type','application/json');
-  res.setHeader('Cache-Control','no-store');
-  if (req.method !== 'POST' || req.url !== '/api/diagnose') {res.writeHead(404);res.end('{}');return;}
-  if (req.headers.host !== '127.0.0.1:8787' && req.headers.host !== '127.0.0.1:5173') {res.writeHead(403);res.end('{}');return;}
-  if (!req.headers['content-type']?.startsWith('application/json')) {res.writeHead(415);res.end('{}');return;}
-  if (req.headers.origin && req.headers.origin !== 'http://127.0.0.1:5173') {res.writeHead(403);res.end('{}');return;}
-  try {
-    let body = '';
-    for await (const chunk of req) { body += chunk; if (Buffer.byteLength(body)>8192) {res.writeHead(413);res.end('{}');return;} }
-    let input;
-    try {input=validateInput(JSON.parse(body));} catch {res.writeHead(400);res.end(JSON.stringify({error:'Enter a goal and owner/name repository.'}));return;}
-    res.end(JSON.stringify(await diagnose(input)));
-  } catch {res.writeHead(500);res.end(JSON.stringify({error:'Inspection failed.'}));}
-});
+import {fileURLToPath} from 'node:url';
+import {createStore} from './phase-a/store.mjs';
+import {createRequestHandler} from './http-handler.mjs';
+const store=createStore(fileURLToPath(new URL('./phase-a/.data/',import.meta.url)));
+const server=createServer(createRequestHandler(store));
 server.requestTimeout=15000;
-server.listen(8787,'127.0.0.1',()=>console.log('Read-only GitHub inspector: http://127.0.0.1:8787'));
+server.listen(8787,'127.0.0.1',()=>console.log('Read-only GitHub inspector and Phase A chat: http://127.0.0.1:8787'));
