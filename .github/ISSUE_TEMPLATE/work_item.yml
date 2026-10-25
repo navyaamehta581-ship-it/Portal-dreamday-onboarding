@@ -1,36 +1,43 @@
-name: Module work item
-description: Plan a focused V2 change with dependencies and verifiable completion.
-title: "[Module] "
+name: Blueprint atom
+description: Claim a focused managed Portal atom with dependencies and evidence.
+title: "[ATOM-ID] "
 body:
-  - type: dropdown
-    id: module
+  - type: input
+    id: atoms
     attributes:
-      label: Module
-      options:
-        - Catalog and context
-        - Planning and constraints
-        - Scaffolder and CI
-        - Frontend and testing
-        - Host setup and shared contracts
-        - Documentation and research
+      label: Atom IDs and dependencies
+      description: Use the register IDs; link prerequisite issues and their proof.
+    validations:
+      required: true
+  - type: input
+    id: ownership
+    attributes:
+      label: Owner and reviewer
     validations:
       required: true
   - type: textarea
-    id: problem
+    id: contract
     attributes:
-      label: Developer problem and proposed scope
-      description: Include what is implemented versus simulated. Use fictional examples.
+      label: Contract and scope
+      description: Expand the blueprint ticket schema including files, inputs, operation, outputs, failure/recovery and applicability. State real versus simulated behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Managed Portal assumptions and evidence
+      description: Cite runtime/capability decisions or mark UNKNOWN. Generic Backstage examples do not establish tenant compatibility.
     validations:
       required: true
   - type: textarea
     id: acceptance
     attributes:
-      label: Acceptance criteria and validation
-      description: Describe observable completion and tests to run.
+      label: PASS criterion, positive and negative tests
+      description: Retain the atom criterion and identify the evidence layer and exact validation commands.
     validations:
       required: true
   - type: textarea
-    id: dependencies
+    id: proof
     attributes:
-      label: Dependencies and contract reviewers
-      description: Link blocking issues and affected module interfaces. Claim an owner in the issue.
+      label: Proof and review decision
+      description: Add sanitized run/commit references, provider or tenant observations where required, PR and reviewer decision before DONE. Update docs/backlog/atoms.json.

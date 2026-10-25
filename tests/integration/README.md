@@ -6,4 +6,4 @@
 - Real template/task integration handles success, failure, retry and cancellation without duplicate side effects.
 - Server rejects prohibited repository/infrastructure operations despite browser/model manipulation.
 
-No integration harness or passing integration test is included yet. Implement against the agreed Backstage host and version.
+No integration harness or passing integration test is included yet. Implement against the verified managed Portal contracts and pinned runtime; see `docs/setup.md`.

@@ -1,0 +1,12 @@
+{
+  "atomCount": 516,
+  "uniqueAtomIDs": 516,
+  "sourceIDsRetained": 355,
+  "allAtomsHaveDependenciesAndPass": true,
+  "allTicketsInitiallyNotStarted": true,
+  "balancedCodeFences": true,
+  "hasOriginalTicketFields": true,
+  "originalIDsCoveredExactlyOnce": true,
+  "dependencyDAG": "ACYCLIC (validated during generation)",
+  "scope": "Document checks only; no software or tenant behavior tested"
+}
