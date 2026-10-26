@@ -27,7 +27,7 @@ export function ActivationPage(){
  function changeIdentity(){setState(null);pending.current=null;setReviewedBlocker('');setBlockerAccepted(false);setBlockerNote('');setNoteReviewed(false);setError('');}
  async function submitReviewedBlocker(){
   if(!state)return;
-  try{if(!pending.current)pending.current=JSON.parse(reviewedBlocker) as BlockerUpdate;}catch{setError('The reviewed blocker command is not valid JSON.');return;}
+  try{if(!pending.current){const candidate=JSON.parse(reviewedBlocker) as BlockerUpdate;if(candidate.customerId!==state.customerId||candidate.developerSessionId!==state.developerSessionId||candidate.expectedRevision!==state.revision||candidate.planRevision!==state.planRevision)throw new Error('STALE_BLOCKER');pending.current=candidate;}}catch{setError('The reviewed command is invalid or belongs to a different customer, session, or revision. Refresh and request a new reviewed command.');return;}
   await run(async()=>{const next=await client().blocker(pending.current!);setBlockerAccepted(true);return next;});
  }
  function submitBlockerNote(){
