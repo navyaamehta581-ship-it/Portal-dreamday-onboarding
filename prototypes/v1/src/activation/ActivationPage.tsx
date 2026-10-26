@@ -1,5 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
-import {activationClient,ActivationRequestError} from './client';
+import {activationClient} from './client';
 import type {ActivationState} from '../../../../contracts/activation/v1/state';
 import type {CustomerContext,ActivationPlan,BlockerUpdate} from '../../../../contracts/activation/v1/types';
 import './activation.css';
@@ -16,7 +16,7 @@ export function ActivationPage(){
   setBusy(true);setError('');
   try{setState(await work());}
   catch(e){
-   if(e instanceof ActivationRequestError&&e.status===409)setError('This session changed elsewhere. Your draft is still here; refresh the saved session before retrying.');
+   if(typeof e==='object'&&e!==null&&'status' in e&&(e as {status:number}).status===409)setError('This session changed elsewhere. Your draft is still here; refresh the saved session before retrying.');
    else setError(e instanceof Error?e.message:'ACTIVATION_UNAVAILABLE');
   }finally{setBusy(false);}
  }
@@ -61,7 +61,7 @@ export function ActivationPage(){
      <details className="activation-intake"><summary>Integration handoff: submit a reviewed blocker command</summary><p>This path exists for a reviewer using an exact, evidence-admitted command. Free-form blocker text cannot yet create a valid command or new plan.</p><textarea aria-label="Blocker command" rows={7} value={reviewedBlocker} disabled={!!pending.current} onChange={e=>setReviewedBlocker(e.target.value)} placeholder="Reviewed blocker JSON"/><div className="activation-actions"><button className="activation-button secondary" disabled={!ready||!reviewedBlocker||blockerAccepted} onClick={submitReviewedBlocker}>Submit / retry reviewed blocker</button><button className="activation-button link" disabled={busy} onClick={()=>{pending.current=null;setReviewedBlocker('');setBlockerAccepted(false);}}>Clear reviewed draft</button></div>{blockerAccepted&&<p>Blocker accepted. The server will recover the plan; refresh or wait for the next poll.</p>}</details>
     </section>
 
-    <section className="activation-card"><p className="activation-kicker">Evidence, not confetti</p><h2>What the system can actually support</h2><div className="activation-evidence">{evidenceFor(state.plan.suggestedNextAction.evidenceIds).map(record=><article key={record.id}><small>{record.kind.replace('_',' ')} · {record.proof.type}</small><p>{record.claim}</p><small>{record.source} · observed {new Date(record.observedAt).toLocaleString()}</small></article>)}</div><p className="activation-disclaimer">GitHub observations are read-only facts; inferred, reported, or simulated evidence is never presented as a deployment, adoption, or ROI result.</p></section>
+    <section className="activation-card"><p className="activation-kicker">Evidence, not confetti</p><h2>What the system can actually support</h2><div className="activation-evidence">{state.evidence.map(record=><article key={record.id}><small>{record.kind} · {record.proof.type}</small><p>{record.claim}</p><small>{record.source} · observed {new Date(record.observedAt).toLocaleString()}</small></article>)}</div><p className="activation-disclaimer">GitHub observations are read-only facts; inferred, reported, or simulated evidence is never presented as a deployment, adoption, or ROI result.</p></section>
    </div>
 
    <aside className="activation-side">
