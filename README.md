@@ -1,5 +1,7 @@
 # Spotify Portal AI Workflow Architect
 
+> **Activation pivot:** The current product direction is Spotify Portal Activation Intelligence. See [preservation and integration order](docs/activation-preservation.md) and the [historical V1 snapshot](archive/workflow-architect-v1/README.md). Original sources remain in place; existing APIs are unchanged. The blueprint below records the earlier scope pending a reviewed roadmap update.
+
 Team workspace for implementing the [516-atom Portal blueprint](docs/blueprint/spotify_portal_workflow_architect_micro_atomic_register.md). The target is **Spotify-managed Portal**. Backstage examples alone do not establish managed deployment, API access or tenant compatibility.
 
 **Implemented today:** a runnable V1 React/TypeScript prototype with fictional data, deterministic planning and simulated execution. Plugin folders contain scope notes only. There is no implemented Portal backend, authenticated tenant integration, production execution or certified plugin artifact.

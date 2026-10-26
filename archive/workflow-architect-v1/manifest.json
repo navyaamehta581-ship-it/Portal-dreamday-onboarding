@@ -1,0 +1,30 @@
+{
+  "snapshot_base": "a32e3c1fd2da2f24f80ec8d6c4e238746754f76a",
+  "purpose": "Historical preservation during activation-intelligence pivot; originals retained",
+  "files": [
+    {
+      "original": "prototypes/v1/src/App.tsx",
+      "snapshot": "archive/workflow-architect-v1/prototypes/v1/src/App.tsx",
+      "sha256": "158d5992d77f80c3c211743ad39deaa9c7f672f7c2cd16509f2932873e611761",
+      "original_retained": true
+    },
+    {
+      "original": "prototypes/v1/src/components/Concept.tsx",
+      "snapshot": "archive/workflow-architect-v1/prototypes/v1/src/components/Concept.tsx",
+      "sha256": "2c41e83931e11f1469ef84a911d86fa40de9f683feeaa64e11af8e2a6b50c900",
+      "original_retained": true
+    },
+    {
+      "original": "prototypes/v1/src/components/concept.css",
+      "snapshot": "archive/workflow-architect-v1/prototypes/v1/src/components/concept.css",
+      "sha256": "f88e6bfe938a93e372431dcccfce27044f9e604508fd1b1d10ccab3c5bc3fdd6",
+      "original_retained": true
+    },
+    {
+      "original": "V1_SOURCE_HANDOFF.zip",
+      "snapshot": "archive/workflow-architect-v1/V1_SOURCE_HANDOFF.zip",
+      "sha256": "f500f6d312f68a3011f69f5909867484ad7393d8dfcbd19220bf2d39d6414a7a",
+      "original_retained": true
+    }
+  ]
+}
