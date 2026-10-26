@@ -1,0 +1,18 @@
+[
+  {
+    "id": "ci",
+    "title": "CI/CD configuration"
+  },
+  {
+    "id": "onboard",
+    "title": "Existing-service onboarding pack"
+  },
+  {
+    "id": "docs",
+    "title": "Documentation & ownership"
+  },
+  {
+    "id": "node",
+    "title": "Node.js service skeleton"
+  }
+]

@@ -63,3 +63,7 @@ test('HTTP rejection paths all use versioned errors; injected backend control is
  // Existing inspector keeps its existing validation response and does not call GitHub here.
  const inspector=await request('/api/diagnose',{method:'POST',body:'{}'});assert.equal(inspector.status,400);assert.equal(typeof inspector.body.error,'string');
 }));
+test('local inspector route 404 is explicitly different from upstream GitHub failure',()=>withServer(async request=>{
+ const r=await request('/api/diagnose-typo',{method:'POST',body:'{}'});
+ assert.equal(r.status,404);assert.deepEqual(r.body.error,{code:'NOT_FOUND',message:'Route not found.',source:'local_inspector'});
+}));

@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "observedAt": "2026-10-26T21:32:03.377Z",
+  "repository": "navyaamehta581-ship-it/Spotify-portal-solution",
+  "access": {
+    "browser": "authenticated; repository visibly Private",
+    "anonymousApi": "404 at metadata",
+    "connectedApi": "PR #8 check diagnostics succeeded"
+  },
+  "checks": [
+    {
+      "id": 121220855075,
+      "name": "goal-api",
+      "head_sha": "65bd2b2f849756dca936e67bb96d1bc44e5428dc",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/navyaamehta581-ship-it/Spotify-portal-solution/actions/runs/40210618670/job/121220855075"
+    },
+    {
+      "id": 121220855033,
+      "name": "V1 tests and build",
+      "head_sha": "65bd2b2f849756dca936e67bb96d1bc44e5428dc",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/navyaamehta581-ship-it/Spotify-portal-solution/actions/runs/40210618642/job/121220855033"
+    }
+  ],
+  "records": [
+    {
+      "id": "spotify-goal-ci-a32e3c1fd2da",
+      "kind": "github_observation",
+      "claim": "Authenticated browser inspection found .github/workflows/goal-api-ci.yml at this commit. It declares Node 24, contents: read, npm ci --ignore-scripts, npm run check and npm test in services/workflow-api. File contents are observations, not evidence that this local work passed CI.",
+      "source": "https://github.com/navyaamehta581-ship-it/Spotify-portal-solution/blob/a32e3c1fd2da2f24f80ec8d6c4e238746754f76a/.github/workflows/goal-api-ci.yml",
+      "observedAt": "2026-10-26T21:32:03.377Z",
+      "sourceRevision": "a32e3c1fd2da2f24f80ec8d6c4e238746754f76a",
+      "scope": "technical:ci-readiness:navyaamehta581-ship-it/Spotify-portal-solution",
+      "producer": "authenticated-github-browser/operator-review",
+      "basisIds": [],
+      "proof": {
+        "type": "none",
+        "actionId": "none",
+        "actionRevision": 0,
+        "reference": "none",
+        "verifier": "none",
+        "result": "not_checked"
+      }
+    },
+    {
+      "id": "spotify-v1-ci-a32e3c1fd2da",
+      "kind": "github_observation",
+      "claim": "Authenticated browser inspection found .github/workflows/v1-ci.yml at this commit. It declares Node 24, blueprint validation, npm test, test:inspector, test:phase-a and build in prototypes/v1. Existing CI should be reviewed and reused. No new workflow was run.",
+      "source": "https://github.com/navyaamehta581-ship-it/Spotify-portal-solution/blob/a32e3c1fd2da2f24f80ec8d6c4e238746754f76a/.github/workflows/v1-ci.yml",
+      "observedAt": "2026-10-26T21:32:03.377Z",
+      "sourceRevision": "a32e3c1fd2da2f24f80ec8d6c4e238746754f76a",
+      "scope": "technical:ci-readiness:navyaamehta581-ship-it/Spotify-portal-solution",
+      "producer": "authenticated-github-browser/operator-review",
+      "basisIds": [],
+      "proof": {
+        "type": "none",
+        "actionId": "none",
+        "actionRevision": 0,
+        "reference": "none",
+        "verifier": "none",
+        "result": "not_checked"
+      }
+    },
+    {
+      "id": "spotify-check-121220855075",
+      "kind": "github_observation",
+      "claim": "Connected GitHub read-only check diagnostics for PR #8 returned goal-api: completed/success at 65bd2b2f849756dca936e67bb96d1bc44e5428dc. This is historical remote CI for that PR head, not verification of the current local uncommitted activation changes.",
+      "source": "https://github.com/navyaamehta581-ship-it/Spotify-portal-solution/actions/runs/40210618670/job/121220855075",
+      "observedAt": "2026-10-26T21:32:03.377Z",
+      "sourceRevision": "65bd2b2f849756dca936e67bb96d1bc44e5428dc",
+      "scope": "technical:ci-readiness:navyaamehta581-ship-it/Spotify-portal-solution",
+      "producer": "codex-connected-github-check-diagnostics/operator-review",
+      "basisIds": [],
+      "proof": {
+        "type": "none",
+        "actionId": "none",
+        "actionRevision": 0,
+        "reference": "none",
+        "verifier": "none",
+        "result": "not_checked"
+      }
+    },
+    {
+      "id": "spotify-check-121220855033",
+      "kind": "github_observation",
+      "claim": "Connected GitHub read-only check diagnostics for PR #8 returned V1 tests and build: completed/success at 65bd2b2f849756dca936e67bb96d1bc44e5428dc. This is historical remote CI for that PR head, not verification of the current local uncommitted activation changes.",
+      "source": "https://github.com/navyaamehta581-ship-it/Spotify-portal-solution/actions/runs/40210618642/job/121220855033",
+      "observedAt": "2026-10-26T21:32:03.377Z",
+      "sourceRevision": "65bd2b2f849756dca936e67bb96d1bc44e5428dc",
+      "scope": "technical:ci-readiness:navyaamehta581-ship-it/Spotify-portal-solution",
+      "producer": "codex-connected-github-check-diagnostics/operator-review",
+      "basisIds": [],
+      "proof": {
+        "type": "none",
+        "actionId": "none",
+        "actionRevision": 0,
+        "reference": "none",
+        "verifier": "none",
+        "result": "not_checked"
+      }
+    }
+  ],
+  "limitations": [
+    "Two commit-pinned workflow files read through authenticated browser; no complete recursive tree claim.",
+    "CI check results concern PR #8 head only. No new checks, repository writes, Portal execution, deployment or customer outcome.",
+    "Records require exact scoped registry admission; no customer agreement is inferred."
+  ]
+}

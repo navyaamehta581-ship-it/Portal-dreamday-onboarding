@@ -9,7 +9,7 @@ export function createRequestHandler(store, {allowedHosts=['127.0.0.1:8787','127
   res.setHeader('Cache-Control','no-store');
   const conversation=req.url?.startsWith('/api/conversations');
   const reply=(status,body)=>{res.writeHead(status);res.end(JSON.stringify(body));};
-  const fail=(status,code,message)=>reply(status,conversation?{contractVersion:CONTRACT_VERSION,error:{code,message}}:{});
+  const fail=(status,code,message)=>reply(status,conversation?{contractVersion:CONTRACT_VERSION,error:{code,message}}:{error:{code,message,source:'local_inspector'}});
   if (!conversation && (req.method !== 'POST' || req.url !== '/api/diagnose')) {fail(404,'NOT_FOUND','Route not found.');return;}
   if (!allowedHosts.includes(req.headers.host)) {fail(403,'FORBIDDEN','Host is not allowed.');return;}
   if (req.headers.origin && req.headers.origin !== 'http://127.0.0.1:5173') {fail(403,'FORBIDDEN','Origin is not allowed.');return;}

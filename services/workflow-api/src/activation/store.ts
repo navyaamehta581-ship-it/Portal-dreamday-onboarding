@@ -17,16 +17,8 @@ export type Policy = {
   admitPlan?: (principal: Principal, context: CustomerContext, plan: ActivationPlan) => boolean;
   admit: (principal: Principal, record: EvidenceRecord, purpose: 'initialize' | 'progress' | 'blocker' | 'plan') => boolean;
 };
-type ActionState = { revision: number; status: 'suggested'|'prepared'|'approved'|'executed'|'verified'; kind: 'github_inspect'|'prepare_artifact'|'portal_workflow'|'deployment'; at: string; receiptId?: string; planRevision: number; blockedByIds: string[]; evidenceIds: string[] };
-export type ActivationState = {
-  contractVersion: '1.0.0'; customerId: string; developerSessionId: string; revision: number;
-  contextRevision: number; planRevision: number; context: CustomerContext; plan: ActivationPlan;
-  milestone: { id: string; status: 'pending'|'in_progress'|'blocked'|'reached'; requiredActions: {id:string;revision:number}[]; evidenceIds:string[] };
-  actions: Record<string, ActionState>; evidence: EvidenceRecord[];
-  replan: { status: 'none'|'pending'|'failed'|'ready'; blockerId: string|null; replacementPlanRevision: number|null; errorCode: string|null };
-  chrisHelp: { status:'none'|'requested'; blockerIds:string[]; owner:string|null; reason:string|null; evidenceIds:string[] };
-  outcome: { agreedGoalContextRevision:number; status:'unassessed'|'reported'; summary:string; evidenceIds:string[]; scope:string };
-};
+import type { ActivationState, ActionState } from '../../../../contracts/activation/v1/state.ts';
+export type { ActivationState } from '../../../../contracts/activation/v1/state.ts';
 /** Separate DB and schema: never migrates or opens the Goal/conversation stores. */
 export function openActivationStore(filename: string, policy: Policy = { admit: () => false }) {
   if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true, mode: 0o700 });
@@ -90,6 +82,11 @@ export function openActivationStore(filename: string, policy: Policy = { admit: 
   }
   return {
     get: read,
+    pending(): Principal[] {
+      return db.prepare('SELECT tenant,customer,session,body FROM activation_sessions').all()
+        .filter(row => ['pending','failed'].includes(JSON.parse(row.body as string).replan.status))
+        .map(row => ({tenantId:row.tenant as string,customerId:row.customer as string,sessionId:row.session as string}));
+    },
     getRevision(p:Principal,revision:number):ActivationState {
       if(!Number.isSafeInteger(revision)||revision<0) fail('INVALID_REQUEST');
       const row=db.prepare('SELECT body FROM activation_history WHERE tenant=? AND customer=? AND session=? AND revision=?').get(...key(p),revision);

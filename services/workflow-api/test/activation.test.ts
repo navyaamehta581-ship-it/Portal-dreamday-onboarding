@@ -125,3 +125,126 @@ test('Chris outcome projection requires admitted goal-scoped report and pins agr
   const state=s.reportOutcome(principal,'report',0,0,[report]);assert.equal(state.outcome.status,'reported');assert.equal(state.outcome.summary,report.claim);assert.deepEqual(state.outcome.evidenceIds,[report.id]);
   s.close();const restart=openActivationStore(x.file,policy);assert.deepEqual(restart.get(principal).outcome,state.outcome);restart.close();
 });
+
+// Automatic recovery uses real SQLite persistence; planner is an explicit test double.
+import { createReplanWorker } from '../src/activation/worker.ts';
+import { registryPolicy, evidenceLabel } from '../src/activation/admission.ts';
+test('automatic worker recovers pending intent after restart and repeated scans are idempotent',async()=>{
+  const x=setup();x.store.initialize(principal,x.context,x.plan);x.store.blocker(principal,x.blocker);x.store.close();
+  const store=openActivationStore(x.file,x.policy);let calls=0;
+  const worker=createReplanWorker(store,async(_p,_s,intent)=>{calls++;assert.equal(intent.newInformation,x.blocker.newInformation);return x.replacement;});
+  await Promise.all([worker.tick(),worker.tick()]);await worker.tick();
+  assert.equal(calls,1);assert.equal(store.get(principal).revision,2);assert.equal(store.get(principal).actions['offline-review'].status,'suggested');store.close();
+});
+test('automatic worker persists planner failure and a restarted worker safely retries',async()=>{
+  const x=setup();x.store.initialize(principal,x.context,x.plan);x.store.blocker(principal,x.blocker);
+  await createReplanWorker(x.store,async()=>{throw new Error('private failure');}).tick();
+  assert.equal(x.store.get(principal).replan.status,'failed');x.store.close();
+  const store=openActivationStore(x.file,x.policy);await createReplanWorker(store,async()=>x.replacement).tick();
+  assert.equal(store.get(principal).replan.status,'ready');assert.equal(store.get(principal).revision,3);store.close();
+});
+test('overlapping independent workers publish only one replacement',async()=>{
+  const x=setup();x.store.initialize(principal,x.context,x.plan);x.store.blocker(principal,x.blocker);
+  const second=openActivationStore(x.file,x.policy);
+  await Promise.all([createReplanWorker(x.store,async()=>x.replacement).tick(),createReplanWorker(second,async()=>x.replacement).tick()]);
+  assert.equal(x.store.get(principal).revision,2);second.close();x.store.close();
+});
+test('registry admission binds exact owner, expiry, bytes and technical-only verification',()=>{
+  const x=setup(), now=Date.now()+2000;
+  const bundle={principal,context:x.context,plans:[x.plan,x.replacement],evidence:[...x.context.evidence,...x.progress.evidence],expiresAt:new Date(now+60000).toISOString()};
+  const policy=registryPolicy([bundle],()=>now), e=x.context.evidence[0];
+  assert.equal(policy.admit(principal,e,'initialize'),true);
+  assert.equal(policy.admit({...principal,tenantId:'other'},e,'initialize'),false);
+  assert.equal(policy.admit(principal,{...e,claim:'forged'},'initialize'),false);
+  assert.equal(registryPolicy([bundle],()=>now+60001).admit(principal,e,'initialize'),false);
+  const verification=x.progress.evidence.find(e=>e.proof.type==='verification')!;
+  assert.equal(policy.admit(principal,verification,'progress'),false);
+  assert.match(evidenceLabel({...e,kind:'portal_simulated'}),/Simulated/);x.store.close();
+});
+test('invalid planner output persists safe failed intent without publishing an action',async()=>{
+  const x=setup();x.store.initialize(principal,x.context,x.plan);x.store.blocker(principal,x.blocker);
+  await createReplanWorker(x.store,async()=>({...x.replacement,rationale:'forged'})).tick();
+  const s=x.store.get(principal);assert.equal(s.replan.status,'failed');assert.equal(s.planRevision,0);assert.equal(s.milestone.status,'blocked');x.store.close();
+});
+
+test('registry admits independently attributed technical check, rejects simulated basis and stale sources',()=>{
+  const x=setup(),now=Date.now()+2000;
+  const records=structuredClone(x.progress.evidence);
+  const verification=records.find(e=>e.proof.type==='verification')!;
+  verification.scope='technical: inspected configuration';verification.proof.verifier='independent-checker';
+  const make=()=>registryPolicy([{principal,context:x.context,plans:[x.plan],evidence:records,expiresAt:new Date(now+60000).toISOString()}],()=>now);
+  assert.equal(make().admit(principal,verification,'progress'),true);
+  const receipt=records.find(e=>e.proof.type==='execution_receipt')!;receipt.kind='portal_simulated';
+  assert.equal(make().admit(principal,verification,'progress'),false);
+  receipt.kind='action_record';verification.observedAt=new Date(now-86400001).toISOString();
+  assert.equal(make().admit(principal,verification,'progress'),false);x.store.close();
+});
+
+import { writeFileSync } from 'node:fs';
+import { developmentActivation } from '../src/activation/dev.ts';
+test('explicit development configuration starts recovery worker and keeps customer route scoped',async()=>{
+  const x=setup();x.store.initialize(principal,x.context,x.plan);x.store.blocker(principal,x.blocker);x.store.close();
+  const env={...process.env};
+  const records=[...new Map([...x.context.evidence,...x.plan.evidence,...x.blocker.evidence,...x.replacement.evidence].map(e=>[e.id,e])).values()];
+  const path=join(mkdtempSync(join(tmpdir(),'activation-bundle-')),'admission.json');
+  writeFileSync(path,JSON.stringify([{principal,context:x.context,plans:[x.plan,x.replacement],evidence:records,expiresAt:new Date(Date.now()+60000).toISOString()}]));
+  let dev:ReturnType<typeof developmentActivation>;
+  try {
+    process.env.ACTIVATION_DEV='1';process.env.ACTIVATION_DEV_TOKEN='t'.repeat(32);process.env.ACTIVATION_ADMISSION_PATH=path;process.env.ACTIVATION_DATABASE_PATH=x.file;
+    dev=developmentActivation(join(tmpdir(),'unused-goals.sqlite'));
+    assert.ok(dev);
+    assert.equal(dev.options.authorize({headers:{authorization:`Bearer ${'t'.repeat(32)}`}} as never,'other'),null);
+    const deadline=Date.now()+8000;
+    while(dev.options.store.get(principal).replan.status!=='ready'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,50));
+    assert.equal(dev.options.store.get(principal).replan.status,'ready');
+  } finally {await dev!?.close();process.env=env;}
+});
+
+test('collector observations require exact registry admission and persist without action or outcome advancement',async()=>{
+ const {collectActivationEvidence}=await import('../../../prototypes/v1/server/activation-evidence.mjs');
+ const {registryPolicy}=await import('../src/activation/admission.ts');
+ const x=setup();x.store.close();
+ const collected=await collectActivationEvidence({goal:'Inspect CI',repository:'example/service'},{token:'',fetchImpl:async(input)=>({ok:true,json:async()=>String(input).includes('/git/trees/')?{tree:[]}:String(input).includes('/commits/')?{sha:'c'.repeat(40)}:{default_branch:'release/next'}} as Response)});
+ const records=collected.records;assert.equal(records.length,3);assert.match(records[0].source,/commits\/c{40}$/);
+ const bundle={principal,context:x.context,plans:[x.plan],evidence:records,expiresAt:new Date(Date.now()+60000).toISOString()};
+ const policy=registryPolicy([bundle]);
+ const store=openActivationStore(x.file,{...x.policy,admit:(p,e,purpose)=>x.policy.admit(p,e,purpose)||policy.admit(p,e,purpose)});
+ store.initialize(principal,x.context,x.plan);
+ const command={...x.progress,id:'inspection-only',evidence:records,transitions:[],milestoneStatus:'pending' as const};
+ rejects(()=>store.progress(principal,{...command,evidence:[{...records[0],claim:'invented passing check'}]}),'INVALID_EVIDENCE');
+ const state=store.progress(principal,command);assert.equal(state.actions.inspect.status,'suggested');assert.equal(state.outcome.status,'unassessed');assert.ok(state.evidence.some(e=>e.id===records[0].id));
+ store.close();const reopened=openActivationStore(x.file);assert.equal(reopened.get(principal).evidence.find(e=>e.id===records[0].id)?.proof.type,'none');reopened.close();
+ const blocked=await collectActivationEvidence({goal:'Inspect CI',repository:'example/service'},{token:'',fetchImpl:async()=>({ok:false,status:404} as Response)});assert.deepEqual(blocked.records,[]);
+});
+
+test('actual authenticated GitHub observations enter a test-owned ledger only through exact registry admission',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const {registryPolicy}=await import('../src/activation/admission.ts');
+ const snapshot=JSON.parse(readFileSync(new URL('../../../docs/activation/evidence/authenticated-project-inspection.json',import.meta.url),'utf8')) as {observedAt:string;records:EvidenceRecord[]};
+ const x=setup();x.store.close();
+ // Context/plan are test doubles. Only the GitHub observation bytes are real captured evidence.
+ // Fixed clock tests admission at collection time; it does not renew historical evidence.
+ const at=Date.parse(snapshot.observedAt)+1000;
+ const policy=registryPolicy([{principal,context:x.context,plans:[x.plan],evidence:snapshot.records,expiresAt:new Date(at+60000).toISOString()}],()=>at);
+ const store=openActivationStore(x.file,{...x.policy,admit:(p,e,purpose)=>x.policy.admit(p,e,purpose)||policy.admit(p,e,purpose)});
+ store.initialize(principal,x.context,x.plan);
+ const event={...x.progress,id:'captured-project-observations',evidence:snapshot.records,transitions:[],milestoneStatus:'pending' as const};
+ rejects(()=>store.progress(principal,{...event,evidence:[{...snapshot.records[0],producer:'invented-collector'}]}),'INVALID_EVIDENCE');
+ const state=store.progress(principal,event);
+ for(const record of snapshot.records)assert.deepEqual(state.evidence.find(e=>e.id===record.id),record);
+ assert.equal(state.outcome.status,'unassessed');assert.equal(state.actions.inspect.status,'suggested');
+ store.close();const reopened=openActivationStore(x.file);assert.equal(reopened.get(principal).evidence.filter(e=>snapshot.records.some(r=>r.id===e.id)).length,4);reopened.close();
+});
+
+test('context-only initialization selects the server reviewed initial plan and retains admission checks',async()=>{
+ const x=setup();const goal=openGoalStore(':memory:');
+ const server=createApp(goal,'http://127.0.0.1:5173',{store:x.store,authorize:()=>principal,initialPlan:(_p,c)=>isDeepStrictEqual(c,x.context)?x.plan:null});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
+ try{
+  const address=server.address();assert.ok(address&&typeof address==='object');
+  const url=`http://127.0.0.1:${address.port}/api/activation/v1/customers/ledger/state`;
+  const send=(context:CustomerContext)=>fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({context})});
+  assert.equal((await send({...x.context,briefing:'unreviewed alteration'})).status,503);
+  const r=await send(x.context);assert.equal(r.status,201);const state=await r.json();assert.deepEqual(state.plan,x.plan);assert.equal(state.outcome.status,'unassessed');
+ }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));x.store.close();goal.close();}
+});

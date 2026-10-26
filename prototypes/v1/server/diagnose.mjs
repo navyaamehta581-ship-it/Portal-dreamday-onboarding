@@ -13,9 +13,13 @@ export function validateRecommendation(value) {
 export async function diagnose(input, {fetchImpl = fetch, token = process.env.GITHUB_TOKEN} = {}) {
   const {goal, repository} = validateInput(input);
   const evidence = [];
+  let requestSource = `https://api.github.com/repos/${repository}`;
+  let requestStage = 'metadata';
   const headers = {Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', ...(token ? {Authorization: `Bearer ${token}`} : {})};
   async function read(path) {
     const source = `https://api.github.com/repos/${repository}${path}`;
+    requestSource = source;
+    requestStage = path.startsWith('/commits/') ? 'default_branch' : path.startsWith('/git/trees/') ? 'tree' : path.startsWith('/git/blobs/') ? 'blob' : 'metadata';
     const response = await fetchImpl(source, {headers, redirect:'error', signal:AbortSignal.timeout(10000)});
     if (!response.ok) { const error = new Error('GitHub inspection unavailable'); error.status = response.status; throw error; }
     return {source, data:await response.json()};
@@ -52,7 +56,7 @@ export async function diagnose(input, {fetchImpl = fetch, token = process.env.GI
     diagnosis = ci.length || other.length ? 'existing_ci' : 'missing_ci';
     title = diagnosis === 'existing_ci' ? 'Review existing CI triggers, jobs and permissions before proposing changes; do not create a duplicate pipeline.' : 'Confirm the build and test commands and any external CI, then draft one minimal CI workflow for review.';
   } catch (error) {
-    evidence.push({id:'access',source:`https://api.github.com/repos/${repository}`,observation:error.status ? `GitHub returned HTTP ${error.status}. A 404 may mean a private or missing repository; 403 may indicate access restrictions or rate limits.` : 'Inspection failed or returned incomplete data; repository state is unknown.'});
+    evidence.push({id:'access',source:requestSource,observation:error.status ? `GitHub returned HTTP ${error.status} at ${requestStage}; authentication ${token ? 'configured' : 'absent'}. A 404 may mean a private, renamed or missing repository, or insufficient repository permissions; it does not establish missing CI.` : `Inspection failed at ${requestStage}; repository state is unknown.`});
     title = 'Resolve repository access or retry inspection; do not infer missing CI from unavailable evidence.';
   }
   return validateRecommendation({version:1,goal,repository,observedAt:new Date().toISOString(),scope:'recommend-only',diagnosis,evidence,actions:[{title,evidenceIds:[diagnosis === 'blocked' ? 'access' : 'ci'],requiresReview:true}],limitations:['Read-only deterministic diagnosis; no model, repository writes or workflow execution.','At most four CI/manifest files are read, each up to 64 KiB; excerpts are limited to 4,000 characters. No YAML semantic or provider-run validation.', 'CI file presence does not prove valid configuration, successful runs or branch protection.','Goal is retained as context; V1 supports CI readiness diagnosis only.','Native Spotify Portal interfaces and installation are unverified.']});

@@ -60,3 +60,7 @@ Exact implementation files:
 - `docs/activation/session-persistence.md` — this implementation and integration record.
 
 All seven original checkouts retain their source bytes, Git status and commit tips, checked against a fresh pre-implementation inventory (`outputs/activation-before.json` and `outputs/activation-preservation-check.json` in the parent workspace). Only the new worktree contains implementation changes.
+
+## Follow-up milestone
+
+Persistence recovery point: local commit `4fd85d5`. See [wire-review.md](wire-review.md) for the additive operator-owned evidence admission policy, browser-safe state type/client, explicit development route configuration, automatic replan recovery, exact validation counts and remaining six-step integration blockers. That follow-up supersedes the earlier statements that no worker or development entrypoint is configured. Full freeze remains HOLD.
