@@ -1,0 +1,646 @@
+{
+  "orbit": {
+    "context": {
+      "contractVersion": "1.0.0",
+      "customerId": "orbit",
+      "revision": 0,
+      "evidence": [
+        {
+          "id": "customer",
+          "kind": "customer_report",
+          "claim": "New team needs its first backend service. No repository exists yet. Customer agreed: Prepare a reviewable backend onboarding artifact",
+          "source": "fictional fixture: customer",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        }
+      ],
+      "briefing": "New team needs its first backend service. No repository exists yet.",
+      "briefingEvidenceIds": [
+        "customer"
+      ],
+      "agreedGoal": {
+        "text": "Prepare a reviewable backend onboarding artifact",
+        "agreedBy": "fictional customer via Chris",
+        "agreedAt": "2026-10-26T09:00:00Z",
+        "evidenceIds": [
+          "customer"
+        ]
+      },
+      "unknowns": [
+        "Real Portal permissions",
+        "Deployment environment"
+      ],
+      "constraints": [
+        "No external writes"
+      ]
+    },
+    "plan": {
+      "contractVersion": "1.0.0",
+      "customerId": "orbit",
+      "revision": 0,
+      "evidence": [
+        {
+          "id": "customer",
+          "kind": "customer_report",
+          "claim": "New team needs its first backend service. No repository exists yet. Customer agreed: Prepare a reviewable backend onboarding artifact",
+          "source": "fictional fixture: customer",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        },
+        {
+          "id": "portal",
+          "kind": "portal_simulated",
+          "claim": "Representative Catalog, Templates and TechDocs standard; access unverified",
+          "source": "fictional fixture: portal",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        },
+        {
+          "id": "reason",
+          "kind": "ai_inference",
+          "claim": "Choose the least-effort first meaningful milestone",
+          "source": "fictional fixture: reason",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [
+            "customer",
+            "portal"
+          ],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        }
+      ],
+      "contextRevision": 0,
+      "supersedesRevision": null,
+      "planner": "demo_backend_adapter",
+      "selectedMilestone": {
+        "id": "first-value",
+        "outcome": "Reviewable catalog metadata and readiness checklist",
+        "successCriteria": [
+          "Result inspectable with source and revision",
+          "No deployment claim"
+        ],
+        "evidenceIds": [
+          "customer"
+        ]
+      },
+      "prerequisites": [
+        {
+          "description": "Review service ownership",
+          "state": "unknown",
+          "evidenceIds": [
+            "customer"
+          ]
+        }
+      ],
+      "capabilities": [
+        {
+          "id": "prepare_artifact",
+          "availability": "representative",
+          "evidenceIds": [
+            "portal"
+          ]
+        }
+      ],
+      "rationale": "Prepare a reviewable backend onboarding artifact; live Portal execution is unavailable.",
+      "suggestedNextAction": {
+        "id": "next-action",
+        "revision": 0,
+        "kind": "prepare_artifact",
+        "description": "Prepare a reviewable backend onboarding artifact",
+        "capabilityId": "prepare_artifact",
+        "status": "suggested",
+        "evidenceIds": [
+          "reason",
+          "portal"
+        ]
+      },
+      "blockerIds": []
+    }
+  },
+  "ledger": {
+    "context": {
+      "contractVersion": "1.0.0",
+      "customerId": "ledger",
+      "revision": 0,
+      "evidence": [
+        {
+          "id": "customer",
+          "kind": "customer_report",
+          "claim": "Existing Java service; team needs to understand onboarding gaps without repository writes. Customer agreed: Inspect existing service configuration",
+          "source": "fictional fixture: customer",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        }
+      ],
+      "briefing": "Existing Java service; team needs to understand onboarding gaps without repository writes.",
+      "briefingEvidenceIds": [
+        "customer"
+      ],
+      "agreedGoal": {
+        "text": "Inspect existing service configuration",
+        "agreedBy": "fictional customer via Chris",
+        "agreedAt": "2026-10-26T09:00:00Z",
+        "evidenceIds": [
+          "customer"
+        ]
+      },
+      "unknowns": [
+        "Real Portal permissions",
+        "Deployment environment"
+      ],
+      "constraints": [
+        "No external writes"
+      ]
+    },
+    "plan": {
+      "contractVersion": "1.0.0",
+      "customerId": "ledger",
+      "revision": 0,
+      "evidence": [
+        {
+          "id": "customer",
+          "kind": "customer_report",
+          "claim": "Existing Java service; team needs to understand onboarding gaps without repository writes. Customer agreed: Inspect existing service configuration",
+          "source": "fictional fixture: customer",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        },
+        {
+          "id": "portal",
+          "kind": "portal_simulated",
+          "claim": "Representative Catalog, Templates and TechDocs standard; access unverified",
+          "source": "fictional fixture: portal",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        },
+        {
+          "id": "reason",
+          "kind": "ai_inference",
+          "claim": "Choose the least-effort first meaningful milestone",
+          "source": "fictional fixture: reason",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [
+            "customer",
+            "portal"
+          ],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        }
+      ],
+      "contextRevision": 0,
+      "supersedesRevision": null,
+      "planner": "demo_backend_adapter",
+      "selectedMilestone": {
+        "id": "first-value",
+        "outcome": "Commit-pinned configuration inspection report",
+        "successCriteria": [
+          "Result inspectable with source and revision",
+          "No deployment claim"
+        ],
+        "evidenceIds": [
+          "customer"
+        ]
+      },
+      "prerequisites": [
+        {
+          "description": "Confirm repository access",
+          "state": "unknown",
+          "evidenceIds": [
+            "customer"
+          ]
+        }
+      ],
+      "capabilities": [
+        {
+          "id": "github_inspect",
+          "availability": "read_only",
+          "evidenceIds": [
+            "portal"
+          ]
+        }
+      ],
+      "rationale": "Inspect existing service configuration; live Portal execution is unavailable.",
+      "suggestedNextAction": {
+        "id": "next-action",
+        "revision": 0,
+        "kind": "github_inspect",
+        "description": "Inspect existing service configuration",
+        "capabilityId": "github_inspect",
+        "status": "suggested",
+        "evidenceIds": [
+          "reason",
+          "portal"
+        ]
+      },
+      "blockerIds": []
+    }
+  },
+  "blockerReplan": {
+    "blocker": {
+      "contractVersion": "1.0.0",
+      "customerId": "ledger",
+      "revision": 1,
+      "evidence": [
+        {
+          "id": "developer",
+          "kind": "developer_report",
+          "claim": "I cannot access GitHub; only local configuration may be reviewed.",
+          "source": "fictional fixture: developer",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        }
+      ],
+      "id": "blocker-1",
+      "developerSessionId": "session-ledger",
+      "planRevision": 0,
+      "expectedRevision": 0,
+      "newInformation": "GitHub access denied",
+      "evidenceIds": [
+        "developer"
+      ],
+      "constraints": [
+        "No GitHub access",
+        "No external writes"
+      ],
+      "replan": {
+        "required": true,
+        "reason": "Repository inspection unavailable",
+        "preserveMilestoneIds": [
+          "first-value"
+        ],
+        "invalidateActionIds": [
+          "next-action"
+        ]
+      },
+      "escalation": {
+        "required": true,
+        "owner": "Chris",
+        "reason": "Help confirm authorized repository access"
+      }
+    },
+    "plan": {
+      "contractVersion": "1.0.0",
+      "customerId": "ledger",
+      "revision": 1,
+      "evidence": [
+        {
+          "id": "customer",
+          "kind": "customer_report",
+          "claim": "Existing Java service; team needs to understand onboarding gaps without repository writes. Customer agreed: Inspect existing service configuration",
+          "source": "fictional fixture: customer",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        },
+        {
+          "id": "portal",
+          "kind": "portal_simulated",
+          "claim": "Representative Catalog, Templates and TechDocs standard; access unverified",
+          "source": "fictional fixture: portal",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        },
+        {
+          "id": "reason",
+          "kind": "ai_inference",
+          "claim": "Choose the least-effort first meaningful milestone",
+          "source": "fictional fixture: reason",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [
+            "customer",
+            "portal",
+            "developer"
+          ],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        },
+        {
+          "id": "developer",
+          "kind": "developer_report",
+          "claim": "I cannot access GitHub; only local configuration may be reviewed.",
+          "source": "fictional fixture: developer",
+          "observedAt": "2026-10-26T09:00:00Z",
+          "sourceRevision": "fixture-1",
+          "scope": "illustration only",
+          "producer": "fixture",
+          "basisIds": [],
+          "proof": {
+            "type": "none",
+            "actionId": "none",
+            "actionRevision": 0,
+            "reference": "none",
+            "verifier": "none",
+            "result": "not_checked"
+          }
+        }
+      ],
+      "contextRevision": 0,
+      "supersedesRevision": 0,
+      "planner": "demo_backend_adapter",
+      "selectedMilestone": {
+        "id": "first-value",
+        "outcome": "Commit-pinned configuration inspection report",
+        "successCriteria": [
+          "Result inspectable with source and revision",
+          "No deployment claim"
+        ],
+        "evidenceIds": [
+          "customer"
+        ]
+      },
+      "prerequisites": [
+        {
+          "description": "Confirm repository access",
+          "state": "unknown",
+          "evidenceIds": [
+            "customer"
+          ]
+        }
+      ],
+      "capabilities": [
+        {
+          "id": "prepare_artifact",
+          "availability": "representative",
+          "evidenceIds": [
+            "developer"
+          ]
+        }
+      ],
+      "rationale": "Developer cannot access GitHub. Prepare a review checklist and ask Chris for access help; prior action approval is invalid.",
+      "suggestedNextAction": {
+        "id": "offline-review",
+        "revision": 1,
+        "kind": "prepare_artifact",
+        "description": "Prepare a checklist for developer-provided configuration; do not claim repository inspection",
+        "capabilityId": "prepare_artifact",
+        "status": "suggested",
+        "evidenceIds": [
+          "developer"
+        ]
+      },
+      "blockerIds": [
+        "blocker-1"
+      ]
+    }
+  },
+  "progress": {
+    "contractVersion": "1.0.0",
+    "customerId": "ledger",
+    "revision": 1,
+    "evidence": [
+      {
+        "id": "artifact",
+        "kind": "action_record",
+        "claim": "SYNTHETIC test receipt; no real operation occurred",
+        "source": "fictional fixture: artifact",
+        "observedAt": "2026-10-26T09:00:00Z",
+        "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scope": "fixture report only",
+        "producer": "fixture",
+        "basisIds": [],
+        "proof": {
+          "type": "artifact",
+          "actionId": "inspect",
+          "actionRevision": 0,
+          "reference": "fixture://artifact",
+          "verifier": "test-only",
+          "result": "passed"
+        }
+      },
+      {
+        "id": "approval",
+        "kind": "action_record",
+        "claim": "SYNTHETIC test receipt; no real operation occurred",
+        "source": "fictional fixture: approval",
+        "observedAt": "2026-10-26T09:00:00Z",
+        "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scope": "fixture report only",
+        "producer": "fixture",
+        "basisIds": [],
+        "proof": {
+          "type": "authorization",
+          "actionId": "inspect",
+          "actionRevision": 0,
+          "reference": "fixture://approval",
+          "verifier": "test-only",
+          "result": "passed"
+        }
+      },
+      {
+        "id": "receipt",
+        "kind": "action_record",
+        "claim": "SYNTHETIC test receipt; no real operation occurred",
+        "source": "fictional fixture: receipt",
+        "observedAt": "2026-10-26T09:00:00Z",
+        "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scope": "fixture report only",
+        "producer": "fixture",
+        "basisIds": [],
+        "proof": {
+          "type": "execution_receipt",
+          "actionId": "inspect",
+          "actionRevision": 0,
+          "reference": "fixture://receipt",
+          "verifier": "test-only",
+          "result": "passed"
+        }
+      },
+      {
+        "id": "verification",
+        "kind": "verified_outcome",
+        "claim": "SYNTHETIC test receipt; no real operation occurred",
+        "source": "fictional fixture: verification",
+        "observedAt": "2026-10-26T09:00:00Z",
+        "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "scope": "fixture report only",
+        "producer": "fixture",
+        "basisIds": [
+          "receipt"
+        ],
+        "proof": {
+          "type": "verification",
+          "actionId": "inspect",
+          "actionRevision": 0,
+          "reference": "fixture://verification",
+          "verifier": "test-only",
+          "result": "passed"
+        }
+      }
+    ],
+    "id": "progress-1",
+    "developerSessionId": "session-ledger",
+    "planRevision": 0,
+    "expectedRevision": 0,
+    "milestoneId": "first-value",
+    "milestoneStatus": "reached",
+    "valueDemonstrated": "SYNTHETIC fixture of an inspectable report",
+    "needsChris": false,
+    "transitions": [
+      {
+        "actionId": "inspect",
+        "actionRevision": 0,
+        "fromStatus": "suggested",
+        "toStatus": "prepared",
+        "at": "2026-10-26T09:00:00Z",
+        "evidenceIds": [
+          "artifact"
+        ]
+      },
+      {
+        "actionId": "inspect",
+        "actionRevision": 0,
+        "fromStatus": "prepared",
+        "toStatus": "approved",
+        "at": "2026-10-26T09:00:00Z",
+        "evidenceIds": [
+          "approval"
+        ]
+      },
+      {
+        "actionId": "inspect",
+        "actionRevision": 0,
+        "fromStatus": "approved",
+        "toStatus": "executed",
+        "at": "2026-10-26T09:00:00Z",
+        "evidenceIds": [
+          "receipt"
+        ]
+      },
+      {
+        "actionId": "inspect",
+        "actionRevision": 0,
+        "fromStatus": "executed",
+        "toStatus": "verified",
+        "at": "2026-10-26T09:00:00Z",
+        "evidenceIds": [
+          "verification"
+        ]
+      }
+    ]
+  }
+}

@@ -1,3 +1,5 @@
+import { activationRoute } from './activation/routes.ts';
+import type { ActivationOptions } from './activation/routes.ts';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -36,7 +38,7 @@ function send(response: ServerResponse, status: number, value: unknown) {
 }
 
 /** Local single-user service. Only the explicitly configured frontend origin is allowed. */
-export function createApp(store: GoalStore, allowedOrigin = 'http://127.0.0.1:5173') {
+export function createApp(store: GoalStore, allowedOrigin = 'http://127.0.0.1:5173', activation?: ActivationOptions) {
   return createServer(async (request, response) => {
     const requestId = randomUUID();
     response.setHeader('X-Request-Id', requestId);
@@ -55,11 +57,12 @@ export function createApp(store: GoalStore, allowedOrigin = 'http://127.0.0.1:51
       if (origin) response.setHeader('Access-Control-Allow-Origin', origin);
       if (request.method === 'OPTIONS') {
         response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        response.setHeader('Access-Control-Allow-Headers', activation ? 'Content-Type, Authorization' : 'Content-Type');
         response.writeHead(204);
         return response.end();
       }
       const path = new URL(request.url || '/', 'http://localhost').pathname;
+      if (activation && await activationRoute(request, response, path, activation, readJson)) return;
       if (path === '/health') {
         if (request.method !== 'GET') { response.setHeader('Allow', 'GET'); return fail(405, 'METHOD_NOT_ALLOWED', 'Use GET.'); }
         return send(response, 200, { status: 'ok', mode: 'local-development', apiVersion: '1' });
