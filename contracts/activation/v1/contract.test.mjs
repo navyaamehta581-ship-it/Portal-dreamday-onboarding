@@ -1,0 +1,50 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fixtures from './fixtures.json' with {type:'json'};
+import {validateContract,validateProgress,validateBlocker} from './validate.mjs';
+const copy=x=>structuredClone(x);
+const ctx=()=>({customerId:'ledger',sessionId:'session-ledger',authorized:true,trustedEvidenceRecords:copy(fixtures.progress.evidence),revision:0,planRevision:0,milestoneId:'first-value',requiredActionIds:['inspect'],trustedEvidenceIds:['artifact','approval','receipt','verification'],authorizedApprovalIds:['approval'],actions:{inspect:{revision:0,status:'suggested',kind:'github_inspect',at:'2026-10-26T08:59:00Z'}}});
+function rejects(name,mutate,code,context=ctx()) {test(name,()=>{const p=copy(fixtures.progress);mutate(p,context);assert.throws(()=>validateProgress(p,context),e=>e.code===code);});}
+test('two materially different customer fixtures and blocker replan validate',()=>{
+ for(const id of ['orbit','ledger']) {validateContract('CustomerContext',fixtures[id].context);validateContract('ActivationPlan',fixtures[id].plan);}
+ validateContract('BlockerUpdate',fixtures.blockerReplan.blocker);validateContract('ActivationPlan',fixtures.blockerReplan.plan);
+ assert.notEqual(fixtures.orbit.plan.suggestedNextAction.kind,fixtures.ledger.plan.suggestedNextAction.kind);
+ assert.notEqual(fixtures.ledger.plan.suggestedNextAction.kind,fixtures.blockerReplan.plan.suggestedNextAction.kind);
+});
+test('complete chain needs distinct server-trusted proofs',()=>assert.equal(validateProgress(fixtures.progress,ctx()).inspect.status,'verified'));
+rejects('UI click cannot establish approval',p=>p.evidence[1].proof.type='none','INVALID_EVIDENCE');
+rejects('UI click cannot establish execution',p=>p.evidence[2].proof.type='authorization','INVALID_EVIDENCE');
+rejects('client cannot self-authorize evidence',(p,c)=>c.trustedEvidenceIds=[],'INVALID_EVIDENCE');
+rejects('cannot skip a status',p=>p.transitions[0].toStatus='executed','INVALID_TRANSITION');
+rejects('cannot reuse approval as execution',p=>p.transitions[2].evidenceIds=['approval'],'INVALID_EVIDENCE');
+rejects('stale plan fails',(p,c)=>c.planRevision=1,'REVISION_CONFLICT');
+rejects('stale state fails',p=>p.expectedRevision=2,'REVISION_CONFLICT');
+rejects('new action revision invalidates approval',p=>p.transitions[1].actionRevision=1,'INVALID_TRANSITION');
+rejects('tenant mismatch fails',(p,c)=>c.customerId='orbit','FORBIDDEN');
+rejects('session mismatch fails',(p,c)=>c.sessionId='other','FORBIDDEN');
+rejects('unapproved actor fails',(p,c)=>c.authorizedApprovalIds=[],'FORBIDDEN');
+rejects('simulated Portal cannot verify',p=>p.evidence[3].kind='portal_simulated','INVALID_EVIDENCE');
+rejects('AI inference cannot prove execution',p=>p.evidence[2].kind='ai_inference','INVALID_EVIDENCE');
+rejects('verification references actual receipt',p=>p.evidence[3].basisIds=['approval'],'INVALID_EVIDENCE');
+rejects('no Portal execution claim',(p,c)=>c.actions.inspect.kind='portal_workflow','CAPABILITY_UNAVAILABLE');
+rejects('no deployment claim',(p,c)=>c.actions.inspect.kind='deployment','CAPABILITY_UNAVAILABLE');
+rejects('unresolved evidence fails',p=>p.transitions[0].evidenceIds=['missing'],'INVALID_EVIDENCE');
+rejects('duplicate evidence fails',p=>p.evidence.push(p.evidence[0]),'INVALID_EVIDENCE');
+rejects('unknown fields fail',p=>p.secret='no','INVALID_REQUEST');
+rejects('unsupported version fails',p=>p.contractVersion='2.0.0','UNSUPPORTED_VERSION');
+rejects('invalid timestamp fails',p=>p.transitions[0].at='2026-02-30T09:00:00Z','INVALID_REQUEST');
+rejects('out-of-order event fails',p=>p.transitions[1].at='2026-10-26T08:00:00Z','INVALID_TRANSITION');
+rejects('cannot claim milestone prematurely',p=>p.transitions=p.transitions.slice(0,1),'INVALID_TRANSITION');
+test('readiness proposal does not become execution',()=>{const p=copy(fixtures.orbit.plan);p.suggestedNextAction.kind='deployment';assert.throws(()=>validateContract('ActivationPlan',p),e=>e.code==='CAPABILITY_UNAVAILABLE');});
+
+test('blocker can replan without invalidating unrelated actions',()=>{const b=copy(fixtures.blockerReplan.blocker);b.replan.invalidateActionIds=[];validateBlocker(b,{customerId:'ledger',sessionId:'session-ledger',authorized:true,revision:0,planRevision:0,actionIds:[],milestoneIds:['first-value']});});
+test('blocker validates history and authorization',()=>{const b=copy(fixtures.blockerReplan.blocker);const c={customerId:'ledger',sessionId:'session-ledger',authorized:true,revision:0,planRevision:0,actionIds:['next-action'],milestoneIds:['first-value']};validateBlocker(b,c);for(const change of [{revision:2},{planRevision:2},{customerId:'orbit'},{authorized:false},{actionIds:[]},{milestoneIds:[]}])assert.throws(()=>validateBlocker(b,{...c,...change}));});
+rejects('trusted ID cannot authenticate changed receipt bytes',p=>p.evidence[2].proof.reference='forged://receipt','INVALID_EVIDENCE');
+rejects('missing immutable records fails closed',(p,c)=>delete c.trustedEvidenceRecords,'INVALID_EVIDENCE');
+rejects('self-referential evidence fails',p=>p.evidence[0].basisIds=['artifact'],'INVALID_EVIDENCE');
+rejects('cyclic evidence fails',p=>{p.evidence[0].basisIds=['approval'];p.evidence[1].basisIds=['artifact'];},'INVALID_EVIDENCE');
+test('inference must have a basis',()=>{const p=copy(fixtures.orbit.plan);p.evidence[0].kind='ai_inference';p.evidence[0].basisIds=[];assert.throws(()=>validateContract('ActivationPlan',p),e=>e.code==='INVALID_EVIDENCE');});
+test('representative capability cannot authorize GitHub inspection',()=>{const p=copy(fixtures.ledger.plan);p.capabilities.find(c=>c.id===p.suggestedNextAction.capabilityId).availability='representative';assert.throws(()=>validateContract('ActivationPlan',p),e=>e.code==='CAPABILITY_UNAVAILABLE');});
+test('structural event validation rejects inconsistent revision',()=>{for(const [name,value] of [['ProgressUpdate',fixtures.progress],['BlockerUpdate',fixtures.blockerReplan.blocker]]){const p=copy(value);p.revision=9;assert.throws(()=>validateContract(name,p),e=>e.code==='REVISION_CONFLICT');}});
+test('proof none cannot claim a passed check',()=>{const p=copy(fixtures.orbit.context);p.evidence[0].proof.result='passed';assert.throws(()=>validateContract('CustomerContext',p),e=>e.code==='INVALID_EVIDENCE');});
+test('immutable evidence comparison ignores object property order',()=>{const p=copy(fixtures.progress);p.evidence=p.evidence.map(e=>Object.fromEntries(Object.entries(e).reverse()));assert.equal(validateProgress(p,ctx()).inspect.status,'verified');});

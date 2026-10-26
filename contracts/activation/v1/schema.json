@@ -1,0 +1,814 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:spotify-portal:activation:1.0.0",
+  "$defs": {
+    "EvidenceRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "claim",
+        "source",
+        "observedAt",
+        "sourceRevision",
+        "scope",
+        "producer",
+        "basisIds",
+        "proof"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "portal_simulated",
+            "github_observation",
+            "customer_report",
+            "developer_report",
+            "ai_inference",
+            "action_record",
+            "verified_outcome"
+          ]
+        },
+        "claim": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "observedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "producer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "basisIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        },
+        "proof": {
+          "$ref": "#/$defs/Proof"
+        }
+      }
+    },
+    "Proof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "actionId",
+        "actionRevision",
+        "reference",
+        "verifier",
+        "result"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "artifact",
+            "authorization",
+            "execution_receipt",
+            "verification"
+          ]
+        },
+        "actionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "actionRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "verifier": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "result": {
+          "type": "string",
+          "enum": [
+            "not_checked",
+            "passed",
+            "failed"
+          ]
+        }
+      }
+    },
+    "Envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "customerId",
+        "revision",
+        "evidence"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRecord"
+          },
+          "maxItems": 100
+        }
+      }
+    },
+    "CustomerContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "customerId",
+        "revision",
+        "evidence",
+        "briefing",
+        "briefingEvidenceIds",
+        "agreedGoal",
+        "unknowns",
+        "constraints"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRecord"
+          },
+          "maxItems": 100
+        },
+        "briefing": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "briefingEvidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        },
+        "agreedGoal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "text",
+            "agreedBy",
+            "agreedAt",
+            "evidenceIds"
+          ],
+          "properties": {
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8000
+            },
+            "agreedBy": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8000
+            },
+            "agreedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "evidenceIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8000
+              },
+              "maxItems": 100
+            }
+          }
+        },
+        "unknowns": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        }
+      }
+    },
+    "Milestone": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "outcome",
+        "successCriteria",
+        "evidenceIds"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "outcome": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "successCriteria": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        }
+      }
+    },
+    "Action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "revision",
+        "kind",
+        "description",
+        "capabilityId",
+        "status",
+        "evidenceIds"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "github_inspect",
+            "prepare_artifact",
+            "portal_workflow",
+            "deployment"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "capabilityId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "status": {
+          "const": "suggested"
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        }
+      }
+    },
+    "ActivationPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "customerId",
+        "revision",
+        "evidence",
+        "contextRevision",
+        "supersedesRevision",
+        "planner",
+        "selectedMilestone",
+        "prerequisites",
+        "capabilities",
+        "rationale",
+        "suggestedNextAction",
+        "blockerIds"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRecord"
+          },
+          "maxItems": 100
+        },
+        "contextRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "supersedesRevision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "planner": {
+          "type": "string",
+          "enum": [
+            "demo_backend_adapter",
+            "aika_adapter"
+          ]
+        },
+        "selectedMilestone": {
+          "$ref": "#/$defs/Milestone"
+        },
+        "prerequisites": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "description",
+              "state",
+              "evidenceIds"
+            ],
+            "properties": {
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8000
+              },
+              "state": {
+                "type": "string",
+                "enum": [
+                  "met",
+                  "unmet",
+                  "unknown"
+                ]
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8000
+                },
+                "maxItems": 100
+              }
+            }
+          },
+          "maxItems": 100
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "availability",
+              "evidenceIds"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8000
+              },
+              "availability": {
+                "type": "string",
+                "enum": [
+                  "representative",
+                  "read_only",
+                  "unavailable"
+                ]
+              },
+              "evidenceIds": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 8000
+                },
+                "maxItems": 100
+              }
+            }
+          },
+          "maxItems": 100
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "suggestedNextAction": {
+          "$ref": "#/$defs/Action"
+        },
+        "blockerIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        }
+      }
+    },
+    "Transition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actionId",
+        "actionRevision",
+        "fromStatus",
+        "toStatus",
+        "at",
+        "evidenceIds"
+      ],
+      "properties": {
+        "actionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "actionRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromStatus": {
+          "type": "string",
+          "enum": [
+            "suggested",
+            "prepared",
+            "approved",
+            "executed",
+            "verified"
+          ]
+        },
+        "toStatus": {
+          "type": "string",
+          "enum": [
+            "suggested",
+            "prepared",
+            "approved",
+            "executed",
+            "verified"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        }
+      }
+    },
+    "ProgressUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "customerId",
+        "revision",
+        "evidence",
+        "id",
+        "developerSessionId",
+        "planRevision",
+        "expectedRevision",
+        "milestoneId",
+        "milestoneStatus",
+        "valueDemonstrated",
+        "needsChris",
+        "transitions"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRecord"
+          },
+          "maxItems": 100
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "developerSessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "planRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "milestoneId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "milestoneStatus": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "in_progress",
+            "blocked",
+            "reached"
+          ]
+        },
+        "valueDemonstrated": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "needsChris": {
+          "type": "boolean"
+        },
+        "transitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Transition"
+          },
+          "maxItems": 100
+        }
+      }
+    },
+    "BlockerUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractVersion",
+        "customerId",
+        "revision",
+        "evidence",
+        "id",
+        "developerSessionId",
+        "planRevision",
+        "expectedRevision",
+        "newInformation",
+        "evidenceIds",
+        "constraints",
+        "replan",
+        "escalation"
+      ],
+      "properties": {
+        "contractVersion": {
+          "const": "1.0.0"
+        },
+        "customerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EvidenceRecord"
+          },
+          "maxItems": 100
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "developerSessionId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "planRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "expectedRevision": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "newInformation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "evidenceIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "maxItems": 100
+        },
+        "replan": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required",
+            "reason",
+            "preserveMilestoneIds",
+            "invalidateActionIds"
+          ],
+          "properties": {
+            "required": {
+              "type": "boolean"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8000
+            },
+            "preserveMilestoneIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8000
+              },
+              "maxItems": 100
+            },
+            "invalidateActionIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 8000
+              },
+              "maxItems": 100
+            }
+          }
+        },
+        "escalation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required",
+            "owner",
+            "reason"
+          ],
+          "properties": {
+            "required": {
+              "type": "boolean"
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8000
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 8000
+            }
+          }
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/CustomerContext"
+    },
+    {
+      "$ref": "#/$defs/ActivationPlan"
+    },
+    {
+      "$ref": "#/$defs/ProgressUpdate"
+    },
+    {
+      "$ref": "#/$defs/BlockerUpdate"
+    }
+  ]
+}

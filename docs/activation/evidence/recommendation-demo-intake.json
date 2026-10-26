@@ -1,0 +1,8 @@
+{
+  "briefing": "A customer engineering team is evaluating Spotify Portal as a way to standardize how developers create and manage backend services. Their immediate use case is a new recommendation service.\nThey want developers to identify the appropriate starting template, understand prerequisites, and prepare the service for review without relying on repeated manual guidance from Chris.\nThe team's approved runtime, available Scaffolder templates, repository permissions, approval requirements, and deployment configuration have not yet been confirmed.",
+  "outcome": "Prepare a reviewable recommendation-service setup artifact, with documented prerequisites, identified unknowns, and available technical checks. Success does not require creating or deploying the service.",
+  "agreedBy": "Fictional customer engineering representative and Chris (simulated roles)",
+  "agreementConfirmed": false,
+  "agreementMode": "simulated",
+  "developerMessage": "I need to create and deploy a new backend service for my team's recommendation feature. Where should I start?"
+}
