@@ -14,7 +14,7 @@ export function replacementForReport(state:ActivationState,event:BlockerUpdate):
  return {...structuredClone(old),revision:old.revision+1,supersedesRevision:old.revision,blockerIds:[event.id],
   evidence:[...state.evidence],
   capabilities:[{id:'bounded-review',availability:'representative',evidenceIds:[report.id]}],
-  prerequisites:[...old.prerequisites,{description:'Confirm the attributed blocker and recover authorized prerequisites; do not bypass original constraints',state:'unknown',evidenceIds:[report.id]}],
+  prerequisites:[...old.prerequisites.filter(item=>item.description!=='Confirm the attributed blocker and recover authorized prerequisites; do not bypass original constraints'),{description:'Confirm the attributed blocker and recover authorized prerequisites; do not bypass original constraints',state:'unknown',evidenceIds:[report.id]}],
   rationale:'Deterministic fallback: developer reported a blocker. Preserve the original goal and constraints; prepare an offline review checklist and ask Chris to resolve prerequisites. No repository facts, approval, execution or customer outcome inferred.',
   suggestedNextAction:{id:`review-${hash(event.id).slice(0,24)}`,revision:0,kind:'prepare_artifact',status:'suggested',capabilityId:'bounded-review',description:`Prepare a review checklist for the reported blocker: ${event.newInformation}. Check the original briefing and constraints; ask Chris to confirm authorized access or missing information.`,evidenceIds:[report.id]}};
 }
