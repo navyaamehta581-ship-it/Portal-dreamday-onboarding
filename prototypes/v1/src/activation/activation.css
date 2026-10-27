@@ -25,3 +25,10 @@
 @media(max-width:560px){.activation-action-heading{align-items:flex-start}.activation-steps li{flex-basis:70px}.activation-card{padding:17px}}
 
 .activation-journey{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 18px}.activation-journey span{padding:11px 9px;background:#e9f1ea;border:1px solid #d6e5d9;border-radius:8px;font-size:11px;font-weight:650;color:#365d45;text-align:center}@media(max-width:640px){.activation-journey{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Canonical command/evidence identifiers may be long and must fit narrow screens. */
+.activation-grid>*{min-width:0}
+.activation-card,.activation-action-heading strong,.activation-evidence article{min-width:0;overflow-wrap:anywhere}
+.activation-card pre{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}
+/* The legacy Portal header has a fixed height; this page header grows with its copy. */
+.activation .activation-header{height:auto;min-height:0;padding:0;border:0;background:transparent}

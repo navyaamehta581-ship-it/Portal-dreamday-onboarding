@@ -19,6 +19,7 @@ export function activationClient(customerId:string,token:string,base='') {
   return {
     intake:(briefing:string,outcome:string,agreedBy:string,agreementConfirmed:boolean)=>request('/intake',{briefing,outcome,agreedBy,agreementConfirmed}),
     read:()=>request('/state'),
+    reportBlocker:(event:{id:string;expectedRevision:number;planRevision:number;message:string})=>request('/blocker-reports',event),
     initialize:(context:CustomerContext,plan?:ActivationPlan)=>request('/state',{context,...(plan?{plan}:{})}),
     progress:(event:ProgressUpdate)=>request('/progress',event),
     blocker:(event:BlockerUpdate)=>request('/blockers',event)

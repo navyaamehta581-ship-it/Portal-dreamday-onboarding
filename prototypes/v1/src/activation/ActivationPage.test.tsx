@@ -6,7 +6,7 @@ import {ActivationPage} from './ActivationPage';
 import {activationClient} from './client';
 import fixtures from '../../../../contracts/activation/v1/fixtures.json';
 import type {ActivationState} from '../../../../contracts/activation/v1/state';
-const api={intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn()};
+const api={intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn()};
 vi.mock('./client',()=>({activationClient:vi.fn()}));
 let host:HTMLDivElement,root:Root;
 function state(scenario:'orbit'|'ledger'):ActivationState{
@@ -24,7 +24,7 @@ it('shows contrasting admitted contexts and clears previous customer state',asyn
 it('reloads canonical replan and evidence without claiming a verified outcome',async()=>{
  const s=state('ledger');api.read.mockResolvedValue(s);await click('Load / refresh');
  api.read.mockResolvedValue({...s,revision:2,planRevision:1,plan:fixtures.blockerReplan.plan,replan:{...s.replan,status:'ready'}});await click('Load / refresh');
- expect(host.textContent).toContain('Prepare a checklist for developer-provided configuration');expect(host.textContent).toContain('developer_report');expect(host.textContent).toContain('Outcome: unassessed');
+ expect(host.textContent).toContain('Prepare a checklist for developer-provided configuration');expect(host.textContent).toContain('Developer reported');expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('unassessed');
 });
 it('retains the exact blocker across uncertain failure and reload',async()=>{
  api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('textarea[aria-label="Blocker command"]',JSON.stringify(fixtures.blockerReplan.blocker));api.blocker.mockRejectedValue(new Error('REVISION_CONFLICT'));await click('Submit / retry');await click('Load / refresh');await click('Submit / retry');expect(api.blocker).toHaveBeenCalledTimes(2);expect(api.blocker.mock.calls[1][0]).toEqual(api.blocker.mock.calls[0][0]);expect(host.textContent).toContain('REVISION_CONFLICT');
@@ -45,5 +45,41 @@ it('requires separately reported agreement and sends pasted intake to the isolat
  await act(async()=>{host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click();});
  api.intake.mockResolvedValue(state('ledger'));await click('Create suggested');
  expect(api.intake).toHaveBeenCalledWith('A new customer needs a reviewable documentation guide.','Review the guide','Customer via Chris',true);
- expect(host.textContent).toContain('Outcome: unassessed');
+ expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('unassessed');
+});
+
+it('polls pending recovery and stops once a replacement is ready',async()=>{
+ vi.useFakeTimers();const s=state('ledger');s.replan.status='pending';api.read.mockResolvedValue(s);await click('Load / refresh');
+ api.read.mockResolvedValue({...s,revision:2,replan:{...s.replan,status:'ready'}});
+ await act(async()=>{await vi.advanceTimersByTimeAsync(5000);});expect(api.read).toHaveBeenCalledTimes(2);
+ await act(async()=>{await vi.advanceTimersByTimeAsync(10000);});expect(api.read).toHaveBeenCalledTimes(2);vi.useRealTimers();
+});
+it('preserves both drafts on HTTP 409 and never silently rebases a reviewed command',async()=>{
+ const s=state('ledger');api.read.mockResolvedValue(s);await click('Load / refresh');
+ const draft=JSON.stringify(fixtures.blockerReplan.blocker);await input('textarea[aria-label="Blocker command"]',draft);await input('textarea[aria-label="Blocker note"]','Access is denied');
+ api.blocker.mockRejectedValue({status:409});await click('Submit / retry');expect(host.textContent).toContain('Your draft is still here');
+ api.read.mockResolvedValue({...s,revision:3});await click('Load / refresh');await click('Submit / retry');
+ expect(api.blocker.mock.calls[1][0]).toEqual(JSON.parse(draft));expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Blocker note"]')?.value).toBe('Access is denied');
+});
+it.each(['customerId','developerSessionId','expectedRevision','planRevision'])('rejects mismatched reviewed %s before sending',async field=>{
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');const command={...fixtures.blockerReplan.blocker,[field]:field.includes('Revision')?42:'other'};
+ await input('textarea[aria-label="Blocker command"]',JSON.stringify(command));await click('Submit / retry');expect(api.blocker).not.toHaveBeenCalled();expect(host.textContent).toContain('different customer, session, or revision');
+});
+it('keeps local note review honest and renders proof type separately from outcome',async()=>{
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('textarea[aria-label="Blocker note"]','Cannot inspect');await click('Review blocker');
+ expect(host.textContent).toContain('not submitted to the server');expect(api.blocker).not.toHaveBeenCalled();expect(host.textContent).toContain('proof: none');expect(host.textContent).toContain('not checked');
+});
+
+it('submits a separately confirmed attributed report and preserves exact retry identity on timeout',async()=>{
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('textarea[aria-label="Blocker note"]','Access denied');await click('Review blocker');expect(api.reportBlocker).not.toHaveBeenCalled();
+ const error=new Error('timeout');error.name='TimeoutError';api.reportBlocker.mockRejectedValue(error);await click('Submit / retry attributed');
+ expect(host.textContent).toContain('request timed out');const first=api.reportBlocker.mock.calls[0][0];expect(first.message).toBe('Access denied');expect(first.expectedRevision).toBe(0);
+ await click('Load / refresh');api.reportBlocker.mockResolvedValue({...state('ledger'),revision:1});await click('Submit / retry attributed');expect(api.reportBlocker.mock.calls[1][0]).toEqual(first);expect(host.textContent).toContain('report saved to the server');
+});
+
+it('shows original constraints, exact action proof and safe reference navigation',async()=>{
+ const s=state('ledger');const e=structuredClone(s.evidence[0]);e.id='artifact-test';e.kind='action_record';e.proof={type:'artifact',actionId:'review',actionRevision:2,reference:'https://github.com/example/service/pull/1',verifier:'local-check',result:'passed'};
+ s.evidence.push(e);s.actions.review={kind:'prepare_artifact',revision:2,status:'prepared',at:'2026-10-27T00:00:00Z',planRevision:0,blockedByIds:[],evidenceIds:[e.id]};api.read.mockResolvedValue(s);await click('Load / refresh');
+ expect(host.textContent).toContain(s.context.briefing);for(const constraint of s.context.constraints)expect(host.textContent).toContain(constraint);
+ expect(host.querySelector('a[href="#evidence-artifact-test"]')).not.toBeNull();expect(host.querySelector('a[href="https://github.com/example/service/pull/1"]')?.textContent).toBe('Inspect proof reference');expect(host.textContent).toContain('Action: review · revision 2');expect(host.textContent).toContain('does not fetch or execute');
 });
