@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ActivationStore, Principal } from './store.ts';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types.ts';
-export type ActivationOptions={prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
+export type ActivationOptions={isOperator?:(request:IncomingMessage,principal:Principal)=>boolean;prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
 export async function activationRoute(request:IncomingMessage,response:ServerResponse,path:string,options:ActivationOptions,readJson:(r:IncomingMessage)=>Promise<unknown>) {
   const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals)$/.exec(path);
   if(!match)return false;
@@ -10,6 +10,8 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
   try {
     const p=options.authorize(request,match[1]);
     if(!p||p.customerId!==match[1]) {send(403,{error:{code:'FORBIDDEN'}});return true;}
+    const operatorOnly=match[2]==='intake'||(match[2]==='state'&&request.method==='POST');
+    if(operatorOnly&&(!options.isOperator||!options.isOperator(request,p))){send(403,{error:{code:'OPERATOR_REQUIRED'}});return true;}
     let state;
     if(match[2]==='state'&&request.method==='GET')state=options.store.get(p);
     else if(request.method==='POST') {
