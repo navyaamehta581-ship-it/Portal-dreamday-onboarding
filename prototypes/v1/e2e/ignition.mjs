@@ -7,7 +7,7 @@ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 const base=process.env.IGNITION_URL??'http://127.0.0.1:5186';
 const out=process.env.IGNITION_EVIDENCE??'../../docs/ignition/screenshots';mkdirSync(out,{recursive:true});
-async function persona(p){await page.getByLabel('Demo persona').selectOption(p);await page.getByRole('button',{name:'Enter demo',exact:true}).click();await page.getByRole('button',{name:`Account: ${p}`,exact:true}).waitFor();}
+async function persona(p){await page.goto(base+({chris:'/ignition/chris',maya:'/ignition/champion',alex:'/ignition/developer',jordan:'/ignition/developer/jordan'}[p]));if(await page.getByLabel('Work email').count()){await page.getByLabel('Work email').fill(p+'@northstar.example');await page.getByRole('button',{name:'Sign in',exact:true}).click();}await page.getByRole('button',{name:`Account: ${p[0].toUpperCase()+p.slice(1)}`,exact:true}).waitFor();}
 async function shot(name){await page.locator('.pt-main').evaluate(e=>e.scrollTop=0).catch(()=>{});await page.screenshot({path:`${out}/${name}.png`,fullPage:true});}
 try{
  await page.goto(base+'/');await page.getByRole('button').first().waitFor();await shot('00-welcome-preserved');
