@@ -76,3 +76,10 @@ it('submits a separately confirmed attributed report and preserves exact retry i
  expect(host.textContent).toContain('request timed out');const first=api.reportBlocker.mock.calls[0][0];expect(first.message).toBe('Access denied');expect(first.expectedRevision).toBe(0);
  await click('Load / refresh');api.reportBlocker.mockResolvedValue({...state('ledger'),revision:1});await click('Submit / retry attributed');expect(api.reportBlocker.mock.calls[1][0]).toEqual(first);expect(host.textContent).toContain('report saved to the server');
 });
+
+it('shows original constraints, exact action proof and safe reference navigation',async()=>{
+ const s=state('ledger');const e=structuredClone(s.evidence[0]);e.id='artifact-test';e.kind='action_record';e.proof={type:'artifact',actionId:'review',actionRevision:2,reference:'https://github.com/example/service/pull/1',verifier:'local-check',result:'passed'};
+ s.evidence.push(e);s.actions.review={kind:'prepare_artifact',revision:2,status:'prepared',at:'2026-10-27T00:00:00Z',planRevision:0,blockedByIds:[],evidenceIds:[e.id]};api.read.mockResolvedValue(s);await click('Load / refresh');
+ expect(host.textContent).toContain(s.context.briefing);for(const constraint of s.context.constraints)expect(host.textContent).toContain(constraint);
+ expect(host.querySelector('a[href="#evidence-artifact-test"]')).not.toBeNull();expect(host.querySelector('a[href="https://github.com/example/service/pull/1"]')?.textContent).toBe('Inspect proof reference');expect(host.textContent).toContain('Action: review · revision 2');expect(host.textContent).toContain('does not fetch or execute');
+});
