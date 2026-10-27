@@ -4,9 +4,9 @@ Status: provisional API 1.0.0; contract freeze HOLD pending Navyaa and backend/d
 
 ## Included and preserved
 
-The integration branch contains preservation commit fa6e987 and persistence commit 4fd85d5, plus evidence admission, durable replan recovery, browser-safe shared state/client, explicit local development configuration, isolated /activation UI, read-only GitHub collector/diagnostics and bounded briefing intake. New-service requests inspect template prerequisites without choosing an unsupported runtime/template. Simulated recommendation intake produces a preview and cannot initialize a real agreed-customer ledger.
+The current main baseline contains preservation commit fa6e987 and persistence commit 4fd85d5, plus evidence admission, durable replan recovery, browser-safe shared state/client, explicit local development configuration, isolated /activation UI, read-only GitHub collector/diagnostics and bounded briefing intake. New-service requests inspect template prerequisites without choosing an unsupported runtime/template. Simulated recommendation intake produces a preview and cannot initialize a real agreed-customer ledger.
 
-All seven original checkouts retain their recorded source hashes, status and HEAD. Their unfinished Phase B, native V2 and Codespaces proxy work is outside this integration; do not merge it incidentally.
+All pre-existing checkouts, including dirty checkouts, were left unchanged by this follow-up apart from read-only Git fetch metadata. Their unfinished Phase B, native V2 and Codespaces proxy work is outside this integration; do not merge it incidentally.
 
 Included fixtures: the explicitly fictional recommendation intake required by the regression test, frozen contract fixtures, and historical commit-pinned GitHub observations required by exact-admission tests. GitHub observations are not passing checks for this branch or customer-outcome proof.
 
@@ -24,7 +24,7 @@ Use Node 24.12.0 (supported: >=24.12.0 <25). From a clean clone, or a new worktr
 
 ```sh
 git fetch origin
-git switch --track origin/integration/activation-intelligence-handoff
+git switch --track origin/<approved-followup-branch>
 cd services/workflow-api
 npm ci --ignore-scripts
 npm run check
@@ -47,8 +47,30 @@ Follow wire-review.md for the operator-owned, scoped admission bundle and server
 
 The standalone inspector needs its own server-side GITHUB_TOKEN for private repositories; the connected account does not export one. Do not copy browser cookies or connector tokens. Collector output requires exact operator review/admission; existing captured evidence must never be retimestamped to bypass freshness checks.
 
-## Validation of the publication candidate
+## Follow-up delivery — 27 October 2026
 
-Node 24.12.0: 152 tests passed (33 backend, 37 contracts, 15 inspector, 4 conversation/local HTTP, 63 frontend). Backend, contracts and frontend typechecks and Vite build passed (1676 modules). Validation used a complete isolated source copy and previously installed dependencies; a fresh dependency installation was not performed. Initial restricted HTTP tests could not bind loopback; the permitted rerun passed all 89 server/contract tests. No dependency/lockfile changes.
+Base main is 71e9fdd8753f56ac0da09c8c91fe8f798b13291a. Live refresh confirmed PR #10 merged, PR #11 merged to integration at a73109f, and PR #12 merged that integration into main. PR #11 no longer needs or permits retargeting. Its last head 0dda497 still has historical Goal API success and V1 failure (61 passing, 2 stale presentation assertions), independently verified from GitHub job logs. Local fixes retain outcome/evidence assertions. The connector's workflow query filters to pull-request runs; an empty result for the main merge is not proof of green main CI.
 
-Historical session reports describe their own earlier checkpoints. This handoff supersedes their uncommitted/no-push status once the branch is published. Real customer acceptance, live hosted interpretation, arbitrary new-context blocker planning, production identity and native Portal/AiKA integration remain open. Demo follow-up must distinguish simulated context, observed repository facts and reviewable technical results.
+Local branch `followup/activation-intelligence` contains separate frontend repair, backend report/recovery and frontend connection commits. No remote write, PR edit, message, push, merge or publication occurred. Recommended delivery: a new draft PR against main with those commits, or two stacked PRs separating frontend acceptance fixes from backend plus frontend report integration. Do not modify Navyaa's branch or revive unrelated Codespaces/native-V2 changes.
+
+### Additive compatibility proposal
+
+Shared contract v1 schema, types, validation and digest remain unchanged. Existing routes and direct ActivationState responses remain intact. Proposed additive development route:
+
+`POST /api/activation/v1/customers/:customerId/blocker-reports`
+
+Body: `{id:"developer:<stable-id>", expectedRevision:0, planRevision:0, message:"Exact trimmed report"}`. Unknown fields, caller-supplied attribution/authority, invalid revisions and empty/oversized text are rejected. The authenticated principal supplies tenant/customer/session attribution. Report evidence is `developer_report` with proof `none`, never an observed repository fact. The server converts it to the existing BlockerUpdate and commits through the existing revision/idempotency transaction. An exact duplicate returns canonical state; changed bytes under the same id conflict. After uncertain failure, GET then retry the original body; use a new report only after explicit review and clearing.
+
+The deterministic planner prepares a bounded offline review checklist, preserves the original milestone/goal/constraints, retains evidence and prerequisites, and requests Chris's help. It never selects runtime/template execution, manufactures agreement/approval or promotes outcomes. Exact derived plans are admitted against the durable server event, so recovery after process restart needs no ephemeral report admission. Operator-reviewed replacements still work through the existing registry fallback. Development authorization now also enforces bundle expiry.
+
+The hosted interpretation provider was inspected. It is used by existing intake only; the new report recovery deliberately uses deterministic fallback and does not send report text to a hosted model. No live hosted interpretation test is claimed. Provider response mocks in inherited tests are mocks, not hosted acceptance.
+
+### Validation
+
+Node 24.12.0: 165 tests pass (37 backend, 37 contracts, 15 inspector, 4 conversation/local HTTP, 72 frontend), plus backend/contracts/frontend typechecks, production build and blueprint validation. Existing installed temporary dependencies were reused; no fresh dependency install or lockfile change is claimed. HTTP suites require permitted loopback listeners.
+
+`node tests/activation/walkthrough.ts` runs two distinct simulated briefing previews, explicitly fictional admitted context under a test adapter, attributed blocker, replacement in a separate process, exact admission of the freshly captured commit-pinned GitHub observation, tamper rejection, generated local technical review with SHA-256, and an evidence-linked Chris summary with outcome unassessed. It reopens the saved database and verifies exact state and idempotent retry. The captured GitHub file proves declared workflow configuration only, not a remote check pass, customer-repository observation, deployment or adoption.
+
+`tests/activation/browser-server.ts` is a local test harness only, with fictional contract fixtures and loopback-only fault injection. The fixed token is a public test constant, never a real credential. It must not be deployed or used to admit real customer sessions. Browser evidence and generated reports are retained outside Git in the local delivery folder. See frontend-audit-2026-10-27.md for browser cases and the artifact-review boundary.
+
+Real acceptance remains blocked on actual Chris/customer agreement, production principal authentication, independently admitted real artifact/authorization/receipt chains where required, native Portal/AiKA availability and customer outcome evidence. Simulated intake remains preview-only under the unchanged contract; the test adapter is not a production bypass.

@@ -1,0 +1,28 @@
+{
+  "observedAt": "2026-10-27T07:40:32Z",
+  "repository": "navyaamehta581-ship-it/Spotify-portal-solution",
+  "commit": "71e9fdd8753f56ac0da09c8c91fe8f798b13291a",
+  "blobSha": "4be6899e4466fe6030581cdcb09d59ca8842dc98",
+  "records": [
+    {
+      "id": "github-workflow-71e9fdd",
+      "kind": "github_observation",
+      "claim": "At the pinned commit, V1 validation declares unit tests, the read-only inspector, Phase A API tests and a production build. This file observation does not establish that those checks passed.",
+      "source": "https://github.com/navyaamehta581-ship-it/Spotify-portal-solution/blob/71e9fdd8753f56ac0da09c8c91fe8f798b13291a/.github/workflows/v1-ci.yml",
+      "observedAt": "2026-10-27T07:40:32Z",
+      "sourceRevision": "71e9fdd8753f56ac0da09c8c91fe8f798b13291a",
+      "scope": "technical:ci-configuration",
+      "producer": "connected-github-read-only",
+      "basisIds": [],
+      "proof": {
+        "type": "none",
+        "actionId": "none",
+        "actionRevision": 0,
+        "reference": "none",
+        "verifier": "none",
+        "result": "not_checked"
+      }
+    }
+  ],
+  "content": "name: V1 validation\n\non:\n  pull_request:\n  push:\n    branches: [main]\n  workflow_dispatch:\n\npermissions:\n  contents: read\n\nconcurrency:\n  group: v1-${{ github.workflow }}-${{ github.ref }}\n  cancel-in-progress: true\n\njobs:\n  v1:\n    name: V1 tests and build\n    runs-on: ubuntu-24.04\n    timeout-minutes: 15\n    defaults:\n      run:\n        working-directory: prototypes/v1\n    steps:\n      - name: Check out source\n        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6\n        with:\n          persist-credentials: false\n      - name: Set up Node 24\n        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6\n        with:\n          node-version: '24'\n          cache: npm\n          cache-dependency-path: prototypes/v1/package-lock.json\n      - name: Validate blueprint and backlog\n        working-directory: .\n        run: python3 scripts/validate_blueprint.py\n      - name: Install locked dependencies\n        run: npm ci\n      - name: Run V1 unit tests\n        run: npm test\n      - name: Check read-only GitHub inspector\n        run: npm run test:inspector\n      - name: Check Phase A conversation API\n        run: npm run test:phase-a\n      - name: Check types and build V1\n        run: npm run build\n"
+}
