@@ -22,7 +22,7 @@ export function replacementForReport(state:ActivationState,event:BlockerUpdate):
 export function createBlockerReports(base:Policy,getStore:()=>ActivationStore) {
  let admitted:{principal:Principal;record:EvidenceRecord}|null=null;
  const policy:Policy={...base,
-  admit:(p,e,purpose)=>(purpose==='blocker'&&isDeepStrictEqual(admitted?.principal,p)&&isDeepStrictEqual(admitted?.record,e))||base.admit(p,e,purpose),
+  admit:(p,e,purpose)=>(['blocker','progress'].includes(purpose)&&isDeepStrictEqual(admitted?.principal,p)&&isDeepStrictEqual(admitted?.record,e))||base.admit(p,e,purpose),
   admitPlan:(p,c,plan)=>{
    if(base.admitPlan?.(p,c,plan))return true;
    try{const s=getStore().get(p);if(!isDeepStrictEqual(s.context,c)||!s.replan.blockerId)return false;
@@ -46,5 +46,20 @@ export function createBlockerReports(base:Policy,getStore:()=>ActivationStore) {
   admitted={principal:structuredClone(p),record};
   try{return store.blocker(p,event);}finally{admitted=null;}
  }
- return {policy,submit,replacement:replacementForReport};
+ function progress(p:Principal,input:unknown) {
+  if(!input||typeof input!=='object'||Array.isArray(input))return fail('INVALID_REQUEST');
+  const b=input as BlockerReport&{needsChris:boolean};
+  if(Object.keys(b).sort().join(',')!=='expectedRevision,id,message,needsChris,planRevision'||typeof b.id!=='string'||!/^progress:[A-Za-z0-9_-]{1,80}$/.test(b.id)||typeof b.message!=='string'||!b.message.trim()||b.message!==b.message.trim()||b.message.length>4000||typeof b.needsChris!=='boolean'||![b.expectedRevision,b.planRevision].every(n=>Number.isSafeInteger(n)&&n>=0))return fail('INVALID_REQUEST');
+  const store=getStore();
+  let prior:{planRevision:number;record:EvidenceRecord;needsChris:boolean}|undefined;
+  try{prior=store.getEvent(p,b.id) as typeof prior;}catch(e){if((e as ActivationError).code!=='NOT_FOUND')throw e;}
+  const digest=hash({id:b.id,expectedRevision:b.expectedRevision,planRevision:b.planRevision,message:b.message,needsChris:b.needsChris});
+  if(prior){if(!prior.record||prior.record.sourceRevision!==digest)return fail('IDEMPOTENCY_CONFLICT');return store.reportDeveloperProgress(p,b.id,b.expectedRevision,b.planRevision,prior.record,b.needsChris);}
+  const state=store.get(p);
+  if(state.revision!==b.expectedRevision||state.planRevision!==b.planRevision)return fail('REVISION_CONFLICT');
+  const record:EvidenceRecord={id:`report:${b.id}`,kind:'developer_report',claim:b.message,source:'Authenticated activation progress report',sourceRevision:digest,observedAt:new Date().toISOString(),scope:state.context.agreedGoal.text,producer:`principal:${JSON.stringify(p)}`,basisIds:[],proof:{type:'none',actionId:'none',actionRevision:0,reference:'none',verifier:'none',result:'not_checked'}};
+  admitted={principal:structuredClone(p),record};
+  try{return store.reportDeveloperProgress(p,b.id,b.expectedRevision,b.planRevision,record,b.needsChris);}finally{admitted=null;}
+ }
+ return {policy,submit,progress,replacement:replacementForReport};
 }

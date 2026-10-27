@@ -1,7 +1,7 @@
 import {useEffect,useRef,useState} from 'react';
 import {activationClient} from './client';
 import type {ActivationState} from '../../../../contracts/activation/v1/state';
-import type {CustomerContext,ActivationPlan,BlockerUpdate} from '../../../../contracts/activation/v1/types';
+import type {CustomerContext,ActivationPlan,BlockerUpdate,ProgressUpdate} from '../../../../contracts/activation/v1/types';
 import './activation.css';
 
 /** Isolated activation workspace. Credentials remain in memory and never enter URLs or storage. */
@@ -12,6 +12,10 @@ export function ActivationPage(){
  const [initial,setInitial]=useState(''),[reviewedBlocker,setReviewedBlocker]=useState(''),[blockerNote,setBlockerNote]=useState(''),[blockerAccepted,setBlockerAccepted]=useState(false);
  const reportDraft=useRef<{id:string;expectedRevision:number;planRevision:number;message:string}|null>(null);
  const [reportAccepted,setReportAccepted]=useState(false);
+ const [progressNote,setProgressNote]=useState(''),[needsChris,setNeedsChris]=useState(false),[progressAccepted,setProgressAccepted]=useState(false);
+ const progressDraft=useRef<{id:string;expectedRevision:number;planRevision:number;message:string;needsChris:boolean}|null>(null);
+ const [reviewedProgress,setReviewedProgress]=useState(''),[commandAccepted,setCommandAccepted]=useState(false);
+ const progressCommand=useRef<ProgressUpdate|null>(null);
  const pending=useRef<BlockerUpdate|null>(null);
  const [noteReviewed,setNoteReviewed]=useState(false);
  const inFlight=useRef(false);
@@ -23,12 +27,12 @@ export function ActivationPage(){
   if(inFlight.current)return;inFlight.current=true;setBusy(true);setError('');
   try{setState(await work());}
   catch(e){
-   if(typeof e==='object'&&e!==null&&'status' in e&&(e as {status:number}).status===409)setError('This session changed elsewhere. Your draft is still here; refresh the saved session before retrying.');
+   if(typeof e==='object'&&e!==null&&'status' in e&&(e as {status:number}).status===409)setError('This session changed elsewhere. Your draft is still here; refresh the saved session before retrying. If the command was rejected as stale, copy your text, clear the draft, and review a new submission against the refreshed plan. Exact retries never silently adopt a newer revision.');
    else if(e instanceof Error&&['TimeoutError','AbortError'].includes(e.name))setError('The request timed out. Your draft is preserved. Refresh canonical state, then retry the exact submission.');
    else setError(e instanceof Error?e.message:'ACTIVATION_UNAVAILABLE');
   }finally{inFlight.current=false;setBusy(false);}
  }
- function changeIdentity(){reportDraft.current=null;setReportAccepted(false);setState(null);pending.current=null;setReviewedBlocker('');setBlockerAccepted(false);setBlockerNote('');setNoteReviewed(false);setError('');}
+ function changeIdentity(){setBriefing('');setOutcome('');setAgreedBy('');setConfirmed(false);setInitial('');setProgressNote('');setNeedsChris(false);setProgressAccepted(false);progressDraft.current=null;setReviewedProgress('');setCommandAccepted(false);progressCommand.current=null;reportDraft.current=null;setReportAccepted(false);setState(null);pending.current=null;setReviewedBlocker('');setBlockerAccepted(false);setBlockerNote('');setNoteReviewed(false);setError('');}
  async function submitReviewedBlocker(){
   if(!state)return;
   try{if(!pending.current){const candidate=JSON.parse(reviewedBlocker) as BlockerUpdate;if(candidate.customerId!==state.customerId||candidate.developerSessionId!==state.developerSessionId||candidate.expectedRevision!==state.revision||candidate.planRevision!==state.planRevision)throw new Error('STALE_BLOCKER');pending.current=candidate;}}catch{setError('The reviewed command is invalid or belongs to a different customer, session, or revision. Refresh and request a new reviewed command.');return;}
@@ -38,6 +42,16 @@ export function ActivationPage(){
   if(!state)return;
   if(!reportDraft.current)reportDraft.current={id:'developer:'+crypto.randomUUID(),expectedRevision:state.revision,planRevision:state.planRevision,message:blockerNote.trim()};
   await run(async()=>{const result=await client().reportBlocker(reportDraft.current!);setReportAccepted(true);return result;});
+ }
+ async function submitProgress(){
+  if(!state)return;
+  if(!progressDraft.current)progressDraft.current={id:'progress:'+crypto.randomUUID(),expectedRevision:state.revision,planRevision:state.planRevision,message:progressNote.trim(),needsChris};
+  await run(async()=>{const next=await client().reportProgress(progressDraft.current!);setProgressAccepted(true);return next;});
+ }
+ async function submitProgressCommand(){
+  if(!state)return;
+  try{if(!progressCommand.current){const candidate=JSON.parse(reviewedProgress) as ProgressUpdate;if(candidate.customerId!==state.customerId||candidate.developerSessionId!==state.developerSessionId||candidate.expectedRevision!==state.revision||candidate.planRevision!==state.planRevision||candidate.milestoneId!==state.milestone.id)throw Error('STALE_PROGRESS');progressCommand.current=candidate;}}catch{setError('The reviewed progress command is invalid or belongs to a different customer, session, milestone, or revision. Refresh and request a new reviewed command.');return;}
+  await run(async()=>{const next=await client().progress(progressCommand.current!);setCommandAccepted(true);return next;});
  }
  function submitBlockerNote(){
   if(!blockerNote.trim())return;
@@ -71,6 +85,15 @@ export function ActivationPage(){
     <section className="activation-card activation-plan"><div className="activation-plan-top"><div><p className="activation-kicker">Customer-specific welcome</p><h2>{state.plan.selectedMilestone.outcome}</h2><p className="activation-goal">Goal: {state.context.agreedGoal.text}</p></div><span className={'activation-status '+state.milestone.status}>{state.milestone.status.replace('_',' ')}</span></div>
      <div className="activation-next"><small>Recommended next action · {state.plan.suggestedNextAction.kind.replace('_',' ')}</small><strong>{state.plan.suggestedNextAction.description}</strong><p>{state.plan.rationale}</p></div>
      <h3>Success means</h3><ul className="activation-list">{state.plan.selectedMilestone.successCriteria.map((criterion,i)=><li key={i}>{criterion}</li>)}</ul><h3>What has to be true first</h3><ul className="activation-list">{state.plan.prerequisites.map((item,i)=><li key={i}>{item.description} <em>({item.state})</em></li>)}</ul><div className="activation-capabilities"><strong>Capability reality check</strong>{state.plan.capabilities.map(cap=><span className="activation-capability" key={cap.id}>{cap.id}: <b>{cap.availability.replace('_',' ')}</b></span>)}</div>
+    </section>
+
+    <section className="activation-card" aria-label="Developer progress"><p className="activation-kicker">Review and progress</p><h2>Review the plan, then report what changed.</h2><p>Review the goal, constraints, prerequisites and success criteria above. Saving a review records your report; it grants no customer approval or execution authority.</p>
+     <button className="activation-button secondary" disabled={busy||!!progressDraft.current} onClick={()=>setProgressNote(`I reviewed plan revision ${state.planRevision} against the customer goal, prerequisites and constraints. Next action: ${state.plan.suggestedNextAction.description}`)}>Draft my plan review</button>
+     <label className="activation-field">Progress or plan review<textarea aria-label="Progress report" rows={3} maxLength={4000} disabled={!!progressDraft.current} value={progressNote} onChange={e=>setProgressNote(e.target.value)}/></label>
+     <label className="activation-checkbox"><input type="checkbox" aria-label="Request Chris help" disabled={!!progressDraft.current} checked={needsChris} onChange={e=>setNeedsChris(e.target.checked)}/>Ask Chris for help with this progress report</label>
+     <p>Submit only what you can attribute to yourself. Reports appear in Chris’s dashboard as reported information, without proving action completion or customer success.</p>
+     <div className="activation-actions"><button className="activation-button" disabled={!ready||!progressNote.trim()||progressAccepted} onClick={submitProgress}>Submit / retry progress report</button><button className="activation-button secondary" disabled={busy} onClick={()=>{progressDraft.current=null;setProgressNote('');setNeedsChris(false);setProgressAccepted(false);}}>Clear progress draft</button></div>{progressAccepted&&<p role="status">Progress report saved. Chris’s dashboard now links to your attributed evidence.</p>}
+     <details className="activation-intake"><summary>Integration handoff: submit reviewed action progress</summary><p>Use an exact reviewed command with independently admitted evidence for action transitions. The server checks scope, revisions, proof and authority. A text report cannot prepare, approve, execute or verify an action.</p><textarea aria-label="Progress command" rows={7} disabled={!!progressCommand.current} value={reviewedProgress} onChange={e=>setReviewedProgress(e.target.value)}/><div className="activation-actions"><button className="activation-button secondary" disabled={!ready||!reviewedProgress||commandAccepted} onClick={submitProgressCommand}>Submit / retry reviewed progress</button><button className="activation-button secondary" disabled={busy} onClick={()=>{progressCommand.current=null;setReviewedProgress('');setCommandAccepted(false);}}>Clear progress command</button></div>{commandAccepted&&<p role="status">Reviewed action progress saved.</p>}</details>
     </section>
 
     <section className="activation-card"><p className="activation-kicker">Developer conversation</p><h2>Tell us what changed.</h2><div className="activation-conversation"><div className="activation-bubble"><strong>Activation guide</strong>Your current path is based on the agreed customer outcome. If you hit a blocker, describe it plainly first—then we’ll show whether the system can safely replan.</div><label className="activation-field">What is blocking the next action?<textarea aria-label="Blocker note" rows={3} disabled={!!reportDraft.current} value={blockerNote} onChange={e=>{setBlockerNote(e.target.value);setNoteReviewed(false);}} placeholder="e.g. The team cannot access the expected CI workflow…"/></label><div className="activation-actions"><button className="activation-button secondary" disabled={!blockerNote.trim()||busy||!!reportDraft.current} onClick={submitBlockerNote}>Review blocker</button>{noteReviewed&&!reportAccepted&&<div className="activation-note" role="status"><strong>Draft reviewed — not submitted to the server.</strong><p>{blockerNote}</p><p>Submit explicitly to save this as your attributed developer report. The server can suggest a bounded review checklist; your report cannot prove repository state, approval, execution or customer success.</p></div>}{noteReviewed&&<button className="activation-button" disabled={!ready||reportAccepted} onClick={submitReport}>Submit / retry attributed report</button>}{reportAccepted&&<p role="status">Developer report saved to the server. A bounded suggested replan is pending or available below.</p>}{reportDraft.current&&<button className="activation-button secondary" disabled={busy} onClick={()=>{reportDraft.current=null;setReportAccepted(false);setBlockerNote('');setNoteReviewed(false);}}>Clear report draft</button>}{state.replan.status==='pending'&&<span className="activation-status pending">Replan in progress · checking every 5 seconds</span>}{state.replan.status==='ready'&&<span className="activation-status ready">A revised action is ready</span>}</div></div>
