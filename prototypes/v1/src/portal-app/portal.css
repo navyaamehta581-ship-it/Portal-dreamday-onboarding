@@ -176,9 +176,11 @@
 .pt-stages li.current::before{box-shadow:0 0 0 4px rgba(99,212,109,.25)}
 
 /* Inputs */
-.pt-input,.pt-textarea{width:100%;border-radius:6px;background:var(--p-field);border:1px solid transparent;color:#fff;padding:12px 14px;font-size:14.5px}
+.pt-input,.pt-textarea{width:100%;border-radius:4px;background:var(--p-surface);border:1px solid #4a4a4a;color:#fff;padding:12px 14px;font-size:14.5px}
 .pt-textarea{resize:vertical;min-height:110px;line-height:1.5}
-.pt-input:focus,.pt-textarea:focus{outline:none;border-color:#7a7a7a}
+.pt-input:focus,.pt-textarea:focus{outline:none;border-color:#fff;box-shadow:inset 0 0 0 1px #fff}
+/* Filled field variant (053 composer, 070 dialog rows) */
+.pt-input.filled,.pt-textarea.filled{background:var(--p-field);border-color:transparent}
 .pt-check{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:14px;color:#dcdcdc}
 .pt-check input{accent-color:var(--p-green);width:16px;height:16px;margin-top:2px;flex:none}
 .pt-pre{margin:12px 0 0;max-height:360px;overflow:auto;padding:14px 16px;border-radius:6px;background:var(--p-field);font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere;color:#e8e8e8}
@@ -268,3 +270,91 @@ select.pt-input{appearance:auto;height:46px}
 .pt-suggest-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .pt-suggest-row .pt-tool{height:auto;min-height:31px;padding:6px 11px;text-align:left;font-weight:600}
 @media (max-width:860px){.pt-form-row{grid-template-columns:1fr}}
+
+/* ===== Shared components grounded in further references ===== */
+/* Bold field labels above outlined inputs, muted help below (005, 012). */
+.pt-formfield{display:grid;gap:8px;margin-top:20px;min-width:0}
+.pt-formfield>label,.pt-formfield>.lbl{font-size:14px;font-weight:700;color:#fff}
+.pt-formfield>.help{font-size:13px;color:var(--p-muted)}
+/* Outline pill (014 "Add components", 018 "View On GitHub"). */
+.pt-btn.outline{background:transparent;color:#fff;border:1px solid #9a9a9a;height:36px;padding:0 16px;font-size:14px}
+.pt-btn.outline:hover:not(:disabled){border-color:#fff;background:transparent}
+/* Plan approval buttons (066). */
+.pt-approve,.pt-reject{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 14px;border-radius:4px;font-size:14px;font-weight:700}
+.pt-approve{background:#4caf50;color:#fff}.pt-approve:hover:not(:disabled){background:#57bd5b}
+.pt-reject{background:#e5484d;color:#fff}.pt-reject:hover:not(:disabled){background:#ef5a5f}
+.pt-disclosure>summary{list-style:none;cursor:pointer;font-size:13px;font-weight:600;color:var(--p-muted)}
+.pt-disclosure>summary::before{content:'▸ ';}
+.pt-disclosure[open]>summary::before{content:'▾ ';}
+/* Dialog (070). */
+.pt-backdrop{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.66);display:grid;place-items:center;padding:16px}
+.pt-dialog{width:min(664px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--p-surface);border:1px solid #2a2a2a;border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+.pt-dialog-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #262626;font-size:14px;font-weight:700}
+.pt-dialog-body{padding:16px;font-size:14px;line-height:1.55;color:#e6e6e6;display:grid;gap:12px}
+.pt-dialog-foot{display:flex;justify-content:flex-end;align-items:center;gap:22px;padding:12px 16px;border-top:1px solid #262626}
+.pt-dialog-foot .pt-btn.sm{height:32px;border-radius:4px;padding:0 16px}
+/* Step progress (012, 014, 018). */
+.pt-stepper{width:min(862px,100%);margin:0 auto}
+.pt-stepbar{height:3px;background:#3e3e3e;border-radius:2px;overflow:hidden}
+.pt-stepbar>span{display:block;height:100%;background:var(--p-green)}
+.pt-stepper .step-of{margin-top:20px;font-size:15px;color:var(--p-muted)}
+.pt-stepper h2{margin-top:10px;font-size:34px;font-weight:700;letter-spacing:-.6px;line-height:1.2}
+.pt-stepper .lede{margin-top:12px;font-size:16px;line-height:26px;color:#cfcfcf}
+.pt-tablebox{margin-top:24px;border:1px solid #2a2a2a;border-radius:4px;padding:8px 26px 4px}
+.pt-tablebox .pt-table{margin-top:0}
+.pt-tablebox .foot{padding:18px 0 16px;border-top:1px solid #2a2a2a;color:var(--p-muted);font-size:15px}
+.pt-ok{color:var(--p-green)}
+/* Simulation / provenance tag: small, local, honest. */
+.pt-tag{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:4px;background:#262626;color:#cfcfcf;font-size:11.5px;font-weight:700;letter-spacing:.2px;white-space:nowrap}
+.pt-tag.sim{background:#2d2a17;color:#f0d77a}
+/* Insights headline blocks and ring (075). */
+.pt-subtabs{display:flex;gap:4px;margin-top:14px;border-bottom:1px solid var(--p-line)}
+.pt-subtabs a,.pt-subtabs button{padding:6px 8px;margin-bottom:6px;font-size:14px;font-weight:600;color:#bdbdbd;border-radius:4px;border:2px solid transparent}
+.pt-subtabs [aria-current=page],.pt-subtabs [aria-selected=true]{color:#fff;border-color:#5a7fd6}
+.pt-headlines{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:40px;margin-top:40px}
+.pt-headline h3{font-size:16px;font-weight:700}
+.pt-headline p{margin-top:16px;font-size:15px;color:#cfcfcf;line-height:1.6}
+.pt-ring{--v:0;width:190px;height:190px;margin:28px auto 0;border-radius:50%;display:grid;place-items:center;text-align:center;
+ background:radial-gradient(closest-side,var(--p-surface) 88%,transparent 89%),conic-gradient(var(--p-green) calc(var(--v)*1%),#24402a 0)}
+.pt-ring strong{display:block;font-size:30px;font-weight:800;line-height:1}
+.pt-ring span{font-size:13px;font-weight:700}
+/* Contextual AiKA (055, 066). */
+.pt-aika-launch{position:fixed;right:20px;bottom:20px;z-index:30;width:44px;height:44px;border-radius:50%;background:#1c1c1c;border:1px solid #3a3a3a;display:grid;place-items:center;color:var(--p-green);box-shadow:0 6px 18px rgba(0,0,0,.5)}
+.pt-aika-launch:hover{background:#262626}
+.pt-aika{position:fixed;right:20px;bottom:12px;z-index:31;width:min(372px,calc(100vw - 24px));height:min(560px,calc(100vh - 90px));display:flex;flex-direction:column;background:var(--p-surface);border:1px solid #2e2e2e;border-radius:8px;box-shadow:0 18px 50px rgba(0,0,0,.65)}
+.pt-aika.expanded{width:min(720px,calc(100vw - 24px));height:calc(100vh - 90px)}
+.pt-aika-head{display:flex;align-items:center;gap:10px;padding:14px 14px 12px 18px}
+.pt-aika-head .icon{width:30px;height:30px;border-radius:4px;background:#2a2a2a;display:grid;place-items:center}
+.pt-aika-head strong{font-size:14px;font-weight:700}
+.pt-aika-head .ctl{margin-left:auto;display:flex;gap:6px}
+.pt-aika-head .ctl button{width:28px;height:28px;display:grid;place-items:center;border-radius:4px;color:#cfcfcf}
+.pt-aika-head .ctl button:hover{background:#262626}
+.pt-aika-body{flex:1;overflow:auto;padding:4px 18px 12px;font-size:14px;line-height:1.55}
+.pt-aika-body .msg-user{margin:14px 0 0 auto;width:fit-content;max-width:88%;padding:7px 12px;border-radius:12px;background:var(--p-raised);font-weight:600}
+.pt-aika-body .msg-ai{margin-top:14px;color:#e6e6e6}
+.pt-aika-body .msg-ai p+p{margin-top:8px}
+.pt-aika-suggest{display:grid;gap:4px;padding:0 18px 8px}
+.pt-aika-suggest button{display:flex;gap:8px;align-items:center;text-align:left;padding:8px 0;font-size:14px;font-weight:700;color:#e6e6e6}
+.pt-aika-suggest button:hover{color:#fff;text-decoration:underline}
+.pt-aika-compose{margin:0 10px 10px;border-radius:6px;background:var(--p-field);padding:10px 10px 8px 12px}
+.pt-aika-compose textarea{width:100%;min-height:36px;resize:none;border:0;background:transparent;color:#fff;font-size:14px}
+.pt-aika-compose textarea:focus{outline:none}
+.pt-aika-compose .bar{display:flex;align-items:center;gap:8px}
+.pt-code{margin-top:8px;padding:10px 12px;border-radius:4px;background:#2a2a2a;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.pt-diff{margin-top:12px;border:1px solid #2a2a2a;border-radius:4px;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;overflow:auto}
+.pt-diff div{padding:2px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.pt-diff .add{background:#13301a;color:#a6e8b0}.pt-diff .del{background:#3a1717;color:#ffb3ad}.pt-diff .same{color:#9a9a9a}
+@media (max-width:1100px){.pt-headlines{grid-template-columns:1fr}}
+/* Entry artwork variant for the password/sign-in screen (001): concentric diamonds. CSS approximation. */
+.pt-art.diamond{background:#4fb460}
+.pt-art.diamond::before{content:'';position:absolute;left:50%;top:57%;width:150px;height:150px;transform:translate(-50%,-50%) rotate(45deg);background:#a9f0b4;
+ box-shadow:0 0 0 60px #97e8a3,0 0 0 125px #87e094,0 0 0 195px #79d887,0 0 0 270px #6ccf7b,0 0 0 350px #62c771,0 0 0 435px #59be68,0 0 0 525px #53b862}
+.pt-art.diamond::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 60% 55% at 50% 57%,rgba(255,255,255,.14),transparent 70%)}
+.pt-art.diamond .pt-art-logo{z-index:2}
+.pt-entry-copy.signin{top:40vh}
+.pt-entry-copy.signin h1{font-size:48px}
+.pt-signin-field{position:relative;margin-top:22px}
+.pt-signin-field .pt-input{height:56px;border:2px solid #d6d6d6;font-size:16px;padding:0 16px}
+.pt-signin-field .pt-input:focus{box-shadow:none;border-color:#fff}
+.pt-entry-copy.signin .pt-btn{margin-top:22px;height:54px;padding:0 34px}
+@media (max-width:860px){.pt-entry-copy.signin{position:relative;left:0;top:0;width:auto;padding:32px 16px 48px}.pt-entry-copy.signin h1{font-size:38px}.pt-art.diamond{height:240px}}

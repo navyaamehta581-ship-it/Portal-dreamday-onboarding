@@ -31,6 +31,9 @@ Read DESIGN_REFERENCES.md for the screenshot map and direct image links. CLAUDE_
 npm run build
 npm test
 node --test server/ignition.node-test.mjs server/portal-session.node-test.mjs
-# Fresh demo server required; Playwright must be installed:
-IGNITION_URL=http://127.0.0.1:5187 node e2e/ignition.mjs
+# Playwright must be installed. Starts its own fresh IGNITION_DEMO=1 server
+# (or set IGNITION_URL to a fresh server you started):
+node e2e/ignition.mjs
 ```
+
+Screens follow the original Portal references; see the visual refinement section in AUDIT.md for the reference used per screen and remaining differences. Rendered screens: refinement/.

@@ -27,3 +27,29 @@ Supersedes the auto-entry/switcher behavior above. Removed visible “fictional�
 Original reference folder found through Drive: https://drive.google.com/drive/folders/1QqcZQX8GbPEMquR5dXuKN3EujJI4Bqka . Added DESIGN_REFERENCES.md with the existing screenshot map and direct image links; rewrote Claude instructions to apply those references and preserve separate logins. Inspected reference 001 and the new login screenshot.
 
 Browser checks executed: all three separate login pages; wrong-account rejection on Chris; Chris/Maya/Alex sign-in; role-specific workspace navigation; Chris/Alex staying signed in after Maya sign-out; approval gate; published Chris handoff arriving in Alex's workspace on refresh. Updated automated browser script for email login; script itself was not run. Build, 89 frontend tests and seven HTTP/domain checks pass; added HTTP assertions for account mismatch, scoped logout and other accounts remaining active. Existing default Portal navigation remains unchanged; the shared Shell now permits surface-specific secondary navigation.
+
+## Visual refinement — 27 October 2026
+
+Branch claude/spotify-portal-frontend-rebuild-i04hn5, from main a5877a8 plus feat/northstar-ignition (7e529ea, persona sign-ins). No merge or deploy.
+
+Reference access: the Drive folder was searched through the Drive connector and these originals were downloaded and opened: 001, 005, 010, 011, 012, 014, 018, 023, 036, 037, 045, 047, 053, 055, 057, 058, 061, 065, 066, 070, 075, 076, 077. The direct links in DESIGN_REFERENCES.md point to a copy the connector could not open ("not found"); the same filenames in the original folder were used instead.
+
+Audit of the previous ignition UI (before): flat mint login without the 001 artwork or field treatment; developer surface reduced to a two-item sidebar instead of the 053 shell; AiKA as a green pill and generic card; uppercase kicker headers instead of the 047 entity header; a separate palette in ignition.css (#202427, #91edaa, #b5f5c5 metric tiles, bordered workflow cards); filled form fields with plain labels; no approval or dialog pattern.
+
+Shared tokens and components (portal.css, used by all surfaces): outlined fields with bold labels and help text (005, 012); outline pill (014, 018); approve/reject buttons and disclosure (066); dialog (070); step progress bar, step header and table box (012, 014, 018); Insights subtabs, headline blocks and ring (075); docked AiKA panel and launcher (055, 065); provenance/simulation tags; line diff. ignition.css now holds layout only.
+
+| Screen | Reference | Rules applied | Remaining differences | Inspected |
+|---|---|---|---|---|
+| Sign-in (all four) | 001 | Split layout, artwork panel with logo, 48px heading, outlined 56px field, green pill | Artwork is a CSS approximation (concentric diamonds, no grain); heading copy differs per product; email instead of password (demo accounts) | Desktop + 390px |
+| Developer shell | 053 | Full sidebar, black top bar, centered search, selected gray row, separate content surface | Outline icons (lucide) instead of the original icon set; only Home and Insights are functional | Desktop + 390px |
+| Developer home | 011, 036 | Welcome title, setup card with progress, black active-step panel, check rows with green actions, locked rows | Card copy and rows come from the approved handoff; no lower "Learn more" cards | Desktop + 390px |
+| Guided workflow | 012, 014, 018, 045 | Centered column, green step bar, step-of label, table box, outlined field, Back/Verify actions | Catalog/doc fixture is a single row/article, labelled simulated | Desktop |
+| Contextual AiKA | 055, 065, 066 | Bottom-right docked panel, “New AiKA Chat” header with expand/minimize, suggestion rows, filled composer, triangle launcher | No chat-history dropdown or MCP selector (not functional here); responses scripted and labelled | Desktop |
+| Chris customer file | 047, 045, 005 | Entity header with meta, horizontal tabs, dense table, right help rail | No screenshot of this workspace exists; layout is derived, not matched | Desktop + 390px |
+| Chris approval and versions | 066, 070 | Green Approve / red Discard, disclosure for changes, 070 dialog for simulated import, line diff | Diff colours have no direct reference | Desktop |
+| Maya team activation | 047, 014 | Entity header, table box with radio priority and checkbox invites | Derived layout; no screenshot of this workspace exists | Desktop + 390px |
+| Insights / adoption | 075 | Insights page bar, boxed subtab, headline blocks, ring | Single tab; no time-series charts (no data) | Desktop |
+
+Executed checks (Node 24.22.1): production build passed; 91 frontend tests (17 files) passed; 7 ignition/session HTTP tests passed; inspector 15/15; phase-A 4/4; workflow-api check + 62 tests passed; blueprint validation passed. e2e/ignition.mjs was rewritten (the previous script raced the lazy login render and failed) and passed against a fresh server: deep link without session shows sign-in, wrong account rejected, concurrent tabs keep identities, Maya sign-out leaves Chris/Alex/Jordan signed in, v1 approval, Alex before Maya, Maya priority/goal reaching Jordan, wrong answer rejected, unsent support draft, v2 with v1 evidence retained and revalidation flags after reload, no sources/commercial data in Maya or developer payloads, no overflow at 390px, no browser errors. e2e/activation.mjs (/, /operator surfaces) also passed after the shared field-style change.
+
+Still open: verification overwrites the prior result on the server (revalidation is flagged in the UI, not appended); no persistence across server restart; AiKA and support are scripted; the Drive reference copy linked from DESIGN_REFERENCES.md is not reachable by the connector.
