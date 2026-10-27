@@ -11,7 +11,9 @@
     "test:inspector": "node --test server/diagnose.node-test.mjs",
     "test:phase-a": "node --test server/phase-a/*.node-test.mjs",
     "test:portal-session": "node --test server/portal-session.node-test.mjs",
-    "test:e2e": "node e2e/activation.mjs"
+    "test:e2e": "node e2e/activation.mjs",
+    "test:ignition": "node --test server/ignition.node-test.mjs",
+    "test:e2e:ignition": "node e2e/ignition.mjs"
   },
   "dependencies": {
     "@fontsource/figtree": "5.3.0",

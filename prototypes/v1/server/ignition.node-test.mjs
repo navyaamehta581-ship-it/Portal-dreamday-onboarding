@@ -1,0 +1,38 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {createServer} from 'node:http';
+import {createIgnitionStore,ignitionPlugin} from './ignition.mjs';
+const principal=(person,tenant='northstar')=>({person,tenant,role:person==='chris'?'operator':person==='maya'?'champion':'developer'});
+const publish={action:'publish',reviewed:true,briefing:'Maya prioritizes service ownership and documentation for payments-api on GitHub.',uncertainties:'Okta unverified; conflicting notes. GitHub access reported only.'};
+test('approval, commercial privacy, conflicts and role isolation are enforced',()=>{
+ const s=createIgnitionStore(),c=principal('chris'),a=principal('alex'),m=principal('maya');
+ assert.throws(()=>s.mutate(a,{...publish,revision:0}),/FORBIDDEN/);
+ assert.throws(()=>s.mutate(c,{...publish,reviewed:false,revision:0}),/REVIEW_REQUIRED/);
+ assert.throws(()=>s.mutate(c,{...publish,uncertainties:'Budget $100K',revision:0}),/PRIVATE_CONTEXT/);
+ s.mutate(c,{...publish,revision:0});
+ for(const p of [a,m]){const v=s.view(p);assert.equal(v.sources,undefined);assert.equal(v.versions,undefined);assert.equal(v.commercial,undefined);assert.match(v.handoff.uncertainties,/unverified/);assert.doesNotMatch(JSON.stringify(v),/100K/);}
+ assert.throws(()=>s.mutate(a,{action:'preferences',priority:'docs',goal:'',invites:[],revision:1}),/FORBIDDEN/);
+ assert.throws(()=>s.mutate(m,{action:'verify',workflow:'docs',answer:'Payments recovery',revision:1}),/FORBIDDEN/);
+});
+test('champion is optional, verification is meaningful, revisions preserve individual evidence and tenants',()=>{
+ const s=createIgnitionStore(),c=principal('chris'),a=principal('alex'),j=principal('jordan');s.mutate(c,{...publish,revision:0});
+ assert.throws(()=>s.mutate(a,{action:'verify',workflow:'ownership',answer:'random',revision:1}),/OUTCOME_NOT_VERIFIED/);
+ s.mutate(a,{action:'verify',workflow:'ownership',answer:'team-payments',revision:1});
+ s.mutate(c,{...publish,briefing:'Revised context: find service ownership and docs.',revision:2});
+ assert.equal(s.view(a).progress.alex.ownership.handoffVersion,1);assert.equal(s.view(a).handoff.version,2);assert.equal(s.view(c).versions.length,2);
+ assert.equal(s.view(j).progress.alex,undefined);assert.deepEqual(s.view(j).progress.jordan,{});
+ assert.equal(s.view(principal('chris','other-tenant')).handoff,null);
+ assert.throws(()=>s.mutate(c,{...publish,revision:1}),/REVISION_CONFLICT/);
+});
+test('HTTP rejects unauthenticated, cross-origin, injected tenant/role and developer publication',async()=>{
+ process.env.IGNITION_DEMO='1';let handler;ignitionPlugin().configureServer({middlewares:{use:h=>handler=h}});
+ const server=createServer((q,r)=>handler(q,r,()=>{r.writeHead(404);r.end();}));await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ const base=`http://127.0.0.1:${server.address().port}`;
+ try{
+  assert.equal((await fetch(base+'/ignition-api/state')).status,401);
+  assert.equal((await fetch(base+'/ignition-api/session',{method:'POST',body:JSON.stringify({person:'chris'})})).status,403);
+  const login=await fetch(base+'/ignition-api/session',{method:'POST',headers:{Origin:base},body:JSON.stringify({person:'alex',role:'operator',tenant:'other'})});const cookie=login.headers.get('set-cookie').split(';')[0];
+  const state=await (await fetch(base+'/ignition-api/state',{headers:{Cookie:cookie}})).json();assert.equal(state.role,'developer');assert.equal(state.sources,undefined);
+  const denied=await fetch(base+'/ignition-api/state',{method:'POST',headers:{Origin:base,Cookie:cookie},body:JSON.stringify({...publish,revision:0})});assert.equal(denied.status,403);
+ }finally{await new Promise(r=>server.close(r));delete process.env.IGNITION_DEMO;}
+});
