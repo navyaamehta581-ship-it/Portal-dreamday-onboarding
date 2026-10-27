@@ -45,17 +45,22 @@ try{
   await op.goto(url+'/operator');await op.getByLabel('Customer account').selectOption(account);
   await op.getByLabel('Operator access token').fill(token);await op.getByRole('button',{name:'Open workspace'}).click();
   await op.getByLabel('Raw account and call notes').fill(notes);await op.getByRole('button',{name:'Organize notes'}).click();
+  await op.getByRole('tab',{name:'Activation Goal'}).click();
   await op.getByLabel('Agreed activation outcome').fill(outcome);await op.getByLabel('Agreement attribution').fill(by);
   await op.getByRole('checkbox',{name:/I reviewed this developer-visible/}).check();
   const sent=op.waitForRequest(r=>r.url().endsWith('/intake')&&r.method()==='POST');
   await op.getByRole('button',{name:'Publish to developers'}).click();
-  const body=(await sent).postData();await op.getByRole('heading',{name:'Activation at a glance'}).waitFor();return body;
+  const body=(await sent).postData();await op.getByRole('heading',{name:'Agreed activation outcome'}).waitFor();return body;
  }
- assert.equal(await op.getByText('Onboarding',{exact:true}).count(),0,'operator has no Portal shell');
  const posted=await publish('northstar',opToken,NORTHSTAR,'Register checkout-api in the Software Catalog with an owner','Fictional platform lead, local test call');
  assert.ok(!posted.includes('PRIVATE CONTRACT NOTE'),'private line held back');
  await publish('lumen',lumenOp,LUMEN,'Generate a first recommendation service from an approved template','Fictional data lead, local test call');
  console.log('Both customers published');
+ // Same Portal shell, separate navigation targets and access.
+ assert.equal(await op.locator('.pt-shell .pt-side').count(),1);
+ assert.equal(await op.getByRole('link',{name:'Customer Onboarding'}).getAttribute('href'),'/operator');
+ assert.equal(await op.locator('a[href^="/portal"],a[href="/activation"]').count(),0);
+ assert.equal((await op.context().cookies()).length,0,'Chris never holds a developer session');
 
  // --- Developer: welcome → simulated login → personalized Portal.
  const devContext=await browser.newContext({viewport:{width:1920,height:1042}});const dev=await devContext.newPage();watch(dev);
@@ -69,6 +74,7 @@ try{
  assert.ok(text.includes('Register checkout-api'));assert.ok(!text.includes('PRIVATE CONTRACT NOTE'));
  assert.ok(!(await dev.content()).includes(devToken),'developer token never reaches the page');
  assert.equal(await dev.getByLabel('Raw account and call notes').count(),0);
+ assert.equal(await dev.locator('a[href^="/operator"]').count(),0,'no operator links for developers');
  await dev.getByRole('button',{name:'Open your onboarding'}).click();
  await dev.getByRole('tab',{name:'Overview'}).waitFor();text=await dev.locator('body').innerText();
  assert.ok(text.includes('Okta')&&text.includes('checkout-api'));assert.equal(await dev.getByRole('tab',{name:'Team'}).count(),0);
@@ -98,7 +104,7 @@ try{
  assert.equal(bearer.length,0,'developer browser never sends bearer tokens');
 
  // --- Chris reviews evidence-backed follow-up.
- await op.goto(url+'/operator');await op.getByLabel('Operator access token').fill(opToken);await op.getByRole('button',{name:'Open workspace'}).click();
+ await op.goto(url+'/operator/progress');await op.getByLabel('Operator access token').fill(opToken);await op.getByRole('button',{name:'Open workspace'}).click();
  await op.getByText('Chris intervention requested',{exact:true}).waitFor();
  assert.ok((await op.getByLabel('Chris team handoff summary').innerText()).includes('blocked'));
  assert.ok((await op.getByLabel('Developer activity').innerText()).includes('deploy to staging'));

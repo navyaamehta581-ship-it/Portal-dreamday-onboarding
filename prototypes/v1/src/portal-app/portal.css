@@ -257,3 +257,14 @@
 .pt-spin{animation:pt-spin 1s linear infinite}
 @keyframes pt-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.pt-spin{animation:none}.pt-btn{transition:none}}
+
+/* Form rows: derived from the reconstructed inputs and labels (no direct screenshot reference). */
+.pt-form-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:16px;align-items:end;margin-top:18px}
+.pt-form-field{display:grid;gap:8px;margin-top:18px;min-width:0}
+.pt-form-row .pt-form-field{margin-top:0}
+.pt-form-field>span{font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#bdbdbd}
+select.pt-input{appearance:auto;height:46px}
+.pt-input:disabled,.pt-textarea:disabled{opacity:.6}
+.pt-suggest-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.pt-suggest-row .pt-tool{height:auto;min-height:31px;padding:6px 11px;text-align:left;font-weight:600}
+@media (max-width:860px){.pt-form-row{grid-template-columns:1fr}}

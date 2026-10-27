@@ -27,6 +27,8 @@ it('goes welcome → simulated sign-in → Portal without collecting credentials
  expect(m.host.textContent).toContain('hasn’t been published yet');
  expect(calls).toContain('GET /portal-api/activation/v1/customers/fictional-north/state');
  expect(m.host.textContent).not.toMatch(/token|Customer ID|operator/i);
+ expect(Array.from(m.host.querySelectorAll('a')).some(a=>a.getAttribute('href')?.startsWith('/operator'))).toBe(false);
+ expect(m.host.textContent).not.toContain('Customer Onboarding');
 });
 
 it('requires sign-in on direct developer routes and keeps Chris’s workspace out of the Portal',async()=>{
