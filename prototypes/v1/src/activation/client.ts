@@ -18,6 +18,8 @@ export function activationClient(customerId:string,token:string,base='') {
   // On timeout retain the exact command ID/body; GET then retry the same body, never invent progress.
   return {
     intake:(briefing:string,outcome:string,agreedBy:string,agreementConfirmed:boolean)=>request('/intake',{briefing,outcome,agreedBy,agreementConfirmed}),
+    prepareGitHub:(command:{id:string;expectedRevision:number;planRevision:number;actionId:string;actionRevision:number})=>request('/github-preparations',command),
+    acceptSetupProposal:(command:{id:string;expectedRevision:number;preparationId:string;artifactDigest:string;sourceCommit:string;planRevision:number;actionRevision:number;decision:'accept_proposal_only'})=>request('/setup-approvals',command),
     read:()=>request('/state'),
     reportProgress:(event:{id:string;expectedRevision:number;planRevision:number;message:string;needsChris:boolean})=>request('/progress-reports',event),
     reportBlocker:(event:{id:string;expectedRevision:number;planRevision:number;message:string})=>request('/blocker-reports',event),

@@ -30,3 +30,16 @@ it('rejects a nested cross-customer response before exposing it to the UI',async
  vi.stubGlobal('fetch',vi.fn().mockResolvedValue({ok:true,status:200,json:async()=>({contractVersion:'1.0.0',customerId:'ledger',revision:0,context:{customerId:'orbit'},plan:{customerId:'ledger'}})}));
  await expect(activationClient('ledger','token').read()).rejects.toThrow('INVALID_ACTIVATION_RESPONSE');
 });
+
+it('prepares only through the bounded action route, with no authority or repository fields',async()=>{
+ const fetch=vi.fn().mockResolvedValue({ok:false,status:403,json:async()=>({error:{code:'FORBIDDEN'}})});vi.stubGlobal('fetch',fetch);
+ const command={id:'prepare:test',expectedRevision:0,planRevision:0,actionId:'inspect',actionRevision:0};
+ await expect(activationClient('ledger','token').prepareGitHub(command)).rejects.toMatchObject({status:403,code:'FORBIDDEN'});
+ expect(fetch.mock.calls[0][0]).toBe('/api/activation/v1/customers/ledger/github-preparations');expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(command);
+});
+it('sends only explicit proposal acceptance bindings and preserves authorization failure',async()=>{
+ const fetch=vi.fn().mockResolvedValue({ok:false,status:403,json:async()=>({error:{code:'FORBIDDEN'}})});vi.stubGlobal('fetch',fetch);
+ const command={id:'approval:test',expectedRevision:2,preparationId:'prepare:test',artifactDigest:'d'.repeat(64),sourceCommit:'a'.repeat(40),planRevision:0,actionRevision:0,decision:'accept_proposal_only' as const};
+ await expect(activationClient('ledger','token').acceptSetupProposal(command)).rejects.toMatchObject({status:403,code:'FORBIDDEN'});
+ expect(fetch.mock.calls[0][0]).toBe('/api/activation/v1/customers/ledger/setup-approvals');expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(command);
+});
