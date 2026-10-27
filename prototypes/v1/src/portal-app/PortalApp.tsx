@@ -1,10 +1,5 @@
 import {useEffect,useMemo,useState} from 'react';
-import '@fontsource/figtree/400.css';
-import '@fontsource/figtree/500.css';
-import '@fontsource/figtree/600.css';
-import '@fontsource/figtree/700.css';
-import '@fontsource/figtree/800.css';
-import './portal.css';
+import './theme';
 import {activationClient} from '../activation/client';
 import {useActivation} from '../activation/useActivation';
 import {currentSession,signOut,type PortalAccount} from './session';
@@ -39,7 +34,7 @@ export function PortalApp(){
  const active=onboarding?'onboarding':feature?feature[1]:'home';
  const tab=(TABS.some(([id])=>id===onboarding?.[1])?onboarding![1]:'overview') as Tab;
  const item=feature?ALL_NAV.find(n=>n.slug===feature[1]):null;
- return <div className="pt"><Shell active={active} account={account} onSignOut={()=>void leave()}>
+ return <div className="pt"><Shell active={active} user={{name:account.user,detail:account.label,actionLabel:'Sign out',onAction:()=>void leave()}}>
   {onboarding?<OnboardingPage session={session} tab={tab} account={account}/>:
    feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2><p>Only Home and Onboarding are functional here.</p></div></div></div>:
    <Home session={session}/>}

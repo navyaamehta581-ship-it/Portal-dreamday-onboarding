@@ -8,5 +8,5 @@ const OperatorWorkspace=lazy(()=>import('./operator/OperatorWorkspace').then(m=>
 const LegacyPortal=lazy(()=>import('./styles.css').then(()=>import('./portal/Portal')));
 const path=window.location.pathname;
 const portal=path==='/'||path==='/login'||path==='/onboarding'||path==='/portal'||path.startsWith('/portal/')||path==='/activation'||path.startsWith('/activation/');
-const Surface=path==='/operator'?OperatorWorkspace:portal?PortalApp:LegacyPortal;
+const Surface=path==='/operator'||path.startsWith('/operator/')?OperatorWorkspace:portal?PortalApp:LegacyPortal;
 createRoot(document.getElementById('root')!).render(<React.StrictMode><Suspense fallback={null}><Surface/></Suspense></React.StrictMode>);

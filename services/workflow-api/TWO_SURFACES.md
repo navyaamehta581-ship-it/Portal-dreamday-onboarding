@@ -38,7 +38,7 @@ With a single customer you can skip the file: start Vite with `ACTIVATION_DEMO_D
 
 **3. Start the frontend** from `prototypes/v1`: `PORTAL_DEMO_ACCOUNTS="$DEMO_ROOT/accounts.json" npm run dev`.
 
-- Chris's external workspace: `http://127.0.0.1:5173/operator`. Pick the customer and paste that customer's operator token (`ACTIVATION_DEMO_DIR=… npm run demo:operator-token --silent`). The token stays in the tab's memory.
+- Chris's workspace: `http://127.0.0.1:5173/operator` (tabs at `/operator/goal` and `/operator/progress`). It renders inside the same Portal shell as the developer Portal but has its own access: pick the customer and paste that customer's operator token (`ACTIVATION_DEMO_DIR=… npm run demo:operator-token --silent`). The token stays in the tab's memory; no developer sign-in or cookie is used.
 - Developer Portal: `http://127.0.0.1:5173/` → Get started → simulated sign-in → Portal home → Onboarding. Direct route: `http://127.0.0.1:5173/activation` (asks for sign-in first).
 - Historical fixture UI: `/legacy-portal`.
 

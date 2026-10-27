@@ -2,7 +2,6 @@ import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {ArrowRightLeft,Bell,BookOpen,Bookmark,ChartColumn,CheckCheck,ChevronRight,Container,Flag,Folder,Globe,GraduationCap,History,House,LayoutGrid,ListChecks,Lock,Newspaper,Plus,Puzzle,Radar,ScrollText,Search,Settings,Triangle,type LucideIcon} from 'lucide-react';
 import {Logo} from './Logo';
 import {Link} from './router';
-import type {PortalAccount} from './session';
 
 export type NavItem={slug:string;label:string;icon:LucideIcon;to?:string;tag?:string;dot?:boolean;chevron?:boolean;solid?:boolean};
 /** Navigation as shown in references 053–061. Only Home and Onboarding are functional in this demo. */
@@ -36,34 +35,40 @@ export const SECONDARY_NAV:NavItem[]=[
 export const ALL_NAV=[...PRIMARY_NAV,...SECONDARY_NAV];
 export const navHref=(item:NavItem)=>item.to??`/portal/x/${item.slug}`;
 
-function Nav({items,active,className='pt-nav'}:{items:NavItem[];active:string;className?:string}){
+type Href=(item:NavItem)=>string;
+function Nav({items,active,href,className='pt-nav'}:{items:NavItem[];active:string;href:Href;className?:string}){
  return <ul className={className}>{items.map(item=>{const Icon=item.icon;return <li key={item.slug}>
-  <Link to={navHref(item)} aria-current={active===item.slug?'page':undefined}>
+  <Link to={href(item)} aria-current={active===item.slug?'page':undefined}>
    <Icon size={16} strokeWidth={2.4} fill={item.solid?'currentColor':'none'} aria-hidden="true"/>{item.dot&&<span className="dot" aria-hidden="true"/>}{item.label}
    {item.tag&&<span className="tag">{item.tag}</span>}{item.chevron&&<ChevronRight className="chev" size={16} aria-hidden="true"/>}
   </Link></li>;})}</ul>;
 }
 
-function AccountMenu({account,onSignOut}:{account:PortalAccount;onSignOut:()=>void}){
+/** Who is signed in to this surface and the one action their menu offers. */
+export type ShellUser={name:string;detail:string;actionLabel:string;onAction:()=>void};
+
+function AccountMenu({user}:{user:ShellUser}){
  const [open,setOpen]=useState(false),ref=useRef<HTMLDivElement>(null);
  useEffect(()=>{if(!open)return;const close=(e:MouseEvent|KeyboardEvent)=>{if(e instanceof KeyboardEvent?e.key==='Escape':!ref.current?.contains(e.target as Node))setOpen(false);};document.addEventListener('mousedown',close);document.addEventListener('keydown',close);return()=>{document.removeEventListener('mousedown',close);document.removeEventListener('keydown',close);};},[open]);
  return <div className="pt-avatar" ref={ref}>
-  <button aria-haspopup="menu" aria-expanded={open} aria-label={`Account: ${account.user}`} onClick={()=>setOpen(!open)}>{account.user.trim().charAt(0).toUpperCase()}</button>
-  {open&&<div className="pt-menu" role="menu"><p><strong>{account.user}</strong>{account.label}</p><button role="menuitem" onClick={onSignOut}>Sign out</button></div>}
+  <button aria-haspopup="menu" aria-expanded={open} aria-label={`Account: ${user.name}`} onClick={()=>setOpen(!open)}>{user.name.trim().charAt(0).toUpperCase()}</button>
+  {open&&<div className="pt-menu" role="menu"><p><strong>{user.name}</strong>{user.detail}</p><button role="menuitem" onClick={()=>{setOpen(false);user.onAction();}}>{user.actionLabel}</button></div>}
  </div>;
 }
 
-export function Shell({active,account,onSignOut,children}:{active:string;account:PortalAccount;onSignOut:()=>void;children:ReactNode}){
+/** The one Portal shell (053–061), shared by the developer Portal and Chris's workspace.
+ * Each surface passes its own navigation targets; authorization stays with the surface. */
+export function Shell({active,user,homeHref='/portal',primaryNav=PRIMARY_NAV,href=navHref,children}:{active:string;user:ShellUser;homeHref?:string;primaryNav?:NavItem[];href?:Href;children:ReactNode}){
  return <div className="pt-shell">
   <header className="pt-top">
-   <Link to="/portal" aria-label="Spotify Portal home"><Logo/></Link>
+   <Link to={homeHref} aria-label="Spotify Portal home"><Logo/></Link>
    <div className="pt-search" aria-disabled="true" title="Search is not available in this demo"><Search size={17} strokeWidth={2.6} aria-hidden="true"/>Search in Portal</div>
-   <AccountMenu account={account} onSignOut={onSignOut}/>
+   <AccountMenu user={user}/>
   </header>
   <div className="pt-body">
    <nav className="pt-side" aria-label="Portal">
-    <Nav items={PRIMARY_NAV} active={active}/>
-    <Nav items={SECONDARY_NAV} active={active} className="pt-nav secondary"/>
+    <Nav items={primaryNav} active={active} href={href}/>
+    <Nav items={SECONDARY_NAV} active={active} href={href} className="pt-nav secondary"/>
    </nav>
    <main className="pt-main" id="main">{children}</main>
   </div>
