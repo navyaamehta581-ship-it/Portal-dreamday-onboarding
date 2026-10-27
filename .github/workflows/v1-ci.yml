@@ -43,5 +43,7 @@ jobs:
         run: npm run test:inspector
       - name: Check Phase A conversation API
         run: npm run test:phase-a
+      - name: Check Portal demo session layer
+        run: npm run test:portal-session
       - name: Check types and build V1
         run: npm run build

@@ -19,6 +19,9 @@ const directory=resolve(process.env.ACTIVATION_DEMO_DIR??join(tmpdir(),`spotify-
 const operatorTokenPath=join(directory,'operator-token');
 const tokenPath=join(directory,'token');
 const admissionPath=join(directory,'admission.json');
+// Optional second fictional customer for isolation checks; the prefix keeps it visibly fictional.
+const customerId=process.env.ACTIVATION_DEMO_CUSTOMER_ID??'fictional-recommendation-demo';
+if(!/^fictional-[a-z0-9-]{1,60}$/.test(customerId))throw Error('ACTIVATION_DEMO_CUSTOMER_ID must start with fictional- and use lowercase letters, digits or hyphens');
 if(!existsSync(directory))mkdirSync(directory,{mode:0o700});
 function privatePath(path:string, directory=false) {
  const s=lstatSync(path);
@@ -28,7 +31,7 @@ privatePath(directory,true);
 if(!existsSync(admissionPath)) {
  if(command==='token'||command==='operator-token')throw Error('Start the demo first');
  if(existsSync(tokenPath))throw Error('Incomplete setup: choose a fresh ACTIVATION_DEMO_DIR');
- const principal={tenantId:'fictional-demo',customerId:'fictional-recommendation-demo',sessionId:'fictional-local-session'};
+ const principal={tenantId:'fictional-demo',customerId,sessionId:'fictional-local-session'};
  const context=structuredClone(fixtures.orbit.context) as CustomerContext,plan=structuredClone(fixtures.orbit.plan) as ActivationPlan;
  context.customerId=plan.customerId=principal.customerId;
  context.briefing='FICTIONAL LOCAL DEMO. Chris and the customer are invented. A new team wants to review its first recommendation-service onboarding path. No real customer agreement, Portal access, GitHub inspection, deployment or adoption is claimed.';
@@ -56,7 +59,7 @@ if(command==='operator-token'){process.stdout.write(process.env.ACTIVATION_OPERA
 const token=readFileSync(tokenPath,'utf8');
 if(command==='token'){process.stdout.write(token+'\n');process.exit(0);}
 const bundles=JSON.parse(readFileSync(admissionPath,'utf8')) as AdmissionBundle[];
-if(bundles.length!==1||bundles[0].principal.customerId!=='fictional-recommendation-demo'||bundles[0].principal.tenantId!=='fictional-demo'||bundles[0].principal.sessionId!=='fictional-local-session')throw Error('Unexpected demo principal');
+if(bundles.length!==1||bundles[0].principal.customerId!==customerId||bundles[0].principal.tenantId!=='fictional-demo'||bundles[0].principal.sessionId!=='fictional-local-session')throw Error('Unexpected demo principal');
 const bundle=bundles[0];
 if(Date.parse(bundle.expiresAt)<=Date.now())throw Error('Eight-hour demo expired. Choose a fresh ACTIVATION_DEMO_DIR; old saved data is retained.');
 // Ignore inherited live integrations and grants; this launcher cannot use them.

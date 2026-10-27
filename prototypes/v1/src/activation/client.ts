@@ -5,11 +5,12 @@ export class ActivationRequestError extends Error {
   constructor(public readonly code:string, public readonly status:number){super(code);this.name='ActivationRequestError';}
 }
 
-/** Separate client: the existing conversation StateResponse remains unchanged. */
-export function activationClient(customerId:string,token:string,base='') {
-  const root=`${base}/api/activation/v1/customers/${encodeURIComponent(customerId)}`;
+/** Separate client: the existing conversation StateResponse remains unchanged.
+ * An empty token omits Authorization; the Portal session layer then supplies it server-side. */
+export function activationClient(customerId:string,token:string,base='',apiPrefix='/api') {
+  const root=`${base}${apiPrefix}/activation/v1/customers/${encodeURIComponent(customerId)}`;
   async function request(route:string,body?:unknown):Promise<ActivationState> {
-    const response=await fetch(root+route,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store',signal:AbortSignal.timeout(30000)});
+    const response=await fetch(root+route,{method:body===undefined?'GET':'POST',headers:{...(token?{Authorization:`Bearer ${token}`}:{}),...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store',signal:AbortSignal.timeout(30000)});
     const data=await response.json().catch(()=>null);
     if(!response.ok)throw new ActivationRequestError(data?.error?.code??'ACTIVATION_UNAVAILABLE',response.status);
     if(data?.contractVersion!=='1.0.0'||data.customerId!==customerId||!Number.isSafeInteger(data.revision)||data.context?.customerId!==customerId||data.plan?.customerId!==customerId||typeof data.developerSessionId!=='string'||!data.developerSessionId||!data.milestone||!data.chrisHelp||!data.actions||Array.isArray(data.actions)||!Array.isArray(data.evidence)||!data.replan||!data.outcome)throw new ActivationRequestError('INVALID_ACTIVATION_RESPONSE',response.status);

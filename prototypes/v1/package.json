@@ -10,9 +10,11 @@
     "start:inspector": "node server/index.mjs",
     "test:inspector": "node --test server/diagnose.node-test.mjs",
     "test:phase-a": "node --test server/phase-a/*.node-test.mjs",
+    "test:portal-session": "node --test server/portal-session.node-test.mjs",
     "test:e2e": "node e2e/activation.mjs"
   },
   "dependencies": {
+    "@fontsource/figtree": "5.3.0",
     "lucide-react": "^0.468.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
