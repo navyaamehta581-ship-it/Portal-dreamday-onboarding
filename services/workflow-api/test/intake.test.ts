@@ -37,7 +37,7 @@ test('validated interpreter guides planning but cannot supply capabilities or au
 test('authenticated HTTP intake persists generated plan, rejects duplicate and unconfirmed intake',async()=>{
  const {createApp}=await import('../src/app.ts');const {openGoalStore}=await import('../src/store.ts');
  const intake=createIntake(base),store=openActivationStore(':memory:',intake.policy),goals=openGoalStore(':memory:');
- const server=createApp(goals,undefined,{store,authorize:r=>r.headers.authorization==='Bearer local-test'?principal:null,intake:async(p,b)=>{try{const prepared=await intake.prepare(p,b);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}});
+ const server=createApp(goals,undefined,{store,isOperator:()=>true,authorize:r=>r.headers.authorization==='Bearer local-test'?principal:null,intake:async(p,b)=>{try{const prepared=await intake.prepare(p,b);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const address=server.address() as {port:number};
  const url=`http://127.0.0.1:${address.port}/api/activation/v1/customers/new-customer`;
  try{

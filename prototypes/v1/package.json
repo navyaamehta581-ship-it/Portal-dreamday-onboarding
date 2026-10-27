@@ -9,7 +9,8 @@
     "test": "vitest run",
     "start:inspector": "node server/index.mjs",
     "test:inspector": "node --test server/diagnose.node-test.mjs",
-    "test:phase-a": "node --test server/phase-a/*.node-test.mjs"
+    "test:phase-a": "node --test server/phase-a/*.node-test.mjs",
+    "test:e2e": "node e2e/activation.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

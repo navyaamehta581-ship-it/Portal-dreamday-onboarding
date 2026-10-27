@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=24.12.0 <25" },
+  "engines": {
+    "node": ">=24.12.0 <25"
+  },
   "scripts": {
     "start": "node src/server.ts",
     "dev": "node --watch src/server.ts",
     "test": "node --test test/*.test.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "demo": "node scripts/demo.ts",
+    "demo:token": "node scripts/demo.ts token",
+    "demo:operator-token": "node scripts/demo.ts operator-token",
+    "demo:handoff": "node scripts/demo.ts handoff"
   },
   "devDependencies": {
     "@types/node": "24.10.0",

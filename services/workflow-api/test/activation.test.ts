@@ -102,7 +102,7 @@ test('unsupported adapter and empty criterion rejected; client narrative never p
 });
 test('HTTP authenticated init/reload/update, no-store and ETag; legacy Goal API still works',async()=>{
   const x=setup(),goals=openGoalStore(':memory:');
-  const app=createApp(goals,undefined,{store:x.store,authorize:(r,c)=>r.headers.authorization==='Bearer test'&&c==='ledger'?principal:null});
+  const app=createApp(goals,undefined,{store:x.store,isOperator:()=>true,authorize:(r,c)=>r.headers.authorization==='Bearer test'&&c==='ledger'?principal:null});
   await new Promise<void>(resolve=>app.listen(0,'127.0.0.1',resolve));
   const address=app.address();assert.ok(address&&typeof address==='object');const base=`http://127.0.0.1:${address.port}`;
   const path='/api/activation/v1/customers/ledger/state';
@@ -240,7 +240,7 @@ test('actual authenticated GitHub observations enter a test-owned ledger only th
 
 test('context-only initialization selects the server reviewed initial plan and retains admission checks',async()=>{
  const x=setup();const goal=openGoalStore(':memory:');
- const server=createApp(goal,'http://127.0.0.1:5173',{store:x.store,authorize:()=>principal,initialPlan:(_p,c)=>isDeepStrictEqual(c,x.context)?x.plan:null});
+ const server=createApp(goal,'http://127.0.0.1:5173',{store:x.store,isOperator:()=>true,authorize:()=>principal,initialPlan:(_p,c)=>isDeepStrictEqual(c,x.context)?x.plan:null});
  await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
  try{
   const address=server.address();assert.ok(address&&typeof address==='object');

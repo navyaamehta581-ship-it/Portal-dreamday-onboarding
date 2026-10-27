@@ -36,14 +36,16 @@ it('acknowledges accepted blocker and allows a new draft only after explicit cle
  await click('Clear reviewed');expect((host.querySelector('textarea[aria-label="Blocker command"]') as HTMLTextAreaElement).disabled).toBe(false);
 });
 
-it('requires separately reported agreement and sends pasted intake to the isolated client',async()=>{
+it('requires separately reported agreement and sends only reviewed published context to the operator client',async()=>{
+ await act(async()=>root.render(<ActivationPage surface="operator" key="op"/>));await input('input','ledger');await input('input[type=password]','x'.repeat(32));
+ await input('[aria-label="Raw account and call notes"]','PRIVATE commercial context. A new customer needs a reviewable documentation guide.');await click('Preview developer handoff');
  await input('textarea[aria-label="Existing customer briefing"]','A new customer needs a reviewable documentation guide.');
  await input('textarea[aria-label="Agreed activation outcome"]','Review the guide');
  await input('input:not([type])', 'ledger');
- await input('details input:not([type])','Customer via Chris');
- expect(Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Create suggested'))?.disabled).toBe(true);
+ await input('[aria-label="Agreement attribution"]','Customer via Chris');
+ expect(Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Publish customer'))?.disabled).toBe(true);
  await act(async()=>{host.querySelector<HTMLInputElement>('input[type=checkbox]')!.click();});
- api.intake.mockResolvedValue(state('ledger'));await click('Create suggested');
+ api.intake.mockResolvedValue(state('ledger'));await click('Publish customer');
  expect(api.intake).toHaveBeenCalledWith('A new customer needs a reviewable documentation guide.','Review the guide','Customer via Chris',true);
  expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('unassessed');
 });
@@ -91,9 +93,10 @@ it('submits progress explicitly, keeps exact retries and renders canonical repor
  api.read.mockResolvedValue({...s,revision:2});await click('Load / refresh');api.reportProgress.mockResolvedValue({...s,revision:3,outcome:{...s.outcome,status:'reported',summary:first.message}});await click('Submit / retry progress report');
  expect(api.reportProgress.mock.calls[1][0]).toEqual(first);expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('reported');expect(host.textContent).toContain('Progress report saved');
 });
-it('clears sensitive briefing, initialization and progress drafts when identity changes',async()=>{
- api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('[aria-label="Existing customer briefing"]','Private customer text');await input('[aria-label="Admitted initialization"]','Private wrapper');await input('[aria-label="Progress report"]','Private progress');
- await input('input','orbit');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Existing customer briefing"]')?.value).toBe('');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Admitted initialization"]')?.value).toBe('');expect(host.querySelector('[aria-label="Progress report"]')).toBeNull();
+it('clears operator raw notes and initialization on customer change',async()=>{
+ await act(async()=>root.render(<ActivationPage surface="operator" key="op"/>));await input('input','ledger');await input('input[type=password]','x'.repeat(32));
+ await input('[aria-label="Raw account and call notes"]','Private customer text');await click('Preview developer handoff');await input('[aria-label="Admitted initialization"]','Private wrapper');
+ await input('input','orbit');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Raw account and call notes"]')?.value).toBe('');expect(host.querySelector('[aria-label="Existing customer briefing"]')).toBeNull();expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Admitted initialization"]')?.value).toBe('');
 });
 it('rejects cross-customer action progress before sending',async()=>{
  api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('[aria-label="Progress command"]',JSON.stringify({customerId:'orbit'}));await click('Submit / retry reviewed progress');expect(api.progress).not.toHaveBeenCalled();expect(host.textContent).toContain('different customer, session, milestone');
@@ -135,4 +138,18 @@ it('requires explicit artifact review, preserves exact approval retries, and sho
  api.acceptSetupProposal.mockResolvedValue({...s,revision:3,githubPreparations:{[id]:{...packet,proposalApproval:{decision:'accept_proposal_only',artifactDigest:digest,sourceCommit:packet.commit,planRevision:0,actionRevision:0,acceptedAt:'2026-10-27T12:00:00Z'}}}});await click('Accept / retry setup');
  expect(host.textContent).toContain('accepted for review only');expect(host.textContent).toContain('all runtime blockers remain');expect(host.textContent).toContain('Execution: absent. Verified action: no');expect(host.querySelector('[data-testid="outcome-status"]')?.textContent).toBe('unassessed');
  await input('input','orbit');expect(host.textContent).not.toContain('Missing skeletons');
+});
+
+it('edits and copies a local champion message, clearing it on customer or token change',async()=>{
+ const s=state('ledger');api.read.mockResolvedValue(s);await click('Load / refresh');
+ expect(host.querySelector('[aria-label="Bring Your Team Along"]')).toBeNull();await click('Accept this onboarding direction');expect(host.querySelector('[aria-label="Bring Your Team Along"]')).not.toBeNull();expect(host.querySelector('[aria-label="Chris team handoff summary"]')).toBeNull();
+ const copy=vi.fn().mockResolvedValue(undefined);Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:copy}});
+ await input('[aria-label="Champion kickoff message"]','Private ledger kickoff');await click('Copy kickoff');expect(copy).toHaveBeenCalledWith('Private ledger kickoff');expect(host.textContent).toContain('Message copied');expect(api.reportProgress).not.toHaveBeenCalled();
+ await input('input','orbit');expect(host.querySelector('[aria-label="Champion kickoff message"]')).toBeNull();api.read.mockResolvedValue(state('orbit'));await click('Load / refresh');expect(host.querySelector('[aria-label="Champion kickoff message"]')).toBeNull();await click('Accept this onboarding direction');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Champion kickoff message"]')?.value).not.toContain('Private ledger');
+ await input('input[type=password]','y'.repeat(32));expect(host.querySelector('[aria-label="Champion kickoff message"]')).toBeNull();
+});
+it('refreshes the champion draft against new canonical evidence and handles unavailable clipboard',async()=>{
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await click('Accept this onboarding direction');await input('[aria-label="Champion kickoff message"]','Old draft');
+ const s=state('ledger');s.revision=1;s.milestone.status='blocked';api.read.mockResolvedValue(s);await click('Load / refresh');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Champion kickoff message"]')?.value).toContain('Review blockers');
+ Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:vi.fn().mockRejectedValue(Error('denied'))}});await click('Copy kickoff');expect(host.textContent).toContain('Select and copy');
 });
