@@ -12,6 +12,7 @@ export class ActivationError extends Error {
 }
 const fail = (code: string): never => { throw new ActivationError(code); };
 export type Policy = {
+  approveSetup?: (principal:Principal,packet:GitHubPreparation)=>boolean;
   // Server-only integration boundary: authenticate agreement, inspect receipts and actor authority.
   admitContext?: (principal: Principal, context: CustomerContext) => boolean;
   admitPlan?: (principal: Principal, context: CustomerContext, plan: ActivationPlan) => boolean;
@@ -158,6 +159,21 @@ export function openActivationStore(filename: string, policy: Policy = { admit: 
         s.githubPreparations![id]=record;
         // A prepared review packet remains separate from approved/executed plan actions.
         // Never complete a milestone or overwrite the customer's reported outcome.
+      });
+    },
+    acceptSetupProposal(p:Principal,input:unknown) {
+      if(!input||typeof input!=='object'||Array.isArray(input))return fail('INVALID_REQUEST');
+      const b=input as {id:string;expectedRevision:number;preparationId:string;artifactDigest:string;sourceCommit:string;planRevision:number;actionRevision:number;decision:'accept_proposal_only'};
+      if(Object.keys(b).sort().join(',')!=='actionRevision,artifactDigest,decision,expectedRevision,id,planRevision,preparationId,sourceCommit'||typeof b.id!=='string'||!/^approval:[A-Za-z0-9_-]{1,80}$/.test(b.id)||typeof b.preparationId!=='string'||!/^prepare:[A-Za-z0-9_-]{1,80}$/.test(b.preparationId)||!/^[a-f0-9]{64}$/.test(b.artifactDigest)||!/^[a-f0-9]{40}$/.test(b.sourceCommit)||![b.expectedRevision,b.planRevision,b.actionRevision].every(n=>Number.isSafeInteger(n)&&n>=0)||b.decision!=='accept_proposal_only')return fail('INVALID_REQUEST');
+      return mutate(p,b.id,b,b.expectedRevision,s=>{
+        const packet=s.githubPreparations?.[b.preparationId];
+        if(!packet||packet.status!=='prepared'||!packet.setupProposal||packet.artifactDigest!==b.artifactDigest||packet.commit!==b.sourceCommit||packet.planRevision!==b.planRevision||packet.actionRevision!==b.actionRevision||packet.proposalApproval)return fail('INVALID_TRANSITION');
+        const a=s.actions[packet.actionId];
+        if(s.planRevision!==b.planRevision||a?.revision!==b.actionRevision||a.blockedByIds.length)fail('REVISION_CONFLICT');
+        if(!policy.approveSetup?.(p,structuredClone(packet)))fail('FORBIDDEN');
+        packet.proposalApproval={decision:b.decision,artifactDigest:b.artifactDigest,sourceCommit:b.sourceCommit,planRevision:b.planRevision,actionRevision:b.actionRevision,acceptedAt:new Date().toISOString()};
+        // Acceptance records review consent only. Artifact/digest/blockers, action proofs,
+        // executed/verified flags, milestones and outcomes remain unchanged.
       });
     },
     // Server-built attributed progress: one transaction for report, dashboard and help request.
