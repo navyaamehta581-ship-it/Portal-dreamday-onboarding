@@ -14,7 +14,7 @@ This follow-up supersedes the earlier inspection-only audit. Base: main 71e9fdd8
 
 ## Browser acceptance
 
-Actual in-app browser against loopback services: loaded an admitted contract test-double session, reviewed a local note, submitted an exact admitted blocker, observed pending then ready plan, and reloaded/reconnected to the durable replacement. At 390 × 844, measured document width and viewport width were both 390.
+Actual in-app browser against loopback services: loaded an admitted contract test-double session, reviewed a local note, submitted an exact admitted blocker, observed pending then ready plan, and reloaded/reconnected to the durable replacement. At 390 × 844, measured document width and viewport width were both 390, including the final long report identifiers. The legacy fixed-height header override was corrected; header and journey no longer overlap.
 
 Injected HTTP 409 retained note and reviewed JSON. A delayed GET exceeded the client's 30-second timeout; the saved state and drafts remained visible, and refresh recovered after the fault was removed. The later attributed-report route was submitted from the browser and produced a new suggested checklist, escalation and durable evidence record, then remained readable after frontend reload. Source links point to a fresh immutable GitHub observation.
 
