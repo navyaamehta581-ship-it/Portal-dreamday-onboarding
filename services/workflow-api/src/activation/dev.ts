@@ -1,3 +1,4 @@
+import {createGitHubPreparation,type GitHubReadScope} from './github.ts';
 import {createBlockerReports} from './reports.ts';
 import type {ActivationStore} from './store.ts';
 import { createIntake } from './intake.ts';
@@ -22,9 +23,10 @@ export function developmentActivation(goalFilename:string) {
   const intake=createIntake(registryPolicy(bundles),interpreterFromEnv());
   let store:ActivationStore;
   const reports=createBlockerReports(intake.policy,()=>store);
-  store=openActivationStore(filename,reports.policy);
+  const github=createGitHubPreparation(reports.policy,()=>store,process.env.ACTIVATION_GITHUB_READ_SCOPES?JSON.parse(readFileSync(process.env.ACTIVATION_GITHUB_READ_SCOPES,'utf8')) as GitHubReadScope[]:[],{token:process.env.GITHUB_READ_TOKEN});
+  store=openActivationStore(filename,github.policy);
   // Server-built report replacements or exact operator-reviewed plans; both remain suggestions.
   const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);
   const stop=worker.start();
-  return {options:{store,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:(p:import('./store.ts').Principal,context:import('../../../../contracts/activation/v1/types.ts').CustomerContext)=>bundles.find(b=>isDeepStrictEqual(b.principal,p)&&isDeepStrictEqual(b.context,context))?.plans.find(plan=>plan.contextRevision===context.revision&&plan.revision===0&&plan.supersedesRevision===null)??null,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>request.headers.authorization===`Bearer ${token}`&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},async close(){await stop();store.close();}};
+  return {options:{store,prepareGitHub:github.prepare,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:(p:import('./store.ts').Principal,context:import('../../../../contracts/activation/v1/types.ts').CustomerContext)=>bundles.find(b=>isDeepStrictEqual(b.principal,p)&&isDeepStrictEqual(b.context,context))?.plans.find(plan=>plan.contextRevision===context.revision&&plan.revision===0&&plan.supersedesRevision===null)??null,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>request.headers.authorization===`Bearer ${token}`&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},async close(){await stop();store.close();}};
 }

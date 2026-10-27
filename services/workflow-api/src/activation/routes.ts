@@ -1,9 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ActivationStore, Principal } from './store.ts';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types.ts';
-export type ActivationOptions={store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
+export type ActivationOptions={prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
 export async function activationRoute(request:IncomingMessage,response:ServerResponse,path:string,options:ActivationOptions,readJson:(r:IncomingMessage)=>Promise<unknown>) {
-  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports)$/.exec(path);
+  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations)$/.exec(path);
   if(!match)return false;
   response.setHeader('Access-Control-Expose-Headers','ETag');
   const send=(status:number,value:unknown)=>{response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});response.end(JSON.stringify(value));};
@@ -14,7 +14,10 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
     if(match[2]==='state'&&request.method==='GET')state=options.store.get(p);
     else if(request.method==='POST') {
       const body=await readJson(request);
-      if(match[2]==='progress-reports') {
+      if(match[2]==='github-preparations') {
+        if(!options.prepareGitHub){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}
+        state=await options.prepareGitHub(p,body);
+      } else if(match[2]==='progress-reports') {
         if(!options.reportProgress){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}
         state=options.reportProgress(p,body);
       } else if(match[2]==='blocker-reports') {

@@ -17,7 +17,7 @@ export type Policy = {
   admitPlan?: (principal: Principal, context: CustomerContext, plan: ActivationPlan) => boolean;
   admit: (principal: Principal, record: EvidenceRecord, purpose: 'initialize' | 'progress' | 'blocker' | 'plan') => boolean;
 };
-import type { ActivationState, ActionState } from '../../../../contracts/activation/v1/state.ts';
+import type { GitHubPreparation, ActivationState, ActionState } from '../../../../contracts/activation/v1/state.ts';
 export type { ActivationState } from '../../../../contracts/activation/v1/state.ts';
 /** Separate DB and schema: never migrates or opens the Goal/conversation stores. */
 export function openActivationStore(filename: string, policy: Policy = { admit: () => false }) {
@@ -138,6 +138,26 @@ export function openActivationStore(filename: string, policy: Policy = { admit: 
         if(event.replan.required) s.replan={status:'pending',blockerId:event.id,replacementPlanRevision:null,errorCode:null};
         if(event.escalation.required) s.chrisHelp={status:'requested',blockerIds:[...s.chrisHelp.blockerIds,event.id],owner:event.escalation.owner,reason:event.escalation.reason,evidenceIds:event.evidenceIds};
 
+      });
+    },
+    // Only the server inspector calls these methods. No client-supplied receipts or authority.
+    beginGitHubPreparation(p:Principal,expected:number,record:GitHubPreparation) {
+      return mutate(p,`github:start:${record.id}`,record,expected,s=>{
+        const a=s.actions[record.actionId];
+        if(s.planRevision!==record.planRevision||a?.revision!==record.actionRevision||a.blockedByIds.length||!['github_inspect','prepare_artifact'].includes(a.kind)) fail('INVALID_TRANSITION');
+        s.githubPreparations={...s.githubPreparations,[record.id]:record};
+      });
+    },
+    finishGitHubPreparation(p:Principal,id:string,expected:number,record:GitHubPreparation,records:EvidenceRecord[]) {
+      return mutate(p,`github:finish:${id}`,{record,records},expected,s=>{
+        const prior=s.githubPreparations?.[id];
+        if(!prior||prior.status!=='inspecting'||prior.commandDigest!==record.commandDigest) fail('INVALID_TRANSITION');
+        if(record.status==='prepared'&&(s.planRevision!==record.planRevision||s.actions[record.actionId]?.revision!==record.actionRevision||s.actions[record.actionId].blockedByIds.length)) fail('REVISION_CONFLICT');
+        validateContract('CustomerContext',{...s.context,evidence:[...s.evidence,...records]});
+        s.evidence=ledger(p,s.evidence,records,'progress');
+        s.githubPreparations![id]=record;
+        // A prepared review packet remains separate from approved/executed plan actions.
+        // Never complete a milestone or overwrite the customer's reported outcome.
       });
     },
     // Server-built attributed progress: one transaction for report, dashboard and help request.

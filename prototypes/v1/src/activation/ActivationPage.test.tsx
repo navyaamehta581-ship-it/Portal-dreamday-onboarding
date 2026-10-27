@@ -6,7 +6,7 @@ import {ActivationPage} from './ActivationPage';
 import {activationClient} from './client';
 import fixtures from '../../../../contracts/activation/v1/fixtures.json';
 import type {ActivationState} from '../../../../contracts/activation/v1/state';
-const api={intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn(),reportProgress:vi.fn()};
+const api={prepareGitHub:vi.fn(),intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn(),reportProgress:vi.fn()};
 vi.mock('./client',()=>({activationClient:vi.fn()}));
 let host:HTMLDivElement,root:Root;
 function state(scenario:'orbit'|'ledger'):ActivationState{
@@ -104,4 +104,19 @@ it('sends exact reviewed action progress across a conflict and canonical refresh
  const command={contractVersion:'1.0.0',customerId:'ledger',developerSessionId:'session-ledger',expectedRevision:0,revision:1,planRevision:0,milestoneId:s.milestone.id,id:'reviewed-progress',evidence:[],transitions:[],milestoneStatus:'in_progress',valueDemonstrated:'',needsChris:false};
  await input('[aria-label="Progress command"]',JSON.stringify(command));api.progress.mockRejectedValue({status:409});await click('Submit / retry reviewed progress');
  api.read.mockResolvedValue({...s,revision:3});await click('Load / refresh');api.progress.mockResolvedValue({...s,revision:4});await click('Submit / retry reviewed progress');expect(api.progress.mock.calls[1][0]).toEqual(command);expect(host.textContent).toContain('Reviewed action progress saved.');
+});
+
+it('preserves preparation command on uncertain failure and clears it with customer identity',async()=>{
+ const s=state('ledger');api.read.mockResolvedValue(s);await click('Load / refresh');api.prepareGitHub.mockRejectedValue(new Error('TimeoutError'));
+ await click('Inspect / retry');const first=api.prepareGitHub.mock.calls[0][0];api.read.mockResolvedValue({...s,revision:3});await click('Load / refresh');await click('Inspect / retry');expect(api.prepareGitHub.mock.calls[1][0]).toEqual(first);
+ await input('input','orbit');api.read.mockResolvedValue(state('orbit'));await click('Load / refresh');await click('Inspect / retry');expect(api.prepareGitHub.mock.calls[2][0].actionId).toBe(fixtures.orbit.plan.suggestedNextAction.id);expect(api.prepareGitHub.mock.calls[2][0].id).not.toBe(first.id);
+});
+it('shows prepared packet provenance and missing authorization without promoting outcome or action',async()=>{
+ const s=state('ledger');s.githubPreparations={'prepare:demo':{id:'prepare:demo',commandDigest:'digest',scopeDigest:'scope',actionId:s.plan.suggestedNextAction.id,actionRevision:0,planRevision:0,startedRevision:1,status:'prepared',repository:'example/fictional',commit:'a'.repeat(40),templatePath:'template.yaml',templateBlob:'b'.repeat(40),observedAt:'2026-10-27T10:00:00Z',completedAt:'2026-10-27T10:01:00Z',evidenceIds:[],artifact:'Fictional review packet',artifactDigest:'digest',blockers:['Separate write authorization missing'],errorCode:null,authorization:'inspect_prepare_only',approved:false,executed:false,verified:false,prUrl:null}};
+ api.read.mockResolvedValue(s);await click('Load / refresh');expect(host.textContent).toContain('prepared · local review packet');expect(host.textContent).toContain('Separate write authorization missing');expect(host.textContent).toContain('Approval: absent. Execution: absent. Verified action: no. PR: none.');expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('unassessed');
+});
+
+it('resumes the exact persisted inspection command after a browser restart',async()=>{
+ const s=state('ledger');s.revision=7;s.githubPreparations={'prepare:resume':{id:'prepare:resume',commandDigest:'digest',scopeDigest:'scope',actionId:s.plan.suggestedNextAction.id,actionRevision:0,planRevision:0,startedRevision:3,status:'inspecting',repository:'example/fictional',commit:'a'.repeat(40),templatePath:'template.yaml',templateBlob:null,observedAt:'2026-10-27T10:00:00Z',completedAt:null,evidenceIds:[],artifact:null,artifactDigest:null,blockers:['pending'],errorCode:null,authorization:'inspect_prepare_only',approved:false,executed:false,verified:false,prUrl:null}};
+ api.read.mockResolvedValue(s);api.prepareGitHub.mockResolvedValue(s);await click('Load / refresh');await click('Resume saved inspection');expect(api.prepareGitHub).toHaveBeenCalledWith({id:'prepare:resume',expectedRevision:2,planRevision:0,actionId:s.plan.suggestedNextAction.id,actionRevision:0});
 });
