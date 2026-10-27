@@ -1,3 +1,5 @@
+> Current cleanup: dormant App/Concept originals have now been removed from active `src` after byte-for-byte comparison with this archive. Root and `/activation` mount Activation Intelligence; `/portal` retains the referenced fixture shell. The baseline statements below are historical.
+
 # Workflow Architect V1 preservation snapshot
 
 Preserved from commit `a32e3c1fd2da2f24f80ec8d6c4e238746754f76a` following approval of the cleanup audit. All original files remain in place. No shared path or contract changes.

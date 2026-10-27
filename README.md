@@ -1,58 +1,87 @@
-# Spotify Portal AI Workflow Architect
+# Spotify Portal Activation Intelligence
 
-> **Activation pivot:** The current product direction is Spotify Portal Activation Intelligence. See [preservation and integration order](docs/activation-preservation.md) and the [historical V1 snapshot](archive/workflow-architect-v1/README.md). Original sources remain in place; existing APIs are unchanged. The blueprint below records the earlier scope pending a reviewed roadmap update.
+A shared activation workspace for Chris and the developer: turn a customer briefing and separately agreed goal into a relevant next action, recover when the developer gets blocked, and show evidence-linked progress toward the first useful outcome.
 
-Team workspace for implementing the [516-atom Portal blueprint](docs/blueprint/spotify_portal_workflow_architect_micro_atomic_register.md). The target is **Spotify-managed Portal**. Backstage examples alone do not establish managed deployment, API access or tenant compatibility.
+This is a local review prototype. Customer and Portal records are simulated fixtures. The GitHub inspector makes real, read-only, commit-pinned observations when authorized access is available. A repository observation does not prove a passing check, deployment, customer adoption or ROI. There is no live AiKA/Spotify Portal integration and no verified deployment or adoption.
 
-**Implemented today:** a runnable V1 React/TypeScript prototype with fictional data, deterministic planning and simulated execution. Plugin folders contain scope notes only. There is no implemented Portal backend, authenticated tenant integration, production execution or certified plugin artifact.
+## Six-step journey
 
-## Start in VS Code
+1. **Briefing and agreed goal:** retain Chris’s context, constraints, unknowns and attributed agreement. A fictional agreement cannot initialize a real customer ledger.
+2. **Personalized plan:** select a milestone and suggested actions grounded in admitted context. Suggestions never grant approval or execution authority.
+3. **Developer next action:** show the welcome, prerequisites, current action and recorded preparation/approval/execution states.
+4. **Blocker and recovery:** accept an attributed developer report, preserve the goal and constraints, invalidate affected actions, and persist a replacement suggestion or request Chris’s help.
+5. **GitHub evidence:** inspect authorized repository content read-only; retain commit, source, scope and proof labels. Artifact metadata is reviewable; proposed diffs are not fetched by artifact review.
+6. **Chris outcome:** connect evidence to the agreed goal, distinguishing reported progress, technical proof and an unassessed customer outcome.
+
+The [active blueprint](docs/blueprint/activation-intelligence.md) records implementation and remaining acceptance gates. The [integration handoff](docs/activation/handoff.md) documents the provisional API and demonstration limits.
+
+## Current architecture
+
+| Path | Role |
+| --- | --- |
+| `prototypes/v1/src/activation/` | React activation page and separate API client; `/` and `/activation` are the product entry points |
+| `services/workflow-api/src/activation/` | SQLite canonical state/history, revision checks, idempotency, exact-record admission, intake and durable replanning |
+| `contracts/activation/v1/` | Provisional versioned types, schema, validators, fixtures and evidence semantics |
+| `prototypes/v1/server/` | Read-only GitHub inspector and conversation/interpretation service; hosted interpretation is optional and server-side |
+| `prototypes/v1/src/portal/`, `src/phase-a/` | Preserved supporting fixture workspace at `/portal`, conversation and repository diagnosis; Navyaa’s frontend remains available |
+| `prototypes/v1/src/logic/` | Reusable deterministic workflow, validation, generation, simulation and evidence rules with regression tests |
+| `services/workflow-api/src/{app,store,server}.ts`, `contracts/goals.ts` | Preserved Goal API foundation and shared contract |
+| `plugins/`, `packages/` | Integration planning markers, not installed managed Portal packages |
+| `archive/`, `docs/v1/`, historical blueprint JSON/register | Provenance and earlier designs, not the current product roadmap |
+
+Vite proxies activation requests to port 7007 and inspector/conversation requests to 8787. The backend owns authoritative state; browser text, model output and fixture policy never establish production authority. Package names such as `@portal-architect/*` are retained compatibility identifiers, not a second product.
+
+## Run locally
+
+Use **Node 24.12 or later in the Node 24 line** and npm. There is no root npm workspace. From a fresh clone, install each independently:
 
 ```sh
 git clone https://github.com/navyaamehta581-ship-it/Spotify-portal-solution.git
 cd Spotify-portal-solution
-code .
+npm ci --prefix prototypes/v1
+npm ci --ignore-scripts --prefix services/workflow-api
 ```
 
-Use Node 24 and npm for V1; installation requires registry access. In a VS Code terminal:
+In separate terminals from the repository root:
 
 ```sh
-cd prototypes/v1
-npm ci
-npm run dev -- --port 5173 --strictPort
+npm run dev --prefix prototypes/v1 -- --port 5173 --strictPort
 ```
-
-Open http://127.0.0.1:5173/. No credentials or environment file are required. Reload resets local tasks and conversations. In another terminal from the same directory:
 
 ```sh
-npm test
-npm run build
+npm run start:inspector --prefix prototypes/v1
 ```
 
-These checks validate the prototype only. There is no root npm workspace or Portal plugin start command yet. See [setup and compatibility gates](docs/setup.md) before generating packages.
+```sh
+npm start --prefix services/workflow-api
+```
 
-## Team workflow
+Open http://127.0.0.1:5173/. The screen loads without credentials; a saved activation session requires the explicitly enabled development API. By default the last command starts only the Goal API. Follow [development activation configuration](docs/activation/wire-review.md#explicit-development-configuration) for `ACTIVATION_DEV=1`, a private server-only token, one operator-owned scoped admission bundle and a separate activation database. Enable `ACTIVATION_INTAKE=1` only for the optional intake candidate. Bundle expiry and exact-record admission still apply. Re-enter the in-memory token after reload; canonical state persists in SQLite. Never commit bundles, tokens, databases or environment values, or put secrets in `VITE_*` variables.
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md), claim an atom from the [backlog](docs/backlog.md), and work on a separate branch and PR. Each atom needs an owner, reviewer, explicit dependencies, acceptance checks and evidence. Do not mark an atom complete from a mock, screenshot or written plan alone. [Repository inventory](docs/repository-inventory.md) explains retained V1 code and the setup guidance replaced by this change.
+For a reproducible fictional review session, `node tests/activation/browser-server.ts` provides a loopback-only test adapter on port 7007 (stop the regular API first). Read its public test customer/token constants in that file. It bypasses real admission only for fixtures and must not be deployed. `node tests/activation/walkthrough.ts` is the separate simulated acceptance harness; inspect its configuration before running network-dependent evidence collection. [GitHub inspection setup](docs/v1/github-inspection.md) explains authorized read access; a server-only `GITHUB_TOKEN` is optional for public repositories and required where repository access needs it.
 
-## Repository map
+## Test and build
 
-| Path | Role |
-| --- | --- |
-| `docs/blueprint/` | Unmodified blueprint, dependency ledger and original provenance |
-| `docs/backlog/atoms.json` | Editable team tracking for all 516 atoms; initially NOT_STARTED |
-| `docs/architecture.md` | Domain boundaries and architecture selection gate |
-| `docs/roadmap.md` | Dependency-led implementation order |
-| `plugins/` | Proposed frontend, backend and common scope markers; no packages yet |
-| `packages/` | Reserved integration composition; no generic host scaffold promised |
-| `prototypes/v1/` | Runnable source, lockfile, 39 existing unit tests and audit records |
-| `examples/` | Fictional scenarios and illustrative YAML with missing skeletons |
-| `tests/` | Integration/E2E acceptance plans, not automated suites |
-| `.github/` | V1 CI, issue form and PR review template |
-| `V1_SOURCE_HANDOFF.zip` | Preserved original transfer archive |
+From repository root under Node 24:
 
-The Orbit launch and Ledger onboarding demos simulate all permissions, integrations and external effects. V1's fake Portal shell, fixture authorization and text-based evidence checks are not production integration components. Preserve useful rules and regression cases while replacing those boundaries.
+```sh
+npm test --prefix prototypes/v1
+npm run test:inspector --prefix prototypes/v1
+npm run test:phase-a --prefix prototypes/v1
+npm run build --prefix prototypes/v1
+npm test --prefix services/workflow-api
+npm run check --prefix services/workflow-api
+node --test contracts/activation/v1/contract.test.mjs
+./services/workflow-api/node_modules/.bin/tsc --noEmit --strict --skipLibCheck --module nodenext --moduleResolution nodenext --target es2022 --allowImportingTsExtensions contracts/activation/v1/typecheck.ts
+python3 scripts/validate_blueprint.py
+```
 
-No project source license has been selected. Branding and redistribution considerations remain in the [V1 handoff](docs/v1/V1_HANDOFF.md).
+The build includes frontend typechecking. HTTP tests need loopback listeners. Blueprint validation checks the immutable historical register and tracker, not product completion. Test doubles, local builds and simulated walkthroughs do not certify Portal compatibility or customer outcomes.
 
-The [cleanup audit](docs/cleanup-audit.md) records the current pinned inventory, deletion evidence and items requiring review.
+## Provenance and limits
+
+Main incorporated PR #13 (`3b37899165d57d4b7808666106344bee55709bf5`) before this cleanup. The [current handoff](docs/activation/handoff.md) supersedes earlier session status reports. The original [Workflow Architect snapshot](archive/workflow-architect-v1/README.md), handoff ZIP, 516-atom register and hashes are retained for traceability. No historical atom is promoted to complete by this narrative update.
+
+Production identity, actual Chris/customer agreement, independent artifact/check receipts, native Portal/AiKA contracts and customer outcome evidence remain acceptance gates. Hosted interpretation has not been established as live acceptance. Deterministic blocker recovery remains available without a hosted model. No source license has been selected; historical branding/redistribution notes remain in the V1 handoff.
+
+See [contributing](CONTRIBUTING.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md) and the [cleanup record](docs/narrative-cleanup.md) for scope, retained legacy references and verification.

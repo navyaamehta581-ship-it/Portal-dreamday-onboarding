@@ -1,3 +1,5 @@
+> Supporting integration planning marker for [Spotify Portal Activation Intelligence](../../README.md). Earlier Architect scope below is historical; this folder is not a runnable managed Portal package.
+
 # portal-assistant-common — planned
 
 Versioned domain contracts and pure deterministic rules, independent of React, secrets and fixtures.
