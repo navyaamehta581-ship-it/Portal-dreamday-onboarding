@@ -1,6 +1,24 @@
-You are refining the Spotify Portal Ignition Challenge prototype in navyaamehta581-ship-it/Spotify-portal-solution.
+Continue the Northstar Ignition prototype in navyaamehta581-ship-it/Spotify-portal-solution. PR #24 was already merged on 2026-10-27; do not try to merge or reopen it. Inspect latest main and feat/northstar-ignition, preserve unrelated work, and use a new refinement branch from current main. Bring over any persona-link changes present only on feat/northstar-ignition before refining.
 
-Start by fetching latest main and examining the feat/northstar-ignition branch/PR. Do not overwrite unrelated work. Read AGENTS.md, docs/ignition/README.md, prototypes/v1/src/main.tsx, portal-app, operator, activation, server/portal-session.mjs, and the ignition server/UI/tests. Inspect available reference screenshots and current browser output before planning. Do not invent unavailable prior-chat details. Use small, independently verified commits and report limitations explicitly.
+Required demo entry routes:
+- /ignition/chris → Chris/operator
+- /ignition/champion → Maya/champion
+- /ignition/developer → Alex/developer
+- /ignition/developer/jordan → Jordan/developer
+Each URL must work by direct navigation and reload without a persona selection step. Keep Insights/navigation in the same persona namespace. Keep one shared Northstar store, separate server-held demo session cookies per persona, server-validated scope/person binding, role-filtered reads, and role-checked writes. Test all three primary URLs concurrently in one browser context; switching/opening another persona must never change an existing tab's identity. Persona links intentionally grant fictional demo access and are not production authentication. Preserve /ignition and all existing Portal/activation/operator routes.
+
+Audit findings to address in order:
+1. Add clear handoff diffs and explicit “needs revalidation” status when the current handoff is newer than an outcome. Preserve original outcome version/time. Current repeat verification overwrites the prior workflow result: append evidence history instead, with meaningful regression tests.
+2. Improve stale-view handling across persona tabs. Current behavior rejects stale writes with REVISION_CONFLICT and requires manual Refresh. Keep conflict protection; show an actionable refresh/review flow without silently losing unsaved input or automatically publishing it. Update selected workflow from saved priorities when appropriate without interrupting work.
+3. Keep the helper usable on compact screens and long support drafts. Inspect desktop and 820px-wide screenshots, scroll the help panel, ensure controls and complete draft are reachable, and check keyboard focus and accessible labels. Add a real copy button for the unsent draft with visible copy feedback; never send it.
+4. Add isolated local persistence only if suitable for the prototype, with schema versioning and explicit reset. Preserve tenant separation and prior evidence. Do not turn on external access or weaken the localhost guard. A hosted preview needs an actual deployed backend and explicit demo access design; static Vite files alone cannot run the middleware. If a supported preview is available, verify all three URLs there; otherwise report that it is local-only.
+
+Browser acceptance walkthrough on a fresh IGNITION_DEMO=1 server:
+Open Chris; inspect private sources and a manual paste; simulate import; extract; inspect held-back content and conflicts; require review before publishing v1. Open Alex directly before Maya does anything and verify workflows are available; reject a wrong answer, accept team-payments. Open Maya directly; choose docs, save a goal and simulate invites. Refresh/open Jordan directly; confirm docs recommendation and goal; accept Payments recovery. Complete both workflows as both developers. Test contextual AiKA and unsent support draft. Publish v2 from Chris; verify retained v1 evidence and revalidation indicators after reload. Developer Insights must contain only that developer; Chris/Maya see cohort totals. Confirm commercial data and raw sources are absent from champion/developer API payloads, not merely hidden. Test stale writes and simultaneous tabs. Capture and inspect screenshots, record browser errors, and report exact observed outcomes.
+
+Run from prototypes/v1: npm run build; npm test; node --test server/ignition.node-test.mjs server/portal-session.node-test.mjs. Run the updated e2e/ignition.mjs against a fresh server (IGNITION_URL sets its origin). Add browser coverage for concurrent persona URLs and direct reload. Do not describe a test as passing unless run. Give exact preview URLs, launch instructions, changed files, test results and remaining limitations. Do not merge or publish anything without a further request.
+
+Additional product and safety contract:
 
 Product contract:
 - Chris works in Insights-inspired customer files, not a technical support inbox. Preserve multiple messy sources (discovery calls, CRM notes, technical notes, email summaries), source provenance, private commercial context, and editable drafts. Manual paste must work. Claude Agent import must remain explicitly SIMULATED unless an independently configured and consented connector genuinely exists.

@@ -7,10 +7,18 @@ Implemented from main `c685250` on `feat/northstar-ignition`.
 ```sh
 cd prototypes/v1
 npm ci
-IGNITION_DEMO=1 npm run dev -- --port 5186
+IGNITION_DEMO=1 npm run dev -- --port 5187
 ```
 
-Open http://127.0.0.1:5186/ignition. The existing `/`, `/portal`, `/activation` and `/operator` routes are preserved. This extension uses their shared Shell, tokens, typeface and navigation. It does not replace the existing authenticated activation API.
+Direct demo entries (automatically enter the fictional persona):
+- Chris: http://127.0.0.1:5187/ignition/chris
+- Champion Maya: http://127.0.0.1:5187/ignition/champion
+- Developer Alex: http://127.0.0.1:5187/ignition/developer
+- Jordan companion route: http://127.0.0.1:5187/ignition/developer/jordan
+
+Use `--port 5187` for these URLs. Separate server-held session cookies allow simultaneous persona tabs sharing one Northstar store. Insights links preserve the persona. These local URLs require a running server on the same computer; no public preview was verified. The original `/ignition` selector remains available.
+
+Open http://127.0.0.1:5187/ignition. The existing `/`, `/portal`, `/activation` and `/operator` routes are preserved. This extension uses their shared Shell, tokens, typeface and navigation. It does not replace the existing authenticated activation API.
 
 1. Choose Chris and Enter demo. Expand the three private source records. Add a manual source or click Simulate Claude Agent import. No agent is contacted.
 2. Extract a review draft. Inspect held-back commercial material, source citations, developer context and unresolved Okta/GitHub claims. Review both fields, check the approval box, and publish v1.
