@@ -58,7 +58,7 @@ function AccountMenu({user}:{user:ShellUser}){
 
 /** The one Portal shell (053–061), shared by the developer Portal and Chris's workspace.
  * Each surface passes its own navigation targets; authorization stays with the surface. */
-export function Shell({active,user,homeHref='/portal',primaryNav=PRIMARY_NAV,href=navHref,children}:{active:string;user:ShellUser;homeHref?:string;primaryNav?:NavItem[];href?:Href;children:ReactNode}){
+export function Shell({active,user,homeHref='/portal',primaryNav=PRIMARY_NAV,secondaryNav=SECONDARY_NAV,href=navHref,children}:{active:string;user:ShellUser;homeHref?:string;primaryNav?:NavItem[];secondaryNav?:NavItem[];href?:Href;children:ReactNode}){
  return <div className="pt-shell">
   <header className="pt-top">
    <Link to={homeHref} aria-label="Spotify Portal home"><Logo/></Link>
@@ -68,7 +68,7 @@ export function Shell({active,user,homeHref='/portal',primaryNav=PRIMARY_NAV,hre
   <div className="pt-body">
    <nav className="pt-side" aria-label="Portal">
     <Nav items={primaryNav} active={active} href={href}/>
-    <Nav items={SECONDARY_NAV} active={active} href={href} className="pt-nav secondary"/>
+    <Nav items={secondaryNav} active={active} href={href} className="pt-nav secondary"/>
    </nav>
    <main className="pt-main" id="main">{children}</main>
   </div>

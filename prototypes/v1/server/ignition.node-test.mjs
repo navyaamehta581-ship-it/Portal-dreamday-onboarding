@@ -35,7 +35,7 @@ test('HTTP rejects unauthenticated, cross-origin, injected tenant/role and devel
   const state=await (await fetch(base+'/ignition-api/state',{headers:{Cookie:cookie}})).json();assert.equal(state.role,'developer');assert.equal(state.sources,undefined);
   const scopedCookies=[];
   for(const person of ['chris','maya','alex','jordan']){
-   const r=await fetch(base+'/ignition-api/'+person+'/session',{method:'POST',headers:{Origin:base},body:JSON.stringify({person})});
+   const r=await fetch(base+'/ignition-api/'+person+'/session',{method:'POST',headers:{Origin:base},body:JSON.stringify({person,email:person+'@northstar.example'})});
    assert.equal(r.status,200);scopedCookies.push(r.headers.get('set-cookie').split(';')[0]);
   }
   const allCookies=scopedCookies.join('; ');
@@ -45,6 +45,10 @@ test('HTTP rejects unauthenticated, cross-origin, injected tenant/role and devel
   }
   assert.equal((await fetch(base+'/ignition-api/chris/session',{method:'POST',headers:{Origin:base},body:JSON.stringify({person:'alex'})})).status,403);
   assert.equal((await fetch(base+'/ignition-api/chris/state',{headers:{Cookie:scopedCookies[2]}})).status,401);
+  assert.equal((await fetch(base+'/ignition-api/chris/session',{method:'POST',headers:{Origin:base},body:JSON.stringify({person:'chris',email:'maya@northstar.example'})})).status,403);
+  assert.equal((await fetch(base+'/ignition-api/maya/logout',{method:'POST',headers:{Origin:base,Cookie:allCookies},body:'{}'})).status,200);
+  assert.equal((await fetch(base+'/ignition-api/maya/state',{headers:{Cookie:allCookies}})).status,401);
+  assert.equal((await fetch(base+'/ignition-api/chris/state',{headers:{Cookie:allCookies}})).status,200);
   const denied=await fetch(base+'/ignition-api/state',{method:'POST',headers:{Origin:base,Cookie:cookie},body:JSON.stringify({...publish,revision:0})});assert.equal(denied.status,403);
  }finally{await new Promise(r=>server.close(r));delete process.env.IGNITION_DEMO;}
 });

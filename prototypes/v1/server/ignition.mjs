@@ -1,7 +1,7 @@
 import {randomBytes} from 'node:crypto';
 const PEOPLE={chris:'Chris',maya:'Maya',alex:'Alex',jordan:'Jordan'};
 export const WORKFLOWS={ownership:{title:'Find the owner of payments-api',prerequisite:'GitHub repository read access and an owner entry',steps:['Open the simulated catalog entry for payments-api.','Inspect spec.owner and follow the team reference.','Confirm the owner is team-payments.'],answer:'team-payments'},docs:{title:'Find the payments-api runbook',prerequisite:'A published documentation index; no Okta setup required',steps:['Open payments-api documentation.','Find the incident runbook.','Confirm the runbook heading is Payments recovery.'],answer:'Payments recovery'}};
-export const SOURCES=[{id:'crm',kind:'CRM paste',text:'Northstar Engineering: 500 employees, 80 engineers. 30-day POC. ~$100K potential. Maya is champion. Service ownership and docs are the goals.'},{id:'call',kind:'Discovery call paste',text:'Maya: GitHub hosts payments-api. Alex and Jordan need to find service owners and runbooks. Okta might be ready; security has not confirmed.'},{id:'technical',kind:'Technical notes paste',text:'GitHub access reported, not verified. Okta unverified. Earlier note says Okta enabled: conflict remains. Use team-payments and Payments recovery in the fictional catalog fixture.'}];
+export const SOURCES=[{id:'crm',kind:'CRM paste',text:'Northstar Engineering: 500 employees, 80 engineers. 30-day POC. ~$100K potential. Maya is champion. Service ownership and docs are the goals.'},{id:'call',kind:'Discovery call paste',text:'Maya: GitHub hosts payments-api. Alex and Jordan need to find service owners and runbooks. Okta might be ready; security has not confirmed.'},{id:'technical',kind:'Technical notes paste',text:'GitHub access reported, not verified. Okta unverified. Earlier note says Okta enabled: conflict remains. Use team-payments and Payments recovery in the demo catalog fixture.'}];
 const error=code=>{throw Object.assign(Error(code),{code});};
 const text=(v,max=8000)=>typeof v==='string'&&v.trim()&&v.length<=max?v.trim():error('INVALID_REQUEST');
 export function createIgnitionStore(){
@@ -21,7 +21,7 @@ export function ignitionPlugin(){
  const store=createIgnitionStore(),sessions=new Map();
  function install(server){server.middlewares.use(async(req,res,next)=>{
   if(!req.url?.startsWith('/ignition-api/'))return next();
-  const scoped=/^\/ignition-api\/(chris|maya|alex|jordan)\/(session|state)$/.exec(req.url);
+  const scoped=/^\/ignition-api\/(chris|maya|alex|jordan)\/(session|state|logout)$/.exec(req.url);
   const endpoint=scoped?'/ignition-api/'+scoped[2]:req.url;
   const cookieName=scoped?'ignition_demo_'+scoped[1]:'ignition_demo';
   const cookiePattern=new RegExp('(?:^|;\\s*)'+cookieName+'=([a-f0-9]{64})(?:;|$)');
@@ -34,11 +34,13 @@ export function ignitionPlugin(){
    if(endpoint==='/ignition-api/session'&&req.method==='POST'){
     if(!Object.hasOwn(PEOPLE,body.person))return send(400,{error:'INVALID_REQUEST'});
     if(scoped&&body.person!==scoped[1])return send(403,{error:'FORBIDDEN'});
+    if(scoped&&body.email!==body.person+'@northstar.example')return send(403,{error:'ACCOUNT_MISMATCH'});
     const sid=randomBytes(32).toString('hex');const person=body.person;
     const old=cookiePattern.exec(req.headers.cookie??'');if(old)sessions.delete(old[1]);
     sessions.set(sid,{tenant:'northstar',person,role:person==='chris'?'operator':person==='maya'?'champion':'developer',expires:Date.now()+3600000});res.setHeader('Set-Cookie',`${cookieName}=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=3600`);return send(200,{ok:true});
    }
    const sid=cookiePattern.exec(req.headers.cookie??'')?.[1],p=sessions.get(sid);if(!p||p.expires<Date.now()||(scoped&&p.person!==scoped[1]))return send(401,{error:'SIGN_IN_REQUIRED'});
+   if(endpoint==='/ignition-api/logout'&&req.method==='POST'){sessions.delete(sid);res.setHeader('Set-Cookie',`${cookieName}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);return send(200,{ok:true});}
    if(endpoint!=='/ignition-api/state')return send(404,{error:'NOT_FOUND'});
    return send(200,{person:p.person,role:p.role,...(req.method==='GET'?store.view(p):store.mutate(p,body))});
   }catch(e){return send(e.code==='FORBIDDEN'?403:e.code==='REVISION_CONFLICT'?409:400,{error:e.code??'INVALID_REQUEST'});}

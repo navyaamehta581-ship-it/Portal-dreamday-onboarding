@@ -1,59 +1,36 @@
-# Northstar Ignition Challenge
+# Northstar workspaces
 
-Implemented from main `c685250` on `feat/northstar-ignition`.
-
-## Start and demo
+Start from prototypes/v1:
 
 ```sh
-cd prototypes/v1
 npm ci
 IGNITION_DEMO=1 npm run dev -- --port 5187
 ```
 
-Direct demo entries (automatically enter the fictional persona):
-- Chris: http://127.0.0.1:5187/ignition/chris
-- Champion Maya: http://127.0.0.1:5187/ignition/champion
-- Developer Alex: http://127.0.0.1:5187/ignition/developer
-- Jordan companion route: http://127.0.0.1:5187/ignition/developer/jordan
+Each surface has its own sign-in and workspace, with no persona switcher or cross-role navigation:
 
-Use `--port 5187` for these URLs. Separate server-held session cookies allow simultaneous persona tabs sharing one Northstar store. Insights links preserve the persona. These local URLs require a running server on the same computer; no public preview was verified. The original `/ignition` selector remains available.
+| Surface | Login | Demo email | Workspace |
+|---|---|---|---|
+| Chris | http://127.0.0.1:5187/ignition/chris/login | chris@northstar.example | /ignition/chris |
+| Champion Maya | http://127.0.0.1:5187/ignition/champion/login | maya@northstar.example | /ignition/champion |
+| Developer Alex | http://127.0.0.1:5187/ignition/developer/login | alex@northstar.example | /ignition/developer |
+| Developer Jordan | http://127.0.0.1:5187/ignition/developer/jordan/login | jordan@northstar.example | /ignition/developer/jordan |
 
-Open http://127.0.0.1:5187/ignition. The existing `/`, `/portal`, `/activation` and `/operator` routes are preserved. This extension uses their shared Shell, tokens, typeface and navigation. It does not replace the existing authenticated activation API.
+No password is required for these local demo accounts. These are account-bound demo sessions, not production authentication. Never enter real credentials. Each role has a separate HttpOnly SameSite cookie and server-validated account scope. Sign out through the profile menu. Other roles remain signed in. The original /ignition entry now asks for a workspace link and does not offer a role chooser. Existing /portal, /activation and /operator surfaces remain available independently.
 
-1. Choose Chris and Enter demo. Expand the three private source records. Add a manual source or click Simulate Claude Agent import. No agent is contacted.
-2. Extract a review draft. Inspect held-back commercial material, source citations, developer context and unresolved Okta/GitHub claims. Review both fields, check the approval box, and publish v1.
-3. Optionally choose Maya. Team Activation already contains the agreed workflows. Prioritize documentation or ownership, add an optional goal, and simulate inviting Alex/Jordan. No questionnaire, email or discovery duplication. Developers can start without this step.
-4. Choose Alex. Open a fixture, follow the steps and enter `team-payments` for ownership or `Payments recovery` for docs. A wrong answer is rejected. A correct answer creates a server-validated simulated outcome.
-5. Open the floating AiKA helper for workflow-specific scripted guidance. Technical support prepares a copyable, unsent draft. Chris is an account escalation after support triage, not a technical inbox.
-6. Choose Jordan and verify another outcome. Return to Chris, revise the approved handoff and approve v2. Open Adoption overview: the v1 outcomes remain intact with their original timestamps and version.
-7. Refresh to see server-held state. Restarting the server resets this fictional demonstration.
+The visible experiences are separate; one shared Northstar store carries approved handoffs, team preferences and adoption results behind the scenes. Only Chris receives raw sources and commercial context. Developers receive only their own progress. Chris and Maya receive cohort summaries. All integrations and outcome evidence are simulated; no external invites, support tickets or agent calls are sent. State is held in memory and resets on server restart. The API stays opt-in and localhost-only. Local URLs require this server on the same computer; no public preview verified.
 
-## Scope and trust boundaries
+Demo: sign in Chris, add/review sources, extract and approve v1; optionally sign in Maya and save team preferences; sign in Alex/Jordan independently and complete ownership/docs workflows. Answers: team-payments and Payments recovery. Test a wrong answer. Prepare an unsent support draft through contextual AiKA. Return to Chris, publish v2 and inspect retained outcome versions in adoption. Refresh separate views after changes; stale mutations are rejected and need review/retry.
 
-Northstar Engineering is fictional: 500 employees, 80 engineers, 30-day POC, approximately $100K potential. Maya is champion; Alex and Jordan form the two-developer demo cohort. The goal is service ownership and documentation for payments-api on GitHub. Okta remains unverified with conflicting notes. Commercial details stay in Chris's projected response and are not sent to champion/developer views.
+Design reference folder:
+https://drive.google.com/drive/folders/1QqcZQX8GbPEMquR5dXuKN3EujJI4Bqka
 
-The demo API is opt-in (`IGNITION_DEMO=1`), localhost-only, same-origin for writes, with HttpOnly SameSite cookies, session expiry, server-selected role/tenant, per-role mutations, response projection, body limits and optimistic revision checks. The browser cannot assign a tenant or grant itself operator rights through a mutation body. The explicit demo persona selector deliberately permits switching fictional roles. It is **not production authentication** and must never accept real customer data. The existing Portal authentication is untouched.
-
-Handoffs append immutable approved snapshots. A new snapshot does not erase previous outcomes. Individual developers see their own evidence; Chris and Maya see cohort summaries. An invite is never counted as adoption. Outcomes mean correct answers against synthetic fixtures, not real access checks, live usage, or production readiness. Extraction is a conservative heuristic plus mandatory human review, not a security-grade DLP system. Both published fields reject obvious commercial/secret markers, but human review is still essential.
-
-No live Spotify Insights, HubSpot, Gong, Claude Agent, GitHub, Okta or AiKA connection exists in this extension. It does not send invitations or support tickets. Its state is process memory, not durable storage. It is a Vite local middleware prototype, not a deployed backend. Refresh is manual across separate views. Production work requires durable tenant storage, real authorization, auditing, connector consent and evidence-based telemetry.
-
-## Phases and files
-
-- Phase 1: `server/ignition.mjs`, declaration and HTTP/domain tests: private sources, role projection, revisions, optional preferences and per-developer outcomes.
-- Phase 2: `src/ignition/`: extraction, customer files, champion preferences, developer workflows, contextual helper and adoption summaries; `src/main.tsx` and `vite.config.ts` wire the separate demo route.
-- Phase 3: `e2e/ignition.mjs`, extraction test and this guide: repeatable walkthrough, screenshots and refinement prompt.
-
-Paths above are relative to `prototypes/v1`. The baseline already had extensive unit/HTTP tests. Existing Portal screenshots in the adjacent local `spotify-portal-references` folder informed preservation of the shell and welcome. The referenced chat's image attachments and full history were unavailable; the user's explicit implementation brief is authoritative.
-
-## Verification
+Read DESIGN_REFERENCES.md for the screenshot map and direct image links. CLAUDE_CODE_PROMPT.md contains the updated implementation brief. AUDIT.md records executed checks and limitations.
 
 ```sh
 npm run build
 npm test
 node --test server/ignition.node-test.mjs server/portal-session.node-test.mjs
-# With the demo running, and Playwright installed:
-node e2e/ignition.mjs
+# Fresh demo server required; Playwright must be installed:
+IGNITION_URL=http://127.0.0.1:5187 node e2e/ignition.mjs
 ```
-
-The browser script accepts `PLAYWRIGHT_MODULE_PATH`, `CHROME_PATH`, `IGNITION_URL`, and `IGNITION_EVIDENCE` for a local browser installation and output directory. It is intended for a fresh demo server. Browser captures are in `screenshots/`.
