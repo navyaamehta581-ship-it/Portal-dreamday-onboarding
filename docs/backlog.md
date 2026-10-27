@@ -1,3 +1,5 @@
+> Current product: [Spotify Portal Activation Intelligence](../README.md) and its [active blueprint](blueprint/activation-intelligence.md). The Architect scope and baseline below are historical reference; use the root README for current setup and validation.
+
 # Atom backlog and tracking
 
 [Source register](blueprint/spotify_portal_workflow_architect_micro_atomic_register.md) contains 516 atoms: 355 retained and 161 additive. [Editable tracker](backlog/atoms.json) preserves every ID, dependency, operation and PASS criterion. All implementation statuses start NOT_STARTED; repository preparation is not a claim that the Architect has been implemented.

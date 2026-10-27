@@ -1,3 +1,5 @@
+> Current product: [Spotify Portal Activation Intelligence](../README.md) and its [active blueprint](blueprint/activation-intelligence.md). The Architect scope and baseline below are historical reference; use the root README for current setup and validation.
+
 # Setup and managed Portal gate
 
 ## Local reference development

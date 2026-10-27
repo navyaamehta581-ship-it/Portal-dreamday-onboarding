@@ -1,3 +1,7 @@
+# Activation and Goal API
+
+For the current Activation Intelligence service, setup and validation, start with the [root README](../../README.md), [active blueprint](../../docs/blueprint/activation-intelligence.md) and [development configuration](../../docs/activation/wire-review.md). Activation is opt-in and uses a separate database with scoped admission. The Goal API foundation below remains supported; its milestone description is historical and does not describe the whole service.
+
 # Goal API — Person B, milestone 1
 
 This is a local, single-user TypeScript backend with real SQLite persistence. It saves and retrieves developer goals. It does not call AI, inspect repositories, validate service ownership, execute workflows or integrate with Spotify Portal. A service ID is a user-supplied label at this stage, not proof that a service exists.

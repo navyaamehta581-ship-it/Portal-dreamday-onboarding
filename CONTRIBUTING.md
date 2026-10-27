@@ -14,6 +14,8 @@ Commit and push that branch, then open a draft PR against `main`. Link atom IDs 
 
 ## Claim work
 
+Start with the [Activation Intelligence blueprint](docs/blueprint/activation-intelligence.md) and [roadmap](docs/roadmap.md). Use scoped activation issues for current work. The atom process below applies only when explicitly revisiting historical requirements.
+
 Use the [backlog](docs/backlog.md) and GitHub atom issue form. Record one owner and reviewer, dependency IDs, intended files, typed inputs/outputs, operation, failure/recovery behavior, positive and negative tests, capability assumptions and proof. Use the blueprint's full ticket schema for implementation work. Claiming a ticket is not completion; source PASS criteria are acceptance requirements.
 
 Keep `docs/backlog/atoms.json` aligned with issues and PRs. Set `IN_PROGRESS` only after dependencies and applicability are reviewed. `DONE` requires linked proof and reviewer decision. BLOCKED/DEFERRED records need a reason. Do not bulk-close unsupported work or mark all atoms passed after a local build.
@@ -32,7 +34,7 @@ These are responsibilities, not assigned people. No CODEOWNERS identities are in
 
 ## Validation and data
 
-Run the commands in [setup](docs/setup.md). Record actual runtime, commit and results in the PR. V1 CI runs its tests/build; integration and E2E directories are acceptance plans only. Do not introduce passing placeholder checks. Add executable adapter/tenant checks when those contracts exist.
+Run the current commands in the [root README](README.md). Record actual runtime, commit and results in the PR. V1 CI runs its tests/build; the activation tests under `tests/activation/` are executable local harnesses; other integration/E2E folders retain historical acceptance plans. Do not introduce passing placeholder checks. Add executable adapter/tenant checks when those contracts exist.
 
 Use fictional fixtures. Never put credentials, private transcripts or production tenant evidence in Git. Store secrets only in an approved facility; never in browser-exposed `VITE_*` variables. Keep V1's lockfile separate until a reviewed workspace decision.
 

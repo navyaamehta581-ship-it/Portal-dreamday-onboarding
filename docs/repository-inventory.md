@@ -1,3 +1,5 @@
+> Current product: [Spotify Portal Activation Intelligence](../README.md) and its [active blueprint](blueprint/activation-intelligence.md). The Architect scope and baseline below are historical reference; use the root README for current setup and validation.
+
 # Repository inventory and adoption rationale
 
 Inspected 23 October 2026: fresh clone of `navyaamehta581-ship-it/Spotify-portal-solution`, default/current branch `main`, commit `9cd4082031571129165b4f249c9a33a9ea1430a2` (merged collaboration PR #1). The checkout was clean before the feature branch `docs/managed-portal-blueprint` was created. This is the remote baseline, not either older local checkout. Local unfinished V2 work in `spotify-portal-v2` was neither imported nor changed.
