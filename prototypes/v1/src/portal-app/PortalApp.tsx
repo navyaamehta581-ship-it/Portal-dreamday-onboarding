@@ -36,7 +36,7 @@ export function PortalApp(){
  const item=feature?ALL_NAV.find(n=>n.slug===feature[1]):null;
  return <div className="pt"><Shell active={active} user={{name:account.user,detail:account.label,actionLabel:'Sign out',onAction:()=>void leave()}}>
   {onboarding?<OnboardingPage session={session} tab={tab} account={account}/>:
-   feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2><p>Only Home and Onboarding are functional here.</p></div></div></div>:
+   feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2></div></div></div>:
    <Home session={session}/>}
  </Shell></div>;
 }

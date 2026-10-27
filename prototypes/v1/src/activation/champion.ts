@@ -28,6 +28,15 @@ export function championPlan(state:ActivationState){
  ];
  const work=packets.length?packets.map(p=>`Local review packet ${p.id}, digest ${p.artifactDigest}, source commit ${p.commit}${p.setupProposal?' with a setup proposal':''}. Prepared for review only; no execution or deployment.`).join('\n'):'No current evidence-backed local review packet is prepared.';
  const reports=evidence.filter(e=>e.kind==='developer_report'||e.kind==='customer_report');
- const message=[`Customer: ${state.customerId}. Goal (customer-reported agreement): ${state.context.agreedGoal.text}`,`Current plan revision: ${state.planRevision}.`,verified?'The first technical milestone has supporting verification; this does not prove team adoption.':'The first developer outcome is not independently verified.',`Prepared work: ${work}`,`Reports: ${reports.length} attributed report(s); these do not verify completion.`,`Unresolved: ${[...new Set(issues)].join('; ')||'No unresolved requirements recorded; technical owner review is still proposed.'}`,`Next action: ${blocked?'Review blockers with the technical owner before proceeding. ':''}${state.plan.suggestedNextAction.description}`,`Suggested roles to involve: ${roles.map(r=>r.role).join(', ')||'No additional role suggested from the current evidence.'}`,`Proposed team steps: technical owner review → repeat onboarding after blockers are resolved → Chris follow-up. No real adoption is claimed.`].join('\n\n');
+ const prepared=packets.length?`A review packet for ${packets[0].repository} is ready to look at. Nothing has been run or deployed.`:'';
+ const open=[...new Set(issues)];
+ const message=['Hi team,',
+  `We’re onboarding to Spotify Portal. Our first goal: ${state.context.agreedGoal.text}.`,
+  `Next step: ${blocked?'Review blockers with the technical owner before we continue. ':''}${state.plan.suggestedNextAction.description}`,
+  [verified?'Our first technical milestone is verified, but the team hasn’t adopted Portal yet.':'Our first milestone isn’t verified yet.',prepared].filter(Boolean).join(' '),
+  open.length?`Still open:\n${open.map(x=>'- '+x).join('\n')}`:'Nothing is blocking us right now.',
+  roles.length?`I’d like help from: ${roles.map(r=>r.role).join(', ')}.`:'',
+  'Plan: a technical owner reviews our setup, a second developer repeats the onboarding once blockers are resolved, then we follow up with Chris.',
+ ].filter(Boolean).join('\n\n');
  return {roles,milestones,message,issues:[...new Set(issues)],work,verified,blocked};
 }

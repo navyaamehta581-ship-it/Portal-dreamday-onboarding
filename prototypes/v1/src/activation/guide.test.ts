@@ -25,3 +25,9 @@ it('answers questions only with matching published context and records help requ
  expect(turn.reply.title).toContain('Chris as a help request');
  expect(contextMatches(state,'zzzz unrelated qqqq')).toEqual([]);
 });
+
+it('matches short technical terms such as SSO but ignores short filler words',()=>{
+ const state=fixtureState('orbit');state.context.briefing='SSO uses Okta. Docs live in Confluence.';
+ expect(contextMatches(state,'Which SSO provider was already shared?').map(m=>m.text)).toContain('SSO uses Okta.');
+ expect(contextMatches(state,'and the for you')).toEqual([]);
+});

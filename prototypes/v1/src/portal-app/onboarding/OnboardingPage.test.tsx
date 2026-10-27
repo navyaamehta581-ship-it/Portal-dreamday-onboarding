@@ -23,7 +23,7 @@ it('shows the customer-specific milestone, context and unknowns with no credenti
  expect(m.host.querySelector('[role=tab]#tab-team')).toBeNull();
  await click(m.host,'Accept this onboarding direction');
  expect(m.host.querySelector('[role=tab]#tab-team')).not.toBeNull();
- expect(m.host.textContent).toContain('It does not complete a milestone');
+ expect(m.host.textContent).toContain('Direction accepted');expect(m.host.textContent).toContain('1 of 3 completed');
 });
 
 it('sends a guide question as an attributed report and a blocker through the blocker route',async()=>{
@@ -60,7 +60,7 @@ it('edits and copies the kickoff message, and handles unavailable clipboard',asy
  await load(fixtureState('orbit'),'team');await act(async()=>{session.direction.accept();});
  await m.render(<Harness tab="team"/>);
  const box=byLabel<HTMLTextAreaElement>(m.host,'Champion kickoff message')!;
- expect(box.value).toContain('not independently verified');
+ expect(box.value).toContain('isn’t verified yet');
  await type(box,'Edited kickoff');
  const write=vi.fn().mockRejectedValue(new Error('denied'));vi.stubGlobal('navigator',{clipboard:{writeText:write}});
  await click(m.host,'Copy kickoff message');

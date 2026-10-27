@@ -13,19 +13,18 @@ export function GoalTab({draft,session}:{draft:OperatorDraft;session:ActivationS
    <div className="pt-field"><dt>Recorded</dt><dd>{new Date(state.context.agreedGoal.agreedAt).toLocaleString()}</dd></div>
    <div className="pt-field"><dt>Context</dt><dd>revision {state.contextRevision}</dd></div>
   </dl>
-  <p className="pt-note">This is reported agreement, not independent verification.</p>
  </section>;
  if(!draft.organized)return <section className="pt-card"><h3>Organize the customer notes first</h3><p className="pt-note">The outcome is published together with the reviewed context.</p>
   <div className="pt-actions"><button className="pt-btn sm" onClick={()=>navigate('/operator')}>Go to Customer Context</button></div></section>;
  const ready=session.ready&&draft.confirmed&&!!draft.briefing.trim()&&!!draft.outcome.trim()&&!!draft.agreedBy.trim();
  return <section className="pt-card" aria-label="Agreed outcome">
-  <h3>Record the separately agreed outcome</h3>
+  <h3>Agreed outcome</h3>
   {draft.organized.outcomeCandidates.length>0&&<><p className="pt-label" style={{marginTop:18}}>From your notes</p>
    <div className="pt-suggest-row">{draft.organized.outcomeCandidates.map(c=><button key={c} className="pt-tool" onClick={()=>draft.setOutcome(c)}>{c}</button>)}</div></>}
   <label className="pt-form-field"><span>Agreed activation outcome</span><textarea className="pt-textarea" style={{minHeight:72}} aria-label="Agreed activation outcome" rows={2} maxLength={1000} value={draft.outcome} onChange={e=>draft.setOutcome(e.target.value)}/></label>
   <label className="pt-form-field"><span>Who agreed, when, and where it was recorded</span><input className="pt-input" aria-label="Agreement attribution" maxLength={200} value={draft.agreedBy} onChange={e=>draft.setAgreedBy(e.target.value)} placeholder="e.g. Platform lead, 14 Oct trial call notes"/></label>
-  <label className="pt-check"><input type="checkbox" checked={draft.confirmed} onChange={e=>draft.setConfirmed(e.target.checked)}/>I reviewed this developer-visible context and report a separately agreed outcome. This is reported agreement, not independent verification.</label>
+  <label className="pt-check"><input type="checkbox" checked={draft.confirmed} onChange={e=>draft.setConfirmed(e.target.checked)}/>I reviewed this developer-visible context, and this outcome was agreed with the customer.</label>
   <div className="pt-actions"><button className="pt-btn sm" disabled={!ready} onClick={()=>void session.intake(draft.briefing,draft.outcome,draft.agreedBy,draft.confirmed)}>Publish to developers</button></div>
-  <p className="pt-note">Publishing starts this customer’s onboarding. An existing session is never overwritten; on conflict your draft stays here.</p>
+  <p className="pt-note">Publishing starts this customer’s onboarding. If it was already published, your draft stays here.</p>
  </section>;
 }

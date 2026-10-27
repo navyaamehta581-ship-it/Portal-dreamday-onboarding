@@ -268,3 +268,44 @@ select.pt-input{appearance:auto;height:46px}
 .pt-suggest-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .pt-suggest-row .pt-tool{height:auto;min-height:31px;padding:6px 11px;text-align:left;font-weight:600}
 @media (max-width:860px){.pt-form-row{grid-template-columns:1fr}}
+/* Setup guide steps (023, 036): one bordered row per step; the open row holds the step's detail and action. */
+.pt-acc{display:grid;gap:17px;margin:28px 0 0;padding:0;list-style:none}
+.pt-acc-row{border:1px solid var(--p-card-line);border-radius:12px}
+.pt-acc-head{display:flex;align-items:center;gap:16px;min-height:96px;padding:0 34px}
+.pt-acc-toggle{display:flex;align-items:center;gap:20px;flex:1;min-width:0;min-height:96px;text-align:left;cursor:pointer}
+.pt-acc-toggle .icon{width:42px;height:42px;flex:none;border-radius:50%;background:#2b2b2b;display:grid;place-items:center;color:#d8d8d8;font-weight:700;font-size:15px}
+.pt-acc-toggle .title{flex:1;min-width:0;font-size:17px;font-weight:600;color:#fff}
+.pt-acc-toggle .title small{display:block;margin-top:3px;font-size:14px;font-weight:500;color:var(--p-subtle);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-acc-row.current .icon{background:#fff;color:#000}
+.pt-acc-row.done .title{color:#9b9b9b}
+.pt-acc-row.done .icon{color:#bdbdbd}
+.pt-acc-row.attention .icon{background:#3d2f12;color:#ffd27a}
+.pt-acc-row.attention .title small{color:#ffd27a}
+.pt-acc-head .chev{color:#cfcfcf;flex:none;display:grid;place-items:center}
+.pt-acc-body{padding:0 34px 30px 96px;font-size:15px;line-height:24px;color:#e6e6e6}
+.pt-acc-body>p:first-child{margin-top:0}
+.pt-acc-body .pt-fields{margin-top:0}
+.pt-acc-body .pt-table{margin-top:22px}
+.pt-acc-body .pt-textarea{margin-top:0}
+.pt-clamp3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin-top:6px;color:#e6e6e6}
+.pt-prose{margin-top:10px;white-space:pre-wrap;color:#cfcfcf;font-size:14px;line-height:22px}
+.pt-row.done .label{color:#9b9b9b}
+.pt-row.done .check{color:#bdbdbd}
+.pt-row.upcoming .label{color:#cfcfcf}
+.pt-done{margin-top:34px;border-radius:24px;padding:56px 32px;text-align:center;background:linear-gradient(100deg,#3a2128 0%,#2c2140 45%,#24234a 70%,#1c1c1c 100%)}
+.pt-done-mark{font-size:30px}
+.pt-done h3{margin-top:10px;font-size:24px;font-weight:700}
+.pt-done p{margin-top:8px;font-size:16px;color:#ececec}
+.pt-done .pt-btn{margin-top:24px}
+.pt-home .pt-done+.pt-guide{margin-top:26px}
+/* Team context below the guide: flat, divided like the 047 About content. */
+.pt-about{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:40px;margin-top:36px;padding-top:30px;border-top:1px solid #333}
+.pt-about h3{font-size:17px;font-weight:700}
+.pt-about-text{margin-top:12px;white-space:pre-wrap;font-size:15px;line-height:24px;color:#e6e6e6}
+@media (max-width:1100px){.pt-about{grid-template-columns:1fr;gap:28px}}
+@media (max-width:860px){.pt-acc-head{padding:8px 14px;gap:10px;min-height:72px;flex-wrap:wrap}.pt-acc-toggle{min-height:64px;gap:12px;flex:1 1 220px}.pt-acc-body{padding:0 16px 22px}.pt-done{padding:40px 18px}}
+.pt-tabpanel>.pt-guide:first-child,.pt-tabpanel>.pt-done:first-child{margin-top:0}
+.pt-row .check .num{font-weight:700;font-size:15px;color:#d8d8d8}
+.pt-acc{grid-template-columns:minmax(0,1fr)}
+.pt-acc-body .pt-actions{flex-wrap:wrap}
+@media (max-width:860px){.pt-acc-body .pt-table{display:block;overflow-x:auto}.pt-acc-toggle .title small{white-space:normal}}
