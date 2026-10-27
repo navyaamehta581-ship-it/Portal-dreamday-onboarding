@@ -41,11 +41,11 @@ export function Adoption({state}:{state:IgnitionState}){
    <section className="pt-headline"><h3>{personal?'Handoff':'Invitations'}</h3><p>{personal?`Current approved handoff: v${state.handoff?.version??'—'}`:`${state.preferences.invites.length} simulated invitation(s) prepared. Invitations are not adoption.`}</p>
     {stale>0&&<p><span className="pt-pill amber">{stale} outcome(s) to revalidate</span></p>}</section>
   </div>
-  <section className="pt-card" style={{marginTop:40}} aria-label="Outcomes">
+  <section className="pt-section" style={{marginTop:40}} aria-label="Outcomes">
    <h3>{personal?'Your outcomes':'Outcomes by developer'}</h3>
    <table className="pt-table"><thead><tr><th>Developer</th>{ids.map(w=><th key={w}>{state.workflows[w].title}</th>)}</tr></thead>
     <tbody>{rows.map(([p,progress])=><tr key={p}><td style={{textTransform:'capitalize'}}>{p}</td>{ids.map(w=>{const o=progress?.[w];return <td key={w}>{o?<><span className="pt-ok">✓</span> Verified in simulation · handoff v{o.handoffVersion}<br/><small className="pt-note" style={{marginTop:0}}>{new Date(o.at).toLocaleString()}</small>{needsRevalidation(o,state)&&<><br/><span className="pt-pill amber">Revalidate against v{state.handoff!.version}</span></>}</>:<span style={{color:'var(--p-subtle)'}}>Not verified</span>}</td>;})}</tr>)}</tbody></table>
-   <p className="pt-note">Outcomes come from simulated workflow verification against catalog fixtures, not live telemetry. Earlier outcomes keep the handoff version they were verified against.</p>
+   <p className="pt-note">Outcomes come from simulated verification, not live telemetry. Each outcome keeps the handoff version it was verified against.</p>
   </section>
  </>;
 }

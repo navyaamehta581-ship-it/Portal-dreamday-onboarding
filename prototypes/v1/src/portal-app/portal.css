@@ -358,3 +358,40 @@ select.pt-input{appearance:auto;height:46px}
 .pt-signin-field .pt-input:focus{box-shadow:none;border-color:#fff}
 .pt-entry-copy.signin .pt-btn{margin-top:22px;height:54px;padding:0 34px}
 @media (max-width:860px){.pt-entry-copy.signin{position:relative;left:0;top:0;width:auto;padding:32px 16px 48px}.pt-entry-copy.signin h1{font-size:38px}.pt-art.diamond{height:240px}}
+
+/* ===== Setup checklist accordion (023, 036) ===== */
+.pt-acc{display:grid;gap:17px;margin-top:28px}
+.pt-acc-row{border:1px solid var(--p-card-line);border-radius:12px}
+.pt-acc-head{display:flex;align-items:center;gap:16px;min-height:96px;padding:0 34px}
+.pt-acc-toggle{display:flex;align-items:center;gap:20px;flex:1;min-width:0;min-height:96px;text-align:left}
+.pt-acc-toggle .icon{width:42px;height:42px;flex:none;border-radius:50%;background:#2b2b2b;display:grid;place-items:center;color:#d8d8d8;font-weight:700;font-size:15px}
+.pt-acc-toggle .title{flex:1;min-width:0;font-size:17px;font-weight:600;color:#fff}
+.pt-acc-toggle .title small{display:block;margin-top:3px;font-size:14px;font-weight:500;color:var(--p-subtle)}
+.pt-acc-row.done .title{color:#9b9b9b}
+.pt-acc-head .chev{color:#cfcfcf;flex:none;width:32px;height:32px;display:grid;place-items:center;border-radius:4px}
+.pt-acc-body{padding:0 34px 30px 96px;font-size:16px;line-height:26px;color:#e6e6e6}
+.pt-acc-body ul{margin:10px 0 0;padding-left:20px}
+.pt-acc-body li{margin-top:4px}
+.pt-acc-body .pt-actions{margin-top:20px}
+.pt-btn.gray{background:#cfcfcf;color:#121212}
+.pt-btn.gray:hover:not(:disabled){background:#e4e4e4}
+.pt-acc-body .meta{margin-top:10px;font-size:14px;color:var(--p-subtle)}
+/* 036 completion banner */
+.pt-done-banner{margin-top:34px;border-radius:20px;padding:56px 32px 50px;text-align:center;background:linear-gradient(100deg,#3b2a2e 0%,#35284a 45%,#2a2a52 70%,#1d1d1d 74%,#272727 100%)}
+.pt-done-banner h3{font-size:24px;font-weight:700;margin-top:12px}
+.pt-done-banner p{margin-top:10px;font-size:16px;color:#ececec}
+.pt-done-banner .pt-btn{margin-top:24px}
+/* Flat page sections with thin dividers (047, 075) instead of boxed cards */
+.pt-section{padding:28px 0;border-top:1px solid var(--p-line)}
+.pt-section:first-child{border-top:0}
+.pt-section h3{font-size:17px;font-weight:700}
+.pt-section .pt-note:first-of-type{margin-top:6px}
+.pt-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:48px}
+/* AiKA mark (070/075 corner icon): green outlined triangle with an inner circle */
+.pt-aika-launch{background:none;border:0;box-shadow:none;width:44px;height:44px;right:18px;bottom:14px;border-radius:6px;color:#3fae49}
+.pt-aika-launch:hover{background:#1c1c1c}
+.pt-aika-page{display:flex;flex-direction:column;min-height:calc(100vh - 65px - 8px - 64px - 16px)}
+.pt-aika-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:min(674px,100%);margin:48px auto 0}
+.pt-aika-grid button{min-height:100px;padding:16px;border-radius:6px;background:#1c1c1c;text-align:left;font-size:14px;font-weight:600;color:#cfcfcf;line-height:1.45}
+.pt-aika-grid button:hover{background:#242424}
+@media (max-width:860px){.pt-acc-head{padding:8px 12px;gap:8px;min-height:72px;flex-wrap:wrap}.pt-acc-toggle{min-height:64px;gap:12px;flex:1 1 220px}.pt-acc-body{padding:0 16px 20px}.pt-cols{grid-template-columns:1fr;gap:0}.pt-aika-grid{grid-template-columns:1fr}}

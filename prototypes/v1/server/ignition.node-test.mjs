@@ -24,6 +24,19 @@ test('champion is optional, verification is meaningful, revisions preserve indiv
  assert.equal(s.view(principal('chris','other-tenant')).handoff,null);
  assert.throws(()=>s.mutate(c,{...publish,revision:1}),/REVISION_CONFLICT/);
 });
+test('onboarding steps are role-scoped, ordered, evidence-labelled and private to each developer',()=>{
+ const s=createIgnitionStore(),c=principal('chris'),a=principal('alex'),j=principal('jordan'),m=principal('maya');
+ assert.throws(()=>s.mutate(a,{action:'step',step:'goal',revision:0}),/HANDOFF_REQUIRED/);
+ s.mutate(c,{...publish,revision:0});
+ assert.throws(()=>s.mutate(m,{action:'step',step:'goal',revision:1}),/FORBIDDEN/);
+ assert.throws(()=>s.mutate(a,{action:'step',step:'register',revision:1}),/STEP_PREREQUISITE/);
+ assert.throws(()=>s.mutate(j,{action:'step',step:'register',revision:1}),/INVALID_REQUEST/);
+ assert.throws(()=>s.mutate(a,{action:'step',step:'owner',revision:1}),/INVALID_REQUEST/);
+ s.mutate(a,{action:'step',step:'prepare',revision:1});s.mutate(a,{action:'step',step:'register',revision:2});
+ assert.equal(s.view(a).steps.alex.register.evidence,'simulated');assert.equal(s.view(j).catalogRegistered,true);
+ assert.equal(s.view(j).steps.alex,undefined);assert.deepEqual(Object.keys(s.view(m).steps),['alex','jordan']);
+ s.mutate(j,{action:'step',step:'discover',revision:3});assert.equal(s.view(j).steps.jordan.discover.evidence,'acknowledged');
+});
 test('HTTP rejects unauthenticated, cross-origin, injected tenant/role and developer publication',async()=>{
  process.env.IGNITION_DEMO='1';let handler;ignitionPlugin().configureServer({middlewares:{use:h=>handler=h}});
  const server=createServer((q,r)=>handler(q,r,()=>{r.writeHead(404);r.end();}));await new Promise(r=>server.listen(0,'127.0.0.1',r));

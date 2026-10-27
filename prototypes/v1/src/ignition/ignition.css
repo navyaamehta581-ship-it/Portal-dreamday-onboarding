@@ -10,3 +10,18 @@
 .ig .pt-table td small{font-size:12px}
 @media (max-width:1100px){.ig-split{grid-template-columns:1fr}}
 @media (max-width:860px){.ig .pt-tablebox{padding:4px 12px;overflow-x:auto}.ig .pt-stepper h2{font-size:26px}.ig .pt-headlines{margin-top:24px}}
+/* Catalog (045): filter rail + table */
+.ig-catalog{display:grid;grid-template-columns:268px minmax(0,1fr);gap:20px;margin-top:40px;align-items:start}
+.ig-catalog aside .pt-formfield{margin-top:0;margin-bottom:22px}
+/* Docs (055): metadata bar, page list, article, table of contents */
+.ig-docmeta{display:flex;flex-wrap:wrap;gap:24px;margin-top:22px;padding:12px 14px;border-radius:4px;background:#2a2a2a;font-size:13px;color:#cfcfcf}
+.ig-docmeta b{color:#fff}
+.ig-doc{display:grid;grid-template-columns:220px minmax(0,1fr) 220px;gap:40px;margin-top:30px}
+.ig-doc nav,.ig-doc aside{display:grid;gap:10px;align-content:start;font-size:14px}
+.ig-doc article h1{font-size:30px;font-weight:800;letter-spacing:-.4px}
+.ig-doc article h2{font-size:22px;font-weight:700;margin-top:28px}
+.ig-doc article p{margin-top:14px;font-size:16px;line-height:1.6}
+.ig-doc article ul{margin-top:12px;font-size:16px;line-height:1.8}
+.pt-aika-head{position:relative}
+@media (max-width:1100px){.ig-doc{grid-template-columns:1fr}.ig-doc aside{display:none}.ig-catalog{grid-template-columns:1fr}.ig-catalog aside{display:none}}
+@media (max-width:860px){.ig-catalog .pt-table{display:block;overflow-x:auto;white-space:nowrap}}

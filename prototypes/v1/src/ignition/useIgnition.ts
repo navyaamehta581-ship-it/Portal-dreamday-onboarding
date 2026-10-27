@@ -14,7 +14,7 @@ export function useIgnition(path:string){
  // eslint-disable-next-line react-hooks/exhaustive-deps
  },[person,login]);
  async function refresh(){try{setState(await request('state'));setError('');}catch(e){if((e as Error).message==='SIGN_IN_REQUIRED')setState(null);else setError(problem((e as Error).message));}}
- async function signIn(email:string){setBusy(true);setError('');try{await request('session',{person,email});setState(await request('state'));navigate(routeBase(person));return true;}catch(e){setError(problem((e as Error).message));return false;}finally{setBusy(false);}}
+ async function signIn(email:string){setBusy(true);setError('');try{await request('session',{person,email});setState(await request('state'));navigate(person==='chris'?routeBase(person):routeBase(person)+'/welcome');return true;}catch(e){setError(problem((e as Error).message));return false;}finally{setBusy(false);}}
  async function signOut(){setBusy(true);try{await request('logout',{});}catch{/* already signed out */}finally{setState(null);setBusy(false);navigate(routeBase(person)+'/login');}}
  /** Writes carry the loaded revision; a conflict keeps the caller's draft and asks for a refresh. */
  async function save(input:object){setBusy(true);try{setState(await request('state',{...input,revision:state!.revision}));setError('');return true;}catch(e){setError(problem((e as Error).message));return false;}finally{setBusy(false);}}

@@ -53,3 +53,25 @@ Shared tokens and components (portal.css, used by all surfaces): outlined fields
 Executed checks (Node 24.22.1): production build passed; 91 frontend tests (17 files) passed; 7 ignition/session HTTP tests passed; inspector 15/15; phase-A 4/4; workflow-api check + 62 tests passed; blueprint validation passed. e2e/ignition.mjs was rewritten (the previous script raced the lazy login render and failed) and passed against a fresh server: deep link without session shows sign-in, wrong account rejected, concurrent tabs keep identities, Maya sign-out leaves Chris/Alex/Jordan signed in, v1 approval, Alex before Maya, Maya priority/goal reaching Jordan, wrong answer rejected, unsent support draft, v2 with v1 evidence retained and revalidation flags after reload, no sources/commercial data in Maya or developer payloads, no overflow at 390px, no browser errors. e2e/activation.mjs (/, /operator surfaces) also passed after the shared field-style change.
 
 Still open: verification overwrites the prior result on the server (revalidation is flagged in the UI, not appended); no persistence across server restart; AiKA and support are scripted; the Drive reference copy linked from DESIGN_REFERENCES.md is not reachable by the connector.
+
+## Original frontend restoration — 27 October 2026
+
+The previous refinement was rejected as box-heavy and not faithful. This round restores the original developer shell first, then integrates the new functionality as additions. Branch claude/spotify-portal-frontend-rebuild-i04hn5, reset to main 9488ddd (PR #25 merged). No merge or deploy.
+
+| Surface | Reference | Restored | Remaining differences |
+|---|---|---|---|
+| Sign-in (all four) | 001 | "Welcome to Portal." with the original sign-in copy, work email, green pill; no demo or prototype notes | Email instead of SSO (demo accounts, not production auth) |
+| Welcome | 010 | Original welcome page after sign-in for Alex, Jordan and Maya | — |
+| Developer shell | 053 | Full original sidebar for Alex, Jordan and Maya (Home, Catalog, Docs, Data Experience, Fleetshift, Notifications, Insights, RBAC, Skill Exchange, Soundcheck, AiKA, Confidence, Tech Radar, Docs Hub, Migration Agent, Create, Add to Bookmarks; App Settings, Plugins, Catalog Settings, Config History, Log Viewer). The extra "Onboarding" entry used by the /portal prototype is not in 053 and is not shown. Unbuilt items open "isn't available in this demo" | Lucide icons instead of the original set |
+| Developer home | 011, 023, 036 | Setup checklist card with progress and time chip; 023 accordion rows (round number/check, title, chevron, expanded description with gray pill action); 023-style confirm dialog for Enable TechDocs; 036 gradient "You're all done!" | Step copy comes from the approved handoff |
+| Setup steps | 012, 014, 018 | Step 1 team select, step 2 component table with type, step 3 pull request (simulated) | No real GitHub write |
+| Catalog / entity / docs | 045, 047, 055 | Filter rail and owned-components table; entity About panel with catalog-info.yaml; docs metadata bar and article; verification inline | One fixture service; filters are visual |
+| AiKA | 053, 055, 058, 065/066, 070/075 | Green outlined triangle mark at bottom-right (no pill); docked "New AiKA Chat ⌄" panel with expand/minimize, arrow suggestions, filled composer; full AiKA page with greeting and suggestion grid | Responses scripted and labelled; History disabled |
+| Chris | 075, 047 | Insights-only nav; Insights subtabs Customer files / Handoff / Versions / Adoption; flat sections with dividers instead of cards | No original screenshot of this workspace |
+| Maya | 053, 023, 075 | Full Portal nav; home checklist "Activate your team"; Insights › Team Activation | No original screenshot; derived |
+
+Personalized onboarding: a new revision-checked `step` action records acknowledged or simulated steps per developer (role-scoped, ordered — register requires prepare, private to each developer, handoff version stamped). Owner and docs steps complete only from verified outcomes. Nothing is completed without a recorded action.
+
+Executed checks (Node 24.22.1): build passed; 91 frontend tests (17 files); 8 ignition/session HTTP tests; inspector 15/15; phase-A 4/4; workflow-api check + 62 tests; blueprint validation; e2e/ignition.mjs and e2e/activation.mjs passed. Browser walkthrough at 1920×1042 and 390×844 across all four workspaces: no page errors, no horizontal overflow at 390px. Compact fixes from inspection: accordion actions wrap below the title; catalog table scrolls horizontally. Renders in refinement/.
+
+Still open: on phones the 053 sidebar is shown above content (shared Shell behaviour); verification overwrites earlier results; in-memory store; AiKA scripted.

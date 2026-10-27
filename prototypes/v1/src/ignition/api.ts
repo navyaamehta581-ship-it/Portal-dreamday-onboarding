@@ -3,9 +3,11 @@ import type {Source} from './extract';
 export type Version={version:number;briefing:string;uncertainties:string;approvedBy:string;at:string};
 export type Outcome={status:string;handoffVersion:number;at:string};
 export type Progress=Record<string,Record<string,Outcome>>;
+export type StepRecord={evidence:'acknowledged'|'simulated';handoffVersion:number;at:string};
 export type Workflow={title:string;prerequisite:string;steps:string[];answer:string};
 export type IgnitionState={person:string;role:'operator'|'champion'|'developer';revision:number;handoff:Version|null;sources?:Source[];versions?:Version[];commercial?:string;
- preferences:{priority:string;goal:string;invites:string[]};progress:Progress;workflows:Record<string,Workflow>};
+ preferences:{priority:string;goal:string;invites:string[]};progress:Progress;workflows:Record<string,Workflow>;
+ steps:Record<string,Record<string,StepRecord>>;catalogRegistered:boolean;docsEnabled:boolean};
 export type Person='chris'|'maya'|'alex'|'jordan';
 
 export const ACCOUNTS:Record<Person,{name:string;product:string}>={
@@ -37,7 +39,7 @@ export function problem(code:string){
   PRIVATE_CONTEXT:'The handoff still contains commercial or secret terms. Remove them before approving.',
   REVIEW_REQUIRED:'Confirm you reviewed both fields before approving.',HANDOFF_REQUIRED:'This needs an approved handoff first.',
   FORBIDDEN:'Your account can’t do this here.',DEMO_DISABLED:'This workspace is currently unavailable.',ACCOUNT_MISMATCH:'Use the account invited to this workspace.',
-  SOURCE_LIMIT:'This customer file has reached its source limit.'} as Record<string,string>)[code]??code;
+  SOURCE_LIMIT:'This customer file has reached its source limit.',STEP_PREREQUISITE:'Finish the previous step first.'} as Record<string,string>)[code]??code;
 }
 /** True when an outcome was verified against an older handoff than the current one. */
 export const needsRevalidation=(o:Outcome|undefined,state:IgnitionState)=>!!o&&!!state.handoff&&o.handoffVersion<state.handoff.version;
