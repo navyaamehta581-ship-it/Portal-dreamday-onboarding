@@ -1,1 +1,12 @@
-.ig .ig-personas{display:flex;gap:18px;align-items:end;flex-wrap:wrap;margin:24px 0}.ig label{display:block;margin:16px 0;font-size:14px}.ig label>.pt-input,.ig label>.pt-textarea{display:block;margin-top:8px;width:100%}.ig .ig-personas label{margin:0}.ig-heading{display:flex;justify-content:space-between;gap:20px;align-items:center;margin:34px 0}.ig-heading h2{font-size:30px;margin:8px 0}.ig-heading p{color:#b6b9bc}.ig details{border-bottom:1px solid #35383a;padding:16px 0;overflow-wrap:anywhere}.ig summary{cursor:pointer;font-size:14px}.ig-pre{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7}.ig .ig-check{display:flex;gap:10px;align-items:center}.ig-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin:24px 0}.ig-metrics div{border:1px solid #404447;padding:20px;border-radius:8px}.ig-metrics strong{display:block;font-size:32px;color:#b5f5c5}.ig-metrics span{font-size:13px}.ig-workflow{display:block;text-align:left;width:100%;background:#202427;color:inherit;border:1px solid #45494c;border-radius:8px;padding:20px;margin:16px 0;cursor:pointer}.ig-workflow.selected{border-color:#91edaa}.ig-workflow span{display:block;font-size:13px;color:#b9c2bc;margin-top:8px}.ig-fixture{background:#16191b;padding:20px}.ig-success{color:#a7ecba}.ig-aika{position:fixed;right:28px;bottom:24px;z-index:11}.ig-help{position:fixed;bottom:88px;right:28px;width:min(420px,calc(100vw - 40px));max-height:70vh;overflow:auto;z-index:12;box-shadow:0 12px 50px #0009;border:1px solid #68736b!important}.ig .pt-tabs a{align-self:center;margin-left:20px}.ig .pt-card{min-width:0}.ig table{overflow-wrap:anywhere}@media(max-width:800px){.ig-heading{align-items:start;flex-direction:column}.ig-metrics{grid-template-columns:1fr}.ig .pt-grid{grid-template-columns:1fr}.ig .pt-span{grid-column:auto}.ig-heading h2{font-size:24px}}
+/* Northstar workspaces: layout only. Colors, type, fields and buttons come from the shared Portal tokens (portal.css). */
+.ig .pt-entity-head h2{max-width:none}
+/* Account file with a right help rail (005): main column + rail. */
+.ig-split{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:40px;align-items:start}
+.ig-rail{padding-top:4px}
+.ig-rail h3{font-size:16px;font-weight:700}
+.ig-rail p{margin-top:10px;font-size:15px;line-height:1.55;color:#e6e6e6}
+.ig-rail .pt-btn{margin-top:16px}
+.ig-rail hr{border:0;border-top:1px solid #2a2a2a;margin:24px 0}
+.ig .pt-table td small{font-size:12px}
+@media (max-width:1100px){.ig-split{grid-template-columns:1fr}}
+@media (max-width:860px){.ig .pt-tablebox{padding:4px 12px;overflow-x:auto}.ig .pt-stepper h2{font-size:26px}.ig .pt-headlines{margin-top:24px}}
