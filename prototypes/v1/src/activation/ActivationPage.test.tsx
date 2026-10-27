@@ -6,7 +6,7 @@ import {ActivationPage} from './ActivationPage';
 import {activationClient} from './client';
 import fixtures from '../../../../contracts/activation/v1/fixtures.json';
 import type {ActivationState} from '../../../../contracts/activation/v1/state';
-const api={intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn()};
+const api={intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn()};
 vi.mock('./client',()=>({activationClient:vi.fn()}));
 let host:HTMLDivElement,root:Root;
 function state(scenario:'orbit'|'ledger'):ActivationState{
@@ -68,4 +68,11 @@ it.each(['customerId','developerSessionId','expectedRevision','planRevision'])('
 it('keeps local note review honest and renders proof type separately from outcome',async()=>{
  api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('textarea[aria-label="Blocker note"]','Cannot inspect');await click('Review blocker');
  expect(host.textContent).toContain('not submitted to the server');expect(api.blocker).not.toHaveBeenCalled();expect(host.textContent).toContain('proof: none');expect(host.textContent).toContain('not checked');
+});
+
+it('submits a separately confirmed attributed report and preserves exact retry identity on timeout',async()=>{
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('textarea[aria-label="Blocker note"]','Access denied');await click('Review blocker');expect(api.reportBlocker).not.toHaveBeenCalled();
+ const error=new Error('timeout');error.name='TimeoutError';api.reportBlocker.mockRejectedValue(error);await click('Submit / retry attributed');
+ expect(host.textContent).toContain('request timed out');const first=api.reportBlocker.mock.calls[0][0];expect(first.message).toBe('Access denied');expect(first.expectedRevision).toBe(0);
+ await click('Load / refresh');api.reportBlocker.mockResolvedValue({...state('ledger'),revision:1});await click('Submit / retry attributed');expect(api.reportBlocker.mock.calls[1][0]).toEqual(first);expect(host.textContent).toContain('report saved to the server');
 });
