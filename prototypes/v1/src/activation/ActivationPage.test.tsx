@@ -6,7 +6,7 @@ import {ActivationPage} from './ActivationPage';
 import {activationClient} from './client';
 import fixtures from '../../../../contracts/activation/v1/fixtures.json';
 import type {ActivationState} from '../../../../contracts/activation/v1/state';
-const api={intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn()};
+const api={intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn(),reportProgress:vi.fn()};
 vi.mock('./client',()=>({activationClient:vi.fn()}));
 let host:HTMLDivElement,root:Root;
 function state(scenario:'orbit'|'ledger'):ActivationState{
@@ -27,12 +27,12 @@ it('reloads canonical replan and evidence without claiming a verified outcome',a
  expect(host.textContent).toContain('Prepare a checklist for developer-provided configuration');expect(host.textContent).toContain('Developer reported');expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('unassessed');
 });
 it('retains the exact blocker across uncertain failure and reload',async()=>{
- api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('textarea[aria-label="Blocker command"]',JSON.stringify(fixtures.blockerReplan.blocker));api.blocker.mockRejectedValue(new Error('REVISION_CONFLICT'));await click('Submit / retry');await click('Load / refresh');await click('Submit / retry');expect(api.blocker).toHaveBeenCalledTimes(2);expect(api.blocker.mock.calls[1][0]).toEqual(api.blocker.mock.calls[0][0]);expect(host.textContent).toContain('REVISION_CONFLICT');
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('textarea[aria-label="Blocker command"]',JSON.stringify(fixtures.blockerReplan.blocker));api.blocker.mockRejectedValue(new Error('REVISION_CONFLICT'));await click('Submit / retry reviewed blocker');await click('Load / refresh');await click('Submit / retry reviewed blocker');expect(api.blocker).toHaveBeenCalledTimes(2);expect(api.blocker.mock.calls[1][0]).toEqual(api.blocker.mock.calls[0][0]);expect(host.textContent).toContain('REVISION_CONFLICT');
 });
 it('acknowledges accepted blocker and allows a new draft only after explicit clear',async()=>{
  const s=state('ledger');api.read.mockResolvedValue(s);api.blocker.mockResolvedValue({...s,revision:1});await click('Load / refresh');
- await input('textarea[aria-label="Blocker command"]',JSON.stringify(fixtures.blockerReplan.blocker));await click('Submit / retry');
- expect(host.textContent).toContain('Blocker accepted.');expect(Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Submit / retry'))?.disabled).toBe(true);
+ await input('textarea[aria-label="Blocker command"]',JSON.stringify(fixtures.blockerReplan.blocker));await click('Submit / retry reviewed blocker');
+ expect(host.textContent).toContain('Blocker accepted.');expect(Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Submit / retry reviewed blocker'))?.disabled).toBe(true);
  await click('Clear reviewed');expect((host.querySelector('textarea[aria-label="Blocker command"]') as HTMLTextAreaElement).disabled).toBe(false);
 });
 
@@ -57,13 +57,13 @@ it('polls pending recovery and stops once a replacement is ready',async()=>{
 it('preserves both drafts on HTTP 409 and never silently rebases a reviewed command',async()=>{
  const s=state('ledger');api.read.mockResolvedValue(s);await click('Load / refresh');
  const draft=JSON.stringify(fixtures.blockerReplan.blocker);await input('textarea[aria-label="Blocker command"]',draft);await input('textarea[aria-label="Blocker note"]','Access is denied');
- api.blocker.mockRejectedValue({status:409});await click('Submit / retry');expect(host.textContent).toContain('Your draft is still here');
- api.read.mockResolvedValue({...s,revision:3});await click('Load / refresh');await click('Submit / retry');
+ api.blocker.mockRejectedValue({status:409});await click('Submit / retry reviewed blocker');expect(host.textContent).toContain('Your draft is still here');
+ api.read.mockResolvedValue({...s,revision:3});await click('Load / refresh');await click('Submit / retry reviewed blocker');
  expect(api.blocker.mock.calls[1][0]).toEqual(JSON.parse(draft));expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Blocker note"]')?.value).toBe('Access is denied');
 });
 it.each(['customerId','developerSessionId','expectedRevision','planRevision'])('rejects mismatched reviewed %s before sending',async field=>{
  api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');const command={...fixtures.blockerReplan.blocker,[field]:field.includes('Revision')?42:'other'};
- await input('textarea[aria-label="Blocker command"]',JSON.stringify(command));await click('Submit / retry');expect(api.blocker).not.toHaveBeenCalled();expect(host.textContent).toContain('different customer, session, or revision');
+ await input('textarea[aria-label="Blocker command"]',JSON.stringify(command));await click('Submit / retry reviewed blocker');expect(api.blocker).not.toHaveBeenCalled();expect(host.textContent).toContain('different customer, session, or revision');
 });
 it('keeps local note review honest and renders proof type separately from outcome',async()=>{
  api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('textarea[aria-label="Blocker note"]','Cannot inspect');await click('Review blocker');
@@ -82,4 +82,26 @@ it('shows original constraints, exact action proof and safe reference navigation
  s.evidence.push(e);s.actions.review={kind:'prepare_artifact',revision:2,status:'prepared',at:'2026-10-27T00:00:00Z',planRevision:0,blockedByIds:[],evidenceIds:[e.id]};api.read.mockResolvedValue(s);await click('Load / refresh');
  expect(host.textContent).toContain(s.context.briefing);for(const constraint of s.context.constraints)expect(host.textContent).toContain(constraint);
  expect(host.querySelector('a[href="#evidence-artifact-test"]')).not.toBeNull();expect(host.querySelector('a[href="https://github.com/example/service/pull/1"]')?.textContent).toBe('Inspect proof reference');expect(host.textContent).toContain('Action: review · revision 2');expect(host.textContent).toContain('does not fetch or execute');
+});
+
+it('submits progress explicitly, keeps exact retries and renders canonical reported outcome',async()=>{
+ const s=state('ledger');api.read.mockResolvedValue(s);await click('Load / refresh');await click('Draft my plan review');expect(api.reportProgress).not.toHaveBeenCalled();
+ const error=new Error('timeout');error.name='TimeoutError';api.reportProgress.mockRejectedValue(error);await click('Submit / retry progress report');
+ const first=api.reportProgress.mock.calls[0][0];expect(first.message).toContain('reviewed plan revision 0');expect(first.expectedRevision).toBe(0);
+ api.read.mockResolvedValue({...s,revision:2});await click('Load / refresh');api.reportProgress.mockResolvedValue({...s,revision:3,outcome:{...s.outcome,status:'reported',summary:first.message}});await click('Submit / retry progress report');
+ expect(api.reportProgress.mock.calls[1][0]).toEqual(first);expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('reported');expect(host.textContent).toContain('Progress report saved');
+});
+it('clears sensitive briefing, initialization and progress drafts when identity changes',async()=>{
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('[aria-label="Existing customer briefing"]','Private customer text');await input('[aria-label="Admitted initialization"]','Private wrapper');await input('[aria-label="Progress report"]','Private progress');
+ await input('input','orbit');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Existing customer briefing"]')?.value).toBe('');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Admitted initialization"]')?.value).toBe('');expect(host.querySelector('[aria-label="Progress report"]')).toBeNull();
+});
+it('rejects cross-customer action progress before sending',async()=>{
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('[aria-label="Progress command"]',JSON.stringify({customerId:'orbit'}));await click('Submit / retry reviewed progress');expect(api.progress).not.toHaveBeenCalled();expect(host.textContent).toContain('different customer, session, milestone');
+});
+
+it('sends exact reviewed action progress across a conflict and canonical refresh',async()=>{
+ const s=state('ledger');api.read.mockResolvedValue(s);await click('Load / refresh');
+ const command={contractVersion:'1.0.0',customerId:'ledger',developerSessionId:'session-ledger',expectedRevision:0,revision:1,planRevision:0,milestoneId:s.milestone.id,id:'reviewed-progress',evidence:[],transitions:[],milestoneStatus:'in_progress',valueDemonstrated:'',needsChris:false};
+ await input('[aria-label="Progress command"]',JSON.stringify(command));api.progress.mockRejectedValue({status:409});await click('Submit / retry reviewed progress');
+ api.read.mockResolvedValue({...s,revision:3});await click('Load / refresh');api.progress.mockResolvedValue({...s,revision:4});await click('Submit / retry reviewed progress');expect(api.progress.mock.calls[1][0]).toEqual(command);expect(host.textContent).toContain('Reviewed action progress saved.');
 });

@@ -140,6 +140,19 @@ export function openActivationStore(filename: string, policy: Policy = { admit: 
 
       });
     },
+    // Server-built attributed progress: one transaction for report, dashboard and help request.
+    reportDeveloperProgress(p:Principal,id:string,expected:number,planRevision:number,record:EvidenceRecord,needsChris:boolean) {
+      return mutate(p,id,{planRevision,record,needsChris},expected,s=>{
+        if(planRevision!==s.planRevision) fail('REVISION_CONFLICT');
+        validateContract('CustomerContext',{...s.context,evidence:[...s.evidence,record]});
+        if(record.kind!=='developer_report'||record.scope!==s.context.agreedGoal.text||record.proof.type!=='none') fail('INVALID_EVIDENCE');
+        s.evidence=ledger(p,s.evidence,[record],'progress');
+        // A narrative can report progress, but cannot establish action execution or milestone completion.
+        if(s.milestone.status==='pending') s.milestone.status='in_progress';
+        s.outcome={agreedGoalContextRevision:s.contextRevision,status:'reported',summary:record.claim,evidenceIds:[record.id],scope:record.scope};
+        if(needsChris) s.chrisHelp={...s.chrisHelp,status:'requested',owner:'Chris',reason:'Developer requested help with reported progress',evidenceIds:[...s.chrisHelp.evidenceIds,record.id]};
+      });
+    },
     // Server-only report projection. Scope must be the exact agreed goal; no verified promotion exists.
     reportOutcome(p:Principal,id:string,expected:number,contextRevision:number,records:EvidenceRecord[]) {
       return mutate(p,id,{contextRevision,records},expected,s=>{

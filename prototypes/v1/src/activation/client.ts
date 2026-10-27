@@ -12,13 +12,14 @@ export function activationClient(customerId:string,token:string,base='') {
     const response=await fetch(root+route,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store',signal:AbortSignal.timeout(30000)});
     const data=await response.json().catch(()=>null);
     if(!response.ok)throw new ActivationRequestError(data?.error?.code??'ACTIVATION_UNAVAILABLE',response.status);
-    if(data?.contractVersion!=='1.0.0'||data.customerId!==customerId||!Number.isSafeInteger(data.revision)||!data.context||!data.plan||!data.actions||Array.isArray(data.actions)||!Array.isArray(data.evidence)||!data.replan||!data.outcome)throw new ActivationRequestError('INVALID_ACTIVATION_RESPONSE',response.status);
+    if(data?.contractVersion!=='1.0.0'||data.customerId!==customerId||!Number.isSafeInteger(data.revision)||data.context?.customerId!==customerId||data.plan?.customerId!==customerId||typeof data.developerSessionId!=='string'||!data.developerSessionId||!data.milestone||!data.chrisHelp||!data.actions||Array.isArray(data.actions)||!Array.isArray(data.evidence)||!data.replan||!data.outcome)throw new ActivationRequestError('INVALID_ACTIVATION_RESPONSE',response.status);
     return data as ActivationState;
   }
   // On timeout retain the exact command ID/body; GET then retry the same body, never invent progress.
   return {
     intake:(briefing:string,outcome:string,agreedBy:string,agreementConfirmed:boolean)=>request('/intake',{briefing,outcome,agreedBy,agreementConfirmed}),
     read:()=>request('/state'),
+    reportProgress:(event:{id:string;expectedRevision:number;planRevision:number;message:string;needsChris:boolean})=>request('/progress-reports',event),
     reportBlocker:(event:{id:string;expectedRevision:number;planRevision:number;message:string})=>request('/blocker-reports',event),
     initialize:(context:CustomerContext,plan?:ActivationPlan)=>request('/state',{context,...(plan?{plan}:{})}),
     progress:(event:ProgressUpdate)=>request('/progress',event),

@@ -54,3 +54,28 @@ test('HTTP report route authenticates, rejects authority fields and returns cano
  assert.equal((await fetch(url.replace('/ledger/','/other/'),{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer test-token'},body:JSON.stringify(input)})).status,403);
  }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));x.store.close();goals.close();}
 });
+
+const progressInput={id:'progress:first',expectedRevision:0,planRevision:0,message:'Reviewed the customer goal and prepared my notes for the next action.',needsChris:true};
+test('progress report atomically persists attributed outcome and help without action proof; exact retry survives restart',()=>{
+ const x=setup();const before=x.store.get(p);const saved=x.reports.progress(p,progressInput);
+ assert.equal(saved.revision,1);assert.equal(saved.outcome.status,'reported');assert.equal(saved.outcome.summary,progressInput.message);assert.equal(saved.outcome.scope,before.context.agreedGoal.text);assert.equal(saved.milestone.status,'in_progress');assert.deepEqual(saved.actions,before.actions);assert.equal(saved.chrisHelp.status,'requested');
+ const record=saved.evidence.find(e=>e.id===saved.outcome.evidenceIds[0])!;assert.equal(record.kind,'developer_report');assert.equal(record.proof.type,'none');
+ x.reopen();assert.deepEqual(x.store.get(p),saved);assert.equal(x.reports.progress(p,progressInput).revision,1);
+ assert.throws(()=>x.reports.progress(p,{...progressInput,message:'changed'}),/IDEMPOTENCY_CONFLICT/);assert.throws(()=>x.reports.progress(p,{...progressInput,id:'progress:stale'}),/REVISION_CONFLICT/);
+ assert.throws(()=>x.reports.progress({...p,tenantId:'other'},progressInput),/NOT_FOUND/);assert.throws(()=>x.reports.progress({...p,customerId:'other'},progressInput),/NOT_FOUND/);assert.throws(()=>x.reports.progress({...p,sessionId:'other'},progressInput),/NOT_FOUND/);
+ for(const extra of [{approve:true},{evidence:[]},{milestoneStatus:'reached'},{needsChris:'yes'}])assert.throws(()=>x.reports.progress(p,{...progressInput,...extra}),/INVALID_REQUEST/);
+ x.store.close();
+});
+test('progress reporting preserves blocked state and durable recovery intent',()=>{
+ const x=setup();const blocked=x.reports.submit(p,input);const saved=x.reports.progress(p,{...progressInput,expectedRevision:1});assert.equal(saved.milestone.status,'blocked');assert.deepEqual(saved.replan,blocked.replan);assert.deepEqual(saved.actions,blocked.actions);x.store.close();
+});
+test('HTTP progress report rejects unauthorized and cross-customer writes, conflicts and unknown authority',async()=>{
+ const {createApp}=await import('../src/app.ts');const {openGoalStore}=await import('../src/store.ts');const x=setup(),goals=openGoalStore(':memory:');
+ const server=createApp(goals,undefined,{store:x.store,reportProgress:x.reports.progress,authorize:r=>r.headers.authorization==='Bearer test-token'?p:null});
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));const port=(server.address() as {port:number}).port;
+ const url=`http://127.0.0.1:${port}/api/activation/v1/customers/ledger/progress-reports`;
+ const post=(body:unknown,target=url,auth=true)=>fetch(target,{method:'POST',headers:{'Content-Type':'application/json',...(auth?{Authorization:'Bearer test-token'}:{})},body:JSON.stringify(body)});
+ try{assert.equal((await post(progressInput,url,false)).status,403);assert.equal((await post(progressInput,url.replace('/ledger/','/other/'))).status,403);assert.equal((await post({...progressInput,approve:true})).status,400);
+ const response=await post(progressInput);assert.equal(response.status,200);assert.equal(response.headers.get('etag'),'"activation-1"');assert.equal((await response.json()).outcome.status,'reported');assert.equal((await post(progressInput)).status,200);assert.equal((await post({...progressInput,id:'progress:stale'})).status,409);
+ }finally{server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));x.store.close();goals.close();}
+});
