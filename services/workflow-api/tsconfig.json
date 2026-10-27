@@ -9,5 +9,5 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "../../contracts/goals.ts"]
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "../../contracts/goals.ts"]
 }
