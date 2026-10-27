@@ -33,7 +33,9 @@ function setup() {
   return {context,plan,progress,blocker,replacement,policy,file,store};
 }
 const rejects=(fn:()=>unknown,code:string)=>assert.throws(fn,(e:unknown)=>!!e&&typeof e==='object'&&'code' in e&&e.code===code);
-test('reload every action state, immutable receipts, outcome stays unassessed at reached milestone',()=>{
+test('reload every action state, immutable receipts, outcome stays unassessed at reached milestone',t=>{
+  // Freeze this test's wall clock so cold startup cannot overtake its proof timestamps.
+  t.mock.timers.enable({apis:['Date'],now:Date.now()});
   const x=setup();let store=x.store;store.initialize(principal,x.context,x.plan);
   for(let i=0;i<4;i++) {
     const event={...x.progress,id:`p${i}`,expectedRevision:i,revision:i+1,milestoneStatus:i===3?'reached' as const:'in_progress' as const,transitions:[x.progress.transitions[i]]};
