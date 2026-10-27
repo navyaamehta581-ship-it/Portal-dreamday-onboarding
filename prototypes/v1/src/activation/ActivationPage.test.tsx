@@ -6,7 +6,7 @@ import {ActivationPage} from './ActivationPage';
 import {activationClient} from './client';
 import fixtures from '../../../../contracts/activation/v1/fixtures.json';
 import type {ActivationState} from '../../../../contracts/activation/v1/state';
-const api={prepareGitHub:vi.fn(),intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn(),reportProgress:vi.fn()};
+const api={acceptSetupProposal:vi.fn(),prepareGitHub:vi.fn(),intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn(),reportProgress:vi.fn()};
 vi.mock('./client',()=>({activationClient:vi.fn()}));
 let host:HTMLDivElement,root:Root;
 function state(scenario:'orbit'|'ledger'):ActivationState{
@@ -113,10 +113,26 @@ it('preserves preparation command on uncertain failure and clears it with custom
 });
 it('shows prepared packet provenance and missing authorization without promoting outcome or action',async()=>{
  const s=state('ledger');s.githubPreparations={'prepare:demo':{id:'prepare:demo',commandDigest:'digest',scopeDigest:'scope',actionId:s.plan.suggestedNextAction.id,actionRevision:0,planRevision:0,startedRevision:1,status:'prepared',repository:'example/fictional',commit:'a'.repeat(40),templatePath:'template.yaml',templateBlob:'b'.repeat(40),observedAt:'2026-10-27T10:00:00Z',completedAt:'2026-10-27T10:01:00Z',evidenceIds:[],artifact:'Fictional review packet',artifactDigest:'digest',blockers:['Separate write authorization missing'],errorCode:null,authorization:'inspect_prepare_only',approved:false,executed:false,verified:false,prUrl:null}};
- api.read.mockResolvedValue(s);await click('Load / refresh');expect(host.textContent).toContain('prepared · local review packet');expect(host.textContent).toContain('Separate write authorization missing');expect(host.textContent).toContain('Approval: absent. Execution: absent. Verified action: no. PR: none.');expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('unassessed');
+ api.read.mockResolvedValue(s);await click('Load / refresh');expect(host.textContent).toContain('prepared · local review packet');expect(host.textContent).toContain('Separate write authorization missing');expect(host.textContent).toContain('Proposal approval: pending explicit approval. Execution: absent. Verified action: no. PR: none.');expect(host.querySelector('[data-testid=outcome-status]')?.textContent).toBe('unassessed');
 });
 
 it('resumes the exact persisted inspection command after a browser restart',async()=>{
  const s=state('ledger');s.revision=7;s.githubPreparations={'prepare:resume':{id:'prepare:resume',commandDigest:'digest',scopeDigest:'scope',actionId:s.plan.suggestedNextAction.id,actionRevision:0,planRevision:0,startedRevision:3,status:'inspecting',repository:'example/fictional',commit:'a'.repeat(40),templatePath:'template.yaml',templateBlob:null,observedAt:'2026-10-27T10:00:00Z',completedAt:null,evidenceIds:[],artifact:null,artifactDigest:null,blockers:['pending'],errorCode:null,authorization:'inspect_prepare_only',approved:false,executed:false,verified:false,prUrl:null}};
  api.read.mockResolvedValue(s);api.prepareGitHub.mockResolvedValue(s);await click('Load / refresh');await click('Resume saved inspection');expect(api.prepareGitHub).toHaveBeenCalledWith({id:'prepare:resume',expectedRevision:2,planRevision:0,actionId:s.plan.suggestedNextAction.id,actionRevision:0});
+});
+
+it('requires explicit artifact review, preserves exact approval retries, and shows acceptance without execution',async()=>{
+ const s=state('ledger');s.revision=2;const id='prepare:setup',digest='d'.repeat(64);
+ const packet={id,commandDigest:'command',scopeDigest:'scope',actionId:s.plan.suggestedNextAction.id,actionRevision:0,planRevision:0,startedRevision:1,status:'prepared' as const,repository:'example/fictional',commit:'a'.repeat(40),templatePath:'template.yaml',templateBlob:'b'.repeat(40),observedAt:'2026-10-27T10:00:00Z',completedAt:'2026-10-27T10:01:00Z',evidenceIds:[],artifact:'Fictional setup',artifactDigest:digest,blockers:['Missing skeletons'],errorCode:null,authorization:'inspect_prepare_only' as const,approved:false as const,executed:false as const,verified:false as const,prUrl:null,
+ setupProposal:{version:1 as const,sourceTree:'c'.repeat(40),kind:'fictional_recommendation_service_setup' as const,targetPath:'.portal/recommendation-service.setup.json',proposedFile:'{}',diff:'+++ b/.portal/recommendation-service.setup.json',templateReview:'reviewed_known_template' as const,dependencies:[{path:'skeletons/node',status:'missing' as const,source:'https://github.com/example/fictional/tree/'+ 'a'.repeat(40)+'/skeletons/node'}],missingPrerequisites:['Missing skeletons','Installed action schemas unknown'],semantics:['Needs review'],readyToRun:false as const}};
+ s.githubPreparations={[id]:packet};api.read.mockResolvedValue(s);await click('Load / refresh');
+ expect(host.textContent).toContain('Missing prerequisites and blockers');expect(host.textContent).toContain('Installed action schemas unknown');expect(host.textContent).toContain('+++ b/.portal/recommendation-service.setup.json');
+ const button=()=>Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('Accept / retry setup'))!;
+ expect(button().disabled).toBe(true);await act(async()=>host.querySelector<HTMLInputElement>('[aria-label="Reviewed proposal prepare:setup"]')!.click());
+ const error=new Error('timeout');error.name='TimeoutError';api.acceptSetupProposal.mockRejectedValue(error);await click('Accept / retry setup');const first=api.acceptSetupProposal.mock.calls[0][0];
+ expect(first).toMatchObject({expectedRevision:2,preparationId:id,artifactDigest:digest,sourceCommit:packet.commit,decision:'accept_proposal_only'});
+ api.read.mockResolvedValue({...s,revision:3});await click('Load / refresh');await click('Accept / retry setup');expect(api.acceptSetupProposal.mock.calls[1][0]).toEqual(first);
+ api.acceptSetupProposal.mockResolvedValue({...s,revision:3,githubPreparations:{[id]:{...packet,proposalApproval:{decision:'accept_proposal_only',artifactDigest:digest,sourceCommit:packet.commit,planRevision:0,actionRevision:0,acceptedAt:'2026-10-27T12:00:00Z'}}}});await click('Accept / retry setup');
+ expect(host.textContent).toContain('accepted for review only');expect(host.textContent).toContain('all runtime blockers remain');expect(host.textContent).toContain('Execution: absent. Verified action: no');expect(host.querySelector('[data-testid="outcome-status"]')?.textContent).toBe('unassessed');
+ await input('input','orbit');expect(host.textContent).not.toContain('Missing skeletons');
 });

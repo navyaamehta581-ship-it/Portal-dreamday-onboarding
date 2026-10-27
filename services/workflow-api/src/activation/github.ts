@@ -1,3 +1,4 @@
+import {buildSetupProposal} from './setup.ts';
 import {createHash} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {ActivationError,type ActivationStore,type Principal,type Policy} from './store.ts';
@@ -74,6 +75,9 @@ export function createGitHubPreparation(base:Policy,getStore:()=>ActivationStore
    result.status='prepared';result.evidenceIds=records.map(e=>e.id);
    result.blockers=['Separate explicit authorization for an exact GitHub write is missing.','Template semantics, service configuration, runtime tests and customer adoption remain unverified.'];
    result.artifact=`# Fictional recommendation-service activation review packet\n\nRepository: ${scope.repository}\nCommit: ${scope.commit}\nTemplate: ${scope.templatePath}\nTemplate blob: ${result.templateBlob}\n\nInspected prerequisites:\n${scope.prerequisitePaths.map(path=>`- ${path}`).join('\n')}\n\nReview the pinned template and determine the exact service configuration and proposed diff. No file content was copied or executed. No branch, PR, deployment or customer resource was created.\n\nAuthorization: inspect and prepare only. Approval: absent. Execution: absent. Verification: no action execution or customer outcome verified.\n`;
+   result.setupProposal=buildSetupProposal(result,tree.tree,tree.sha);
+   result.blockers=[...result.setupProposal.missingPrerequisites,'Runtime GitHub writes and deployments require separate authorization; proposal acceptance cannot grant it.'];
+   result.artifact=JSON.stringify({packet:result.artifact,setupProposal:result.setupProposal},null,2)+'\n';
    result.artifactDigest=hash(result.artifact);
   } catch(e) {
    result.status='failed';result.errorCode=e instanceof ActivationError?e.code:'GITHUB_UNAVAILABLE';result.blockers=[result.errorCode,'Repository readiness is unknown; no external writes were attempted.'];result.artifact=null;result.artifactDigest=null;result.templateBlob=null;result.evidenceIds=[];records.length=0;
@@ -83,6 +87,7 @@ export function createGitHubPreparation(base:Policy,getStore:()=>ActivationStore
   // Any concurrent mutation invalidates the prepared packet, even if plan IDs still match.
   if(s.revision!==record.startedRevision){result.status='failed';result.errorCode='REVISION_CONFLICT';result.blockers=['Session changed during inspection. Review current state and submit a new preparation.'];result.artifact=null;result.artifactDigest=null;result.evidenceIds=[];records.length=0;}
   const existing=s.githubPreparations?.[b.id];if(existing?.status!=='inspecting')return s;
+  if(result.status!=='prepared')delete result.setupProposal;
   result.completedAt=new Date(now()).toISOString();
   admitted={principal:structuredClone(p),records};
   try{return store.finishGitHubPreparation(p,b.id,s.revision,result,records);}finally{admitted=null;}

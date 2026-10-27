@@ -1,3 +1,4 @@
+import {setupApprovalPolicy,type SetupApprovalGrant} from './approval.ts';
 import {createGitHubPreparation,type GitHubReadScope} from './github.ts';
 import {createBlockerReports} from './reports.ts';
 import type {ActivationStore} from './store.ts';
@@ -24,7 +25,7 @@ export function developmentActivation(goalFilename:string) {
   let store:ActivationStore;
   const reports=createBlockerReports(intake.policy,()=>store);
   const github=createGitHubPreparation(reports.policy,()=>store,process.env.ACTIVATION_GITHUB_READ_SCOPES?JSON.parse(readFileSync(process.env.ACTIVATION_GITHUB_READ_SCOPES,'utf8')) as GitHubReadScope[]:[],{token:process.env.GITHUB_READ_TOKEN});
-  store=openActivationStore(filename,github.policy);
+  store=openActivationStore(filename,setupApprovalPolicy(github.policy,process.env.ACTIVATION_SETUP_APPROVAL_GRANTS?JSON.parse(readFileSync(process.env.ACTIVATION_SETUP_APPROVAL_GRANTS,'utf8')) as SetupApprovalGrant[]:[]));
   // Server-built report replacements or exact operator-reviewed plans; both remain suggestions.
   const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);
   const stop=worker.start();
