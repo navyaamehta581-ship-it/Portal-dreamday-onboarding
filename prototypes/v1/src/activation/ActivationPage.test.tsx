@@ -136,3 +136,17 @@ it('requires explicit artifact review, preserves exact approval retries, and sho
  expect(host.textContent).toContain('accepted for review only');expect(host.textContent).toContain('all runtime blockers remain');expect(host.textContent).toContain('Execution: absent. Verified action: no');expect(host.querySelector('[data-testid="outcome-status"]')?.textContent).toBe('unassessed');
  await input('input','orbit');expect(host.textContent).not.toContain('Missing skeletons');
 });
+
+it('edits and copies a local champion message, clearing it on customer or token change',async()=>{
+ const s=state('ledger');api.read.mockResolvedValue(s);await click('Load / refresh');
+ expect(host.querySelector('[aria-label="Bring Your Team Along"]')).not.toBeNull();expect(host.querySelector('[aria-label="Chris team handoff summary"]')).not.toBeNull();
+ const copy=vi.fn().mockResolvedValue(undefined);Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:copy}});
+ await input('[aria-label="Champion kickoff message"]','Private ledger kickoff');await click('Copy kickoff');expect(copy).toHaveBeenCalledWith('Private ledger kickoff');expect(host.textContent).toContain('Message copied');expect(api.reportProgress).not.toHaveBeenCalled();
+ await input('input','orbit');expect(host.querySelector('[aria-label="Champion kickoff message"]')).toBeNull();api.read.mockResolvedValue(state('orbit'));await click('Load / refresh');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Champion kickoff message"]')?.value).not.toContain('Private ledger');
+ await input('input[type=password]','y'.repeat(32));expect(host.querySelector('[aria-label="Champion kickoff message"]')).toBeNull();
+});
+it('refreshes the champion draft against new canonical evidence and handles unavailable clipboard',async()=>{
+ api.read.mockResolvedValue(state('ledger'));await click('Load / refresh');await input('[aria-label="Champion kickoff message"]','Old draft');
+ const s=state('ledger');s.revision=1;s.milestone.status='blocked';api.read.mockResolvedValue(s);await click('Load / refresh');expect(host.querySelector<HTMLTextAreaElement>('[aria-label="Champion kickoff message"]')?.value).toContain('Review blockers');
+ Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:vi.fn().mockRejectedValue(Error('denied'))}});await click('Copy kickoff');expect(host.textContent).toContain('Select and copy');
+});
