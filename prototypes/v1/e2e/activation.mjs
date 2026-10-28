@@ -22,7 +22,7 @@ const NORTHSTAR=['PRIVATE CONTRACT NOTE: renewal discount pending; exclude from 
  'Backstage familiarity: the platform team ran a proof of concept; app developers are new to it.',
  'SSO uses Okta; repository access is managed through GitHub teams. Docs live in Confluence.',
  'A solutions engineer can help with deep configuration.'].join('\n');
-const LUMEN='FICTIONAL TEST: Lumen Retail wants to create a new Python recommendation service from a Scaffolder template. Code is on GitLab; SSO via Entra ID.';
+const LUMEN='FICTIONAL TEST: Lumen Retail wants to create a new Python recommendation service from a Scaffolder template. Code is on GitLab; SSO via Entra ID.\nTemplate repo is gitlab.com/lumen/recs-service.';
 try{
  const uiPort=await port(),url=`http://127.0.0.1:${uiPort}`;
  const customers=[{id:'northstar',label:'Northstar Engineering',user:'Alex Rivera',customerId:'fictional-northstar-engineering'},{id:'lumen',label:'Lumen Retail',user:'Sam Okafor',customerId:'fictional-lumen-retail'}];
@@ -44,11 +44,12 @@ try{
  async function publish(account,token,notes,outcome,by){
   await op.goto(url+'/operator');await op.getByLabel('Customer account').selectOption(account);
   await op.getByLabel('Operator access token').fill(token);await op.getByRole('button',{name:'Open workspace'}).click();
-  await op.getByLabel('Raw account and call notes').fill(notes);await op.getByRole('button',{name:'Organize notes'}).click();
+  await op.getByLabel('Raw account and call notes').fill(notes);await op.getByRole('button',{name:'Analyze sources'}).click();
+  await op.getByText('Kept internal').waitFor();
   await op.getByRole('tab',{name:'Activation Goal'}).click();
   await op.getByLabel('Agreed activation outcome').fill(outcome);await op.getByLabel('Agreement attribution').fill(by);
   await op.getByRole('checkbox',{name:/I reviewed this developer-visible/}).check();
-  const sent=op.waitForRequest(r=>r.url().endsWith('/intake')&&r.method()==='POST');
+  const sent=op.waitForRequest(r=>r.url().endsWith('/handoff-publications')&&r.method()==='POST');
   await op.getByRole('button',{name:'Publish to developers'}).click();
   const body=(await sent).postData();await op.getByRole('heading',{name:'Agreed activation outcome'}).waitFor();return body;
  }
@@ -65,26 +66,28 @@ try{
  // --- Developer: welcome → simulated login → personalized Portal.
  const devContext=await browser.newContext({viewport:{width:1920,height:1042}});const dev=await devContext.newPage();watch(dev);
  const bearer=[];dev.on('request',r=>{if(r.headers().authorization)bearer.push(r.url());});
+ // Hidden JSON fields must not carry Chris's research either.
+ const leaked=[];dev.on('response',async r=>{if(!r.url().includes('/portal-api/'))return;const body=await r.text().catch(()=>'');for(const x of ['PRIVATE CONTRACT NOTE','renewal discount','Fictional platform lead','solutions engineer'])if(body.includes(x))leaked.push(x);});
  await dev.goto(url);await dev.getByRole('button',{name:'Get started'}).waitFor();await dev.keyboard.press('Tab');await dev.keyboard.press('Enter');
  await dev.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  assert.equal(await dev.locator('input[type=password]').count(),0);
  await dev.getByRole('button',{name:'Continue'}).click();
  await dev.getByRole('heading',{name:/First up/}).waitFor();
  let text=await dev.locator('body').innerText();
- assert.ok(text.includes('Register checkout-api'));assert.ok(!text.includes('PRIVATE CONTRACT NOTE'));
+ assert.ok(text.includes('checkout-api'));for(const x of ['PRIVATE CONTRACT NOTE','renewal discount','Fictional platform lead'])assert.ok(!text.includes(x),'developer page leaks '+x);
  assert.ok(!(await dev.content()).includes(devToken),'developer token never reaches the page');
  assert.equal(await dev.getByLabel('Raw account and call notes').count(),0);
  assert.equal(await dev.locator('a[href^="/operator"]').count(),0,'no operator links for developers');
  await dev.getByRole('button',{name:'Open your onboarding'}).click();
  await dev.getByRole('tab',{name:'Overview'}).waitFor();text=await dev.locator('body').innerText();
- assert.ok(text.includes('Okta')&&text.includes('checkout-api'));assert.equal(await dev.getByRole('tab',{name:'Team'}).count(),0);
+ assert.ok(text.includes('northstar/platform')&&text.includes('Review checkout-api repository readiness'));assert.ok(!text.includes('renewal'),'no commercial notes');assert.equal(await dev.getByRole('tab',{name:'Team'}).count(),0);
  // Developer credentials cannot publish (role denial at the API).
  assert.equal((await fetch(`${north.apiOrigin}/api/activation/v1/customers/${north.customerId}/intake`,{method:'POST',headers:{Authorization:`Bearer ${devToken}`,'Content-Type':'application/json'},body:'{}'})).status,403);
 
  console.log('Guide: question then blocker');
  await dev.getByRole('tab',{name:'Guide'}).click();
- await dev.getByLabel('Question or update').fill('Which SSO provider was already shared?');await dev.getByRole('button',{name:'Send'}).click();
- await dev.getByText('Saved as your report').waitFor();assert.ok((await dev.locator('body').innerText()).includes('SSO uses Okta'));
+ await dev.getByLabel('Question or update').fill('Which repository holds checkout-api?');await dev.getByRole('button',{name:'Send'}).click();
+ await dev.getByText('Saved as your report').waitFor();assert.ok((await dev.locator('body').innerText()).includes('northstar/platform'));
  await dev.getByLabel('Message type').selectOption('blocker');
  await dev.getByLabel('Blocker note').fill('I don’t have permission to deploy to staging, and I don’t know who owns the service metadata.');
  await dev.getByRole('button',{name:'Submit blocker'}).click();
@@ -102,6 +105,7 @@ try{
  await dev.getByRole('tab',{name:'Repository'}).click();await dev.getByRole('button',{name:'Inspect and prepare'}).click();
  await dev.getByRole('alert').filter({hasText:/isn’t authorized|isn’t available/}).waitFor();
  assert.equal(bearer.length,0,'developer browser never sends bearer tokens');
+ assert.deepEqual(leaked,[],'developer API responses carry no private research');
 
  // --- Chris reviews evidence-backed follow-up.
  await op.goto(url+'/operator/progress');await op.getByLabel('Operator access token').fill(opToken);await op.getByRole('button',{name:'Open workspace'}).click();
@@ -115,7 +119,7 @@ try{
  const other=await (await browser.newContext({viewport:{width:1920,height:1042}})).newPage();watch(other);
  await other.goto(url+'/activation');await other.getByLabel(/Sam Okafor/).check();await other.getByRole('button',{name:'Continue'}).click();
  await other.getByRole('tab',{name:'Overview'}).waitFor();text=await other.locator('body').innerText();
- assert.ok(text.includes('recommendation service')&&!text.includes('checkout-api')&&!text.includes('Okta'));
+ assert.ok(text.includes('Software Template')&&text.includes('lumen/recs-service')&&!text.includes('checkout-api')&&!text.includes('Okta'));
  assert.equal(await other.evaluate(async id=>(await fetch(`/portal-api/activation/v1/customers/${id}/state`)).status,north.customerId),403);
  assert.equal((await fetch(`${lumen.apiOrigin}/api/activation/v1/customers/${lumen.customerId}/state`,{headers:{Authorization:`Bearer ${devToken}`}})).status,403);
 

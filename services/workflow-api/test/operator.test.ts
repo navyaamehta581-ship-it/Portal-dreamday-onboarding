@@ -18,7 +18,10 @@ test('operator and agent publication is scoped; developer cannot publish or init
   const response=await post('account/intake','operator',body);assert.equal(response.status,200);const s=await response.json();
   assert.equal(s.outcome.status,'unassessed');assert.match(s.context.constraints.join(' '),/Reported Identity and SSO: SSO uses Okta/);
   assert.match(s.plan.suggestedNextAction.description,/Backstage starting point/);
-  const read=await fetch(root+'account/state',{headers:{Authorization:'Bearer developer'}});assert.deepEqual(await read.json(),s);
+  assert.deepEqual(await (await fetch(root+'account/state',{headers:{Authorization:'Bearer operator'}})).json(),s);
+  const dev=await (await fetch(root+'account/state',{headers:{Authorization:'Bearer developer'}})).json(),raw=JSON.stringify(dev);
+  assert.equal(dev.revision,s.revision);assert.ok(dev.handoff,'developer receives the server-built handoff');
+  for(const leak of ['FICTIONAL TEST','Fictional customer via test operator','SSO uses Okta but permissions'])assert.ok(!raw.includes(leak),`developer state must not contain: ${leak}`);
   assert.equal((await post('account/intake','operator',body)).status,409);
   assert.throws(()=>store.get({...p,tenantId:'other'}));
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();goals.close();}

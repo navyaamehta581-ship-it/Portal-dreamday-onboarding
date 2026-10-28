@@ -33,7 +33,7 @@ test('fictional bootstrap authenticates, persists reports across process restart
   const url=base+'fictional-recommendation-demo/';
   const response=await fetch(url+'state',{headers});assert.equal(response.status,200);
   assert.equal(response.headers.get('cache-control'),'no-store');
-  const state=await response.json();assert.match(state.context.briefing,/FICTIONAL LOCAL DEMO/);
+  const state=await response.json();assert.doesNotMatch(JSON.stringify(state),/FICTIONAL LOCAL DEMO/,'developer view never carries the stored briefing');assert.ok(state.handoff);
   assert.equal(state.outcome.status,'unassessed');
   const report=await fetch(url+'progress-reports',{headers,method:'POST',body:JSON.stringify({id:'progress:demo-test-report',expectedRevision:state.revision,planRevision:state.planRevision,message:'Fictional developer reviewed the proposed onboarding path.',needsChris:true})});
   assert.equal(report.status,200);const saved=await report.json();

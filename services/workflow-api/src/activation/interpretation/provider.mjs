@@ -6,7 +6,7 @@ Intent definitions from master specification chapter 4 / S2 lines 156-268: disco
 context/friction/constraints/existingCapabilities contain exact quoted substrings of user messages with sourceMessageIds. These are developer statements, not verified findings. Put inferences in assumptions. No repository inspection or tools are available. Never invent evidence, capability availability, validation, execution, files, or permissions. Confirmed constraints are immutable: flag their IDs if a new request conflicts; do not silently replace them. Extract other constraints as statements only, never confirm them.
 Ask at most one concise clarification, only for material ambiguity, conflicting constraints, or blocking developer-only information. Retrieval gaps must wait for later investigation, not become an intake questionnaire. State unknowns explicitly. Do not provide a free-form answer, recommendations or tool actions.`;
 
-async function boundedJson(response) {
+export async function boundedJson(response) {
  if(!response.body)throw new InterpretationError('PROVIDER_UNAVAILABLE');
  const reader=response.body.getReader();let length=0;const chunks=[];
  try {for(;;){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>65536)throw new InterpretationError('INVALID_MODEL_OUTPUT');chunks.push(Buffer.from(value));}}
@@ -14,7 +14,7 @@ async function boundedJson(response) {
  try{return JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new InterpretationError('INVALID_MODEL_OUTPUT');}
 }
 // Plain HTTP is permitted only for explicit loopback hosts, never LAN/public hosts.
-function endpointUrl(endpoint) {
+export function endpointUrl(endpoint) {
  try {
   const url=new URL(endpoint);
   const local=url.protocol==='http:'&&['127.0.0.1','localhost','[::1]'].includes(url.hostname);

@@ -6,6 +6,7 @@ import {STAGES,currentStage} from './model';
 import {onboardingSteps,type Step,type StepId} from './steps';
 
 const stateTone=(s:string)=>s==='met'?'green':s==='unmet'?'red':'amber';
+const NOTE:Record<string,[string,string]>={verified:['Verified','green'],reported:['Reported',''],assumption:['Unconfirmed','amber']};
 
 /** Setup-guide layout (references 011, 023, 036): progress, then one row per step with the current step expanded. */
 export function OverviewTab({session}:{session:ActivationSession}){
@@ -15,6 +16,8 @@ export function OverviewTab({session}:{session:ActivationSession}){
  // Completing a step opens the next one.
  useEffect(()=>{if(current)setOpen(current.id);},[current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
  const allDone=done===total;
+ const h=state.handoff,m=h?.milestones[0];
+ const unknowns=h?h.unknowns:state.context.unknowns.map(question=>({question,reason:''}));
  return <>
   {allDone&&<section className="pt-done" aria-label="Onboarding complete">
    <p className="pt-done-mark" aria-hidden="true">🎉</p><h3>You’re all done!</h3>
@@ -36,10 +39,12 @@ export function OverviewTab({session}:{session:ActivationSession}){
    </ol>
   </section>
   <section className="pt-about" aria-label="Your team’s context">
-   <div><h3>What we know</h3><p className="pt-about-text">{state.context.briefing}</p>
-    <ul className="pt-list">{state.context.constraints.map((c,i)=><li key={i}>{c}</li>)}</ul></div>
-   <div>{state.context.unknowns.length>0&&<><h3>Still unknown</h3><ul className="pt-list">{state.context.unknowns.map(u=><li key={u}>{u}</li>)}</ul></>}
-    <h3 style={{marginTop:state.context.unknowns.length?28:0}}>Success means</h3><ul className="pt-list">{state.plan.selectedMilestone.successCriteria.map((c,i)=><li key={i}>{c}</li>)}</ul></div>
+   <div><h3>What we know</h3>
+    {h?<dl className="pt-notes">{h.context.map(n=><div key={n.topic}><dt>{n.topic}<span className={'pt-pill '+NOTE[n.status][1]}>{NOTE[n.status][0]}</span></dt><dd>{n.text}</dd></div>)}</dl>
+     :<><p className="pt-about-text">{state.context.briefing}</p><ul className="pt-list">{state.context.constraints.map((c,i)=><li key={i}>{c}</li>)}</ul></>}</div>
+   <div>{unknowns.length>0&&<><h3>Still unknown</h3><ul className="pt-list">{unknowns.map(u=><li key={u.question}><span>{u.question}{u.reason&&<small className="pt-sub">{u.reason}</small>}</span></li>)}</ul></>}
+    <h3 style={{marginTop:unknowns.length?28:0}}>Success means</h3><ul className="pt-list">{state.plan.selectedMilestone.successCriteria.map((c,i)=><li key={i}>{c}</li>)}</ul>
+    {m&&<p className="pt-note">Evidence: {m.expectedOutput}</p>}</div>
   </section>
  </>;
 }
@@ -61,16 +66,21 @@ function StepRow({step,index,open,onToggle,children}:{step:Step;index:number;ope
 }
 
 function GoalDetail({session}:{session:ActivationSession}){
- const state=session.state!,goal=state.context.agreedGoal,action=state.plan.suggestedNextAction;
+ const state=session.state!,goal=state.context.agreedGoal,action=state.plan.suggestedNextAction,m=state.handoff?.milestones[0];
  return <>
   <dl className="pt-fields">
    <div className="pt-field wide"><dt>First milestone</dt><dd>{state.plan.selectedMilestone.outcome}</dd></div>
-   <div className="pt-field"><dt>Agreed by</dt><dd>{goal.agreedBy}</dd></div>
-   <div className="pt-field"><dt>Agreed</dt><dd>{new Date(goal.agreedAt).toLocaleDateString()}</dd></div>
+   {m?<><div className="pt-field"><dt>Service</dt><dd>{m.system.service??'—'}</dd></div><div className="pt-field"><dt>Repository</dt><dd>{m.system.repository??'Not identified yet'}</dd></div><div className="pt-field"><dt>Platform</dt><dd>{m.system.platform??'—'}</dd></div></>
+    :<><div className="pt-field"><dt>Agreed by</dt><dd>{goal.agreedBy}</dd></div><div className="pt-field"><dt>Agreed</dt><dd>{new Date(goal.agreedAt).toLocaleDateString()}</dd></div></>}
   </dl>
-  <p className="pt-label" style={{marginTop:22}}>First step</p>
-  <p className="pt-clamp3">{action.description}</p>
-  <details className="pt-details"><summary>Full step and why it was chosen</summary><p className="pt-prose">{action.description}</p><p className="pt-prose">{state.plan.rationale}</p></details>
+  <p className="pt-label" style={{marginTop:22}}>{m?'What to do':'First step'}</p>
+  {m?<ol className="pt-steps-list">{m.actions.map(a=><li key={a}>{a}</li>)}</ol>:<p className="pt-clamp3">{action.description}</p>}
+  <details className="pt-details"><summary>Full step and why it was chosen</summary>
+   {m?<><p className="pt-prose">{m.why}</p><p className="pt-prose"><strong>You’ll produce:</strong> {m.expectedOutput}</p>
+    {m.requiredInformation.length>0&&<p className="pt-prose"><strong>You’ll need:</strong> {m.requiredInformation.join(' · ')}</p>}
+    <p className="pt-prose"><strong>Where:</strong> {m.destinations.map((d,i)=><span key={d.path}>{i>0&&' · '}<Link className="pt-link" to={d.path}>{d.label}</Link></span>)}</p></>
+    :<><p className="pt-prose">{action.description}</p><p className="pt-prose">{state.plan.rationale}</p></>}
+  </details>
   {state.plan.prerequisites.length>0&&<table className="pt-table" aria-label="Prerequisites"><thead><tr><th>Before you start</th><th style={{width:120}}>Status</th></tr></thead>
    <tbody>{state.plan.prerequisites.map((p,i)=><tr key={i}><td>{p.description}</td><td><span className={'pt-pill '+stateTone(p.state)}>{p.state}</span></td></tr>)}</tbody></table>}
   <div className="pt-actions">
