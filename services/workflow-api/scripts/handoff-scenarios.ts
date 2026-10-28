@@ -30,6 +30,13 @@ async function bench(){
   for(const m of ps.models??[])console.log(`loaded ${m.name}: ${(m.size/1e9).toFixed(1)} GB, ${m.size?Math.round(m.size_vram/m.size*100):0}% on GPU${m.context_length?`, context ${m.context_length}`:''}`);}catch{/* older Ollama */}
 }
 const PRIVATE=/\$\d|\b\d[\d,]*\s+(?:employees|engineers)\b|\bARR\b|\bprocurement\b|nice-to-have|VP thinks|\bstage \d|technical validation/i;
+/** Every developer-view field the leak check matches, with the matched text, so a YES can be traced to its source. */
+function leaks(value:unknown,path='handoff'):string[]{
+ if(typeof value==='string'){const m=PRIVATE.exec(value);return m?[`${path} matched "${m[0]}" in: ${value}`]:[];}
+ if(Array.isArray(value))return value.flatMap((x,i)=>leaks(x,`${path}[${i}]`));
+ if(value&&typeof value==='object')return Object.entries(value).flatMap(([k,x])=>leaks(x,`${path}.${k}`));
+ return [];
+}
 console.log(config?`Model: ${config.model} at ${config.endpoint} (timeout ${config.timeoutMs} ms)`:'No model configured (set PORTAL_LLM_PROVIDER=ollama). Showing the rule-based fallback.');
 if(config&&args.includes('--bench'))await bench();
 for(const [name,s] of Object.entries(scenarios)){
@@ -50,8 +57,10 @@ for(const [name,s] of Object.entries(scenarios)){
  if(u.stakeholders?.length)console.log('Stakeholders:',u.stakeholders.map(x=>`${x.name??'(unnamed)'} — ${x.role} [${x.confidence}]${x.responsibilities[0]?` · ${x.workBasis==='role_default'?'role default':'work'}: ${x.responsibilities[0]}`:''}`).join('; '));
  if(u.baseline?.length)console.log('Baseline checks:',u.baseline.map(b=>`${b.area} (${b.status})`).join(', '));
  if(u.contradictions.length)console.log('Contradictions:',u.contradictions.map(c=>c.summary).join(' | '));
- for(const m of p.milestones)console.log(`Milestone: ${m.objective}\n  role: ${m.recommendedRole??'—'} · proposed assignee: ${m.proposedAssignee??'not confirmed'} · evidence: ${m.evidenceStatus??'—'}\n  actions: ${m.actions.join(' → ')}\n  done when: ${m.completionCriteria.join(' / ')}${m.dependencies.length?`\n  depends on: ${m.dependencies.join(', ')}`:''}`);
+ for(const m of p.milestones)console.log(`Milestone: ${m.objective}\n  role: ${m.recommendedRole??'—'} · proposed assignee: ${m.proposedAssignee??'not confirmed'}${m.assignmentBasis==='stated_work'?' (from stated work in sources)':''} · evidence: ${m.evidenceStatus??'—'}\n  actions: ${m.actions.join(' → ')}\n  done when: ${m.completionCriteria.join(' / ')}${m.dependencies.length?`\n  depends on: ${m.dependencies.join(', ')}`:''}`);
  if(!p.milestones.length)console.log('No milestone proposed.');
  if(p.missing.length)console.log('Ask the customer:',p.missing.join(' | '));
- console.log('Developer view leaks private text:',PRIVATE.test(JSON.stringify(h))?'YES — investigate':'no');
+ const found=leaks(h);
+ console.log('Developer view leaks private text:',found.length?'YES — investigate':'no');
+ for(const l of found)console.log('  leak:',l);
 }

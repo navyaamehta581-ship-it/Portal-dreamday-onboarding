@@ -303,11 +303,14 @@ test('real failure shape: an account-owner milestone stays as an unassigned draf
   const {understanding:u,proposal:p}=await analyzeWithModel(model(s.url),A);
   assert.equal(u.model!.ok,true);
   assert.deepEqual(p.milestones.map(m=>[m.objective,m.recommendedRole,m.proposedAssignee]),[
-   ['Assess payments-api repository readiness','unassigned',null],
+   ['Assess payments-api repository readiness','developer','Alex Rivera'],
    ['Validate that payments-api and its docs are discoverable','developer','Jordan Lee']]);
+  // The rejected role/assignee are not approved or silently swapped: Alex is proposed from his stated work and labelled so.
+  assert.deepEqual(p.milestones.map(m=>[m.assignmentBasis,m.assignmentStatus??'proposed']),[['stated_work','proposed'],['model','proposed']]);
   const reasons=u.model!.discards!.map(d=>`${d.stage}/${d.item}/${d.reason}`);
   assert.ok(reasons.includes('plan/milestone_role/account_owner_role_rejected'));
-  assert.ok(reasons.includes('plan/assignee/assignee_role_mismatch'),'the champion is not handed execution work');
+  assert.ok(reasons.includes('plan/assignee/champion_not_executor'),'the champion is not handed execution work');
+  assert.ok(reasons.includes('plan/assignee/proposed_from_stated_work'));
   assert.ok(reasons.includes('plan/milestone/too_few_actions'),'the broken third milestone alone is dropped');
   assert.ok(!reasons.includes('plan/milestone/account_owner_task'));
   assert.ok(p.milestones.every(m=>m.proposedAssignee!=='Chris'));
@@ -317,7 +320,8 @@ test('real failure shape: an account-owner milestone stays as an unassigned draf
  const s2=await stub(b=>isPlan(b)?{...plan,milestones:[assess({proposed_assignee:'Chris'})]}:realShape);
  try{
   const {understanding:u,proposal:p}=await analyzeWithModel(model(s2.url),A);
-  assert.equal(p.milestones[0].proposedAssignee,null);assert.ok(u.model!.discards!.some(d=>d.reason==='assignee_not_technical'));
+  assert.ok(u.model!.discards!.some(d=>d.reason==='assignee_not_technical'));
+  assert.deepEqual([p.milestones[0].proposedAssignee,p.milestones[0].assignmentBasis],['Alex Rivera','stated_work'],'Chris is refused; the sourced assignee is proposed instead');
  }finally{await s2.close();}
 });
 
@@ -348,4 +352,91 @@ test('client: Ollama timing fields are summed over attempts; throughput comes fr
   const {understanding:u}=await analyzeWithModel(model(bad.url),A);
   assert.equal(u.model!.ok,false);assert.equal(u.model!.stages![0].attempts,2);assert.equal(u.model!.stages![0].evalMs,2000);
  }finally{await bad.close();}
+});
+
+// Regressions shaped like the qwen3:1.7b retest on scenario A: developer view flagged as leaking, both milestones
+// given to the Champion, Alex's and Jordan's distinct work lost. The smaller model restates private lines in
+// technical-looking fields and misses some confidential markings, so the backend must not rely on its labels.
+// Same detector as scripts/handoff-scenarios.ts, unchanged.
+const RUNNER_PRIVATE=/\$\d|\b\d[\d,]*\s+(?:employees|engineers)\b|\bARR\b|\bprocurement\b|nice-to-have|VP thinks|\bstage \d|technical validation/i;
+const smallModel={...realShape,
+ people:[{name:'Maya Chen',role:'Champion, Director of Platform Engineering',assigned_work:null,lines:['s1.4']},
+  {name:'Alex Rivera',role:'Developer',assigned_work:'Initial repository readiness assessment',lines:['s2.3']},
+  {name:'Jordan Lee',role:'Developer',assigned_work:'Check whether people can find the service and its docs',lines:['s2.3']}],
+ problems:[{statement:'Nobody can tell who owns a service and runbooks are missing',status:'reported',lines:['s2.1']},
+  {statement:'Our VP thinks Backstage is a nice-to-have, so the team needs something concrete in 60 days',status:'reported',lines:['s2.4']},
+  {statement:'Backstage has to show something concrete soon or it will be dropped',status:'reported',lines:['s2.4']}],
+ facts:[...realShape.facts,{area:'other',fact:'The evaluation is in the technical validation stage',status:'reported',lines:['s1.3']},
+  {area:'ci_cd',fact:'Unclear whether payments-api deploys with GitHub Actions or Jenkins',status:'reported',lines:['s3.1']}],
+ unknowns:[...realShape.unknowns,{question:'Will the VP still see Backstage as a nice-to-have after the pilot?',why:'Shapes priorities',blocks_first_step:false,ask:'developer'}],
+ // The private comment on s2.4 is not marked confidential, as the smaller model did.
+ confidential:[{line:'s1.3',kind:'commercial'}],
+};
+const smallPlan={technical_goal:'Show something concrete before the technical validation stage ends',baseline_checks:[],clarification_questions:[],milestones:[
+ milestone({title:'Assess payments-api repository readiness',recommended_role:'champion',proposed_assignee:'Maya Chen',
+  actions:['Locate the payments-api repository on GitHub','Inspect catalog-info.yaml','Identify the declared owner','Record missing readiness items'],
+  rationale:'The VP thinks Backstage is a nice-to-have, so the team needs something concrete within 60 days.',
+  completion_criteria:['Readiness is good','Each readiness item is marked verified, missing or inaccessible']}),
+ milestone({title:'Validate that people can find payments-api and its docs',recommended_role:'champion',proposed_assignee:'Maya Chen',system:'technical validation',
+  actions:['Search the Catalog for payments-api','Open its docs and runbook links','Record what could not be found'],
+  rationale:'An independent check confirms the service can be found by someone who did not register it.',evidence_status:'confirmed',
+  expected_evidence:['A discoverability check listing found and missing items'],completion_criteria:['payments-api and its docs are found from Catalog search']})]};
+
+test('small-model shape: private comments restated in facts, problems, unknowns and rationale never reach the developer view',async()=>{
+ const s=await stub(b=>isPlan(b)?smallPlan:smallModel);
+ try{
+  const {understanding:u,proposal:p}=await analyzeWithModel(model(s.url,{model:'qwen3:1.7b'}),A);
+  assert.equal(u.model!.ok,true);assert.equal(u.model!.model,'qwen3:1.7b');
+  const h=developerHandoff(1,'now',u,p.milestones);
+  // Field by field, like the runner, so a regression names its field.
+  const walk=(v:unknown,path:string):string[]=>typeof v==='string'?(RUNNER_PRIVATE.test(v)||/\b60 days\b|something concrete|dropped/i.test(v)?[path]:[]):Array.isArray(v)?v.flatMap((x,i)=>walk(x,`${path}[${i}]`)):v&&typeof v==='object'?Object.entries(v).flatMap(([k,x])=>walk(x,`${path}.${k}`)):[];
+  assert.deepEqual(walk(h,'handoff'),[]);
+  for(const x of PRIVATE)assert.ok(!JSON.stringify(h).includes(x),'developer handoff leaked '+x);
+  // The planner never saw the private problem, and the operator still keeps it for Chris.
+  const sent=s.calls.find(isPlan)!.messages[1].content;
+  assert.ok(!/nice-to-have|VP|60 days|something concrete/i.test(sent),'private text reached the planner: '+sent);
+  const reasons=u.model!.discards!.map(d=>`${d.item}:${d.reason}`);
+  for(const r of ['rationale:private_comment','milestone_system:not_in_sources','completion_criterion:not_measurable'])assert.ok(reasons.includes(r),r);
+  assert.equal(p.milestones[0].why,'','the unsafe rationale is removed, the work is kept');
+  assert.deepEqual(p.milestones.map(m=>m.completionCriteria.length),[1,1]);
+  assert.equal(p.milestones[1].evidenceStatus,'unknown','an invented evidence status is not passed through');
+  assert.equal(u.goals.length,0,'a technical goal restating the deal stage is dropped');
+  // Not over-blocked: the technical part of Chris's notes still reaches developers.
+  assert.ok(h.context.some(n=>n.topic==='CI/CD'&&/GitHub Actions or Jenkins/.test(n.text)),JSON.stringify(h.context));
+ }finally{await s.close();}
+});
+
+test('small-model shape: execution milestones given to the Champion go to the people whose work the sources state',async()=>{
+ const s=await stub(b=>isPlan(b)?smallPlan:smallModel);
+ try{
+  const {understanding:u,proposal:p}=await analyzeWithModel(model(s.url,{model:'qwen3:1.7b'}),A);
+  assert.deepEqual(p.milestones.map(m=>[m.proposedAssignee,m.recommendedRole,m.assignmentBasis]),[['Alex Rivera','developer','stated_work'],['Jordan Lee','developer','stated_work']]);
+  assert.equal(u.model!.discards!.filter(d=>d.item==='assignee'&&d.reason==='champion_not_executor').length,2);
+  const maya=u.stakeholders!.find(x=>x.name==='Maya Chen')!;assert.equal(maya.workBasis,'role_default');
+  assert.ok(!p.missing.some(x=>/No milestone covers/.test(x)),'both people\'s work is covered');
+ }finally{await s.close();}
+ // A coordination milestone may stay with the Champion.
+ const coord=await stub(b=>isPlan(b)?{...smallPlan,milestones:[milestone({title:'Agree payments-api pilot priorities with the platform team',recommended_role:'champion',proposed_assignee:'Maya Chen',actions:['Confirm the pilot scope for payments-api','Approve the proposed assignments','Schedule the readiness review'],completion_criteria:['Pilot scope and assignments are confirmed in writing']})]}:smallModel);
+ try{const {proposal:p}=await analyzeWithModel(model(coord.url),A);assert.deepEqual([p.milestones[0].proposedAssignee,p.milestones[0].recommendedRole],['Maya Chen','champion']);}finally{await coord.close();}
+});
+
+test('generic platform milestones do not displace stated customer work; uncovered work is reported to Chris, not invented',async()=>{
+ const s=await stub(b=>isPlan(b)?{...smallPlan,milestones:[
+   milestone({title:'Backstage readiness assessment',proposed_assignee:null,actions:['Install Backstage','Configure the software catalog','Review plugins'],completion_criteria:['Backstage is installed and reachable']}),
+   milestone({title:'Assess payments-api repository readiness',proposed_assignee:'Alex Rivera'})]}:smallModel);
+ try{
+  const {understanding:u,proposal:p}=await analyzeWithModel(model(s.url),A);
+  assert.deepEqual(p.milestones.map(m=>m.objective),['Assess payments-api repository readiness']);
+  const reasons=u.model!.discards!.map(d=>`${d.item}:${d.reason}`);
+  assert.ok(reasons.includes('milestone:generic_title'));assert.ok(reasons.includes('stated_work:not_covered_by_milestone'));
+  assert.ok(p.missing.some(x=>/No milestone covers the work the sources give Jordan Lee/.test(x)));
+  assert.equal(p.milestones.length,1,'no milestone is invented for Jordan');
+ }finally{await s.close();}
+});
+
+test('privacy screen catches paraphrases without blocking technical text or technical stakeholders',()=>{
+ const {understanding:u}=ruleBasedAnalysis(A);
+ u.stakeholders=[{name:'Maya Chen',role:'Champion, Director of Platform Engineering',responsibilities:[],confidence:'reported',sources:[]}];
+ for(const t of ['Leadership sees Backstage as optional','Deliver results within 60 days','The deal is in technical validation','Our VP is not convinced','Backstage must show something concrete soon or be dropped'])assert.equal(developerSafe(t,u),false,t);
+ for(const t of ['Inspect catalog-info.yaml in payments-api','Confirm whether payments-api deploys with GitHub Actions or Jenkins','Ask Maya Chen to approve the assignment','Check that people can find the service and its docs','Run the CI stage that builds the image'])assert.equal(developerSafe(t,u),true,t);
 });

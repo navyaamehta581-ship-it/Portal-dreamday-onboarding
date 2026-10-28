@@ -39,6 +39,9 @@ export type Understanding = {
   company?: string | null; engineeringProblem?: string | null;
   stakeholders?: Stakeholder[]; classifications?: Classification[]; baseline?: BaselineCheck[];
   clarifications?: string[]; model?: ModelRun;
+  /** Operator-only. Distinctive word stems of each private source passage, derived from the sources (never from model
+   * text) and used to screen developer-facing text for restatements. */
+  privateStems?: string[][];
 };
 
 export type MilestoneDraft = {
@@ -50,7 +53,9 @@ export type MilestoneDraft = {
   destinations: { label: string; path: string }[];
   expectedOutput: string; completionCriteria: string[]; dependencies: string[]; developerUnknowns: string[];
   /** Role-aware proposal fields. A proposed assignee is a recommendation until the Champion approves it. */
-  recommendedRole?: string; proposedAssignee?: string | null; expectedEvidence?: string[]; evidenceStatus?: EvidenceStatus;
+  recommendedRole?: string; proposedAssignee?: string | null;
+  /** Where the proposed assignee came from: the model's plan, or the person's work as stated in the sources. */
+  assignmentBasis?: 'model' | 'stated_work'; expectedEvidence?: string[]; evidenceStatus?: EvidenceStatus;
   /** Developers see an assignee only once the assignment is approved (Champion step, not built yet). */
   assignmentStatus?: 'proposed' | 'approved';
 };
