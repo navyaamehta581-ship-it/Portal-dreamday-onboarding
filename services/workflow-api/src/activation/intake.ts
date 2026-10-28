@@ -50,5 +50,6 @@ export function createIntake(base:Policy, interpret?:(input:unknown)=>Promise<un
   validateContract('CustomerContext',context);
   pending.set(JSON.stringify(p),{p,context,plan});return {context,plan};
  }
- return {policy,prepare,release:(p:Principal)=>pending.delete(JSON.stringify(p))};
+ // Server-built handoff publications are staged for exact admission the same way.
+ return {policy,prepare,stage:(p:Principal,context:CustomerContext,plan:ActivationPlan)=>{pending.set(JSON.stringify(p),{p,context,plan});},release:(p:Principal)=>pending.delete(JSON.stringify(p))};
 }

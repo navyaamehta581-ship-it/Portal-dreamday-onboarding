@@ -1,6 +1,7 @@
 import type {ActivationState} from '../../../../contracts/activation/v1/state';
 import {championPlan} from '../activation/champion';
 import {milestoneTone} from '../portal-app/onboarding/model';
+import {planLabel} from './versions';
 
 /** Developer Progress: what developers reported, what was observed, and what needs Chris's decision. */
 export function ProgressTab({state}:{state:ActivationState|null}){
@@ -15,7 +16,7 @@ export function ProgressTab({state}:{state:ActivationState|null}){
    <h3>Activation at a glance</h3>
    <dl className="pt-fields">
     <div className="pt-field"><dt>Milestone</dt><dd><span className={'pt-pill '+milestoneTone(state.milestone.status)}>{state.milestone.status.replace('_',' ')}</span></dd></div>
-    <div className="pt-field"><dt>Plan</dt><dd>revision {state.planRevision}{state.replan.status==='pending'?' · updating':state.replan.status==='failed'?' · update failed':''}</dd></div>
+    <div className="pt-field"><dt>Plan</dt><dd>{planLabel(state.planRevision)}{state.replan.status==='pending'?' · updating':state.replan.status==='failed'?' · update failed':''}</dd></div>
     <div className="pt-field"><dt>Help requested</dt><dd><span className={'pt-pill '+(helping?'amber':'')}>{helping?'Yes':'No'}</span></dd></div>
     <div className="pt-field"><dt>Outcome</dt><dd data-testid="outcome-status">{state.outcome.status}</dd></div>
     <div className="pt-field"><dt>Developer reports</dt><dd>{reports.length}</dd></div>
@@ -58,7 +59,7 @@ export function ProgressTab({state}:{state:ActivationState|null}){
   <section className="pt-card pt-span" aria-label="Chris GitHub action evidence">
    <h3>Technical evidence</h3>
    {packets.length===0?<p className="pt-note">No repository inspection yet.</p>:<table className="pt-table"><thead><tr><th>Packet</th><th>Prepared</th><th>Approved</th><th>Executed</th><th>Verified</th></tr></thead>
-    <tbody>{packets.map(p=><tr key={p.id}><td><span className={'pt-pill '+(p.status==='failed'?'red':p.status==='prepared'?'green':'amber')}>{p.status}</span> {p.repository} @ {p.commit.slice(0,12)} · plan {p.planRevision}{p.blockers.length>0&&<ul className="pt-list">{p.blockers.map(b=><li key={b}>{b}</li>)}</ul>}</td><td>{p.status==='prepared'?'Yes':'No'}</td><td>No{p.proposalApproval?' · proposal accepted for review':''}</td><td>No</td><td>No</td></tr>)}</tbody></table>}
+    <tbody>{packets.map(p=><tr key={p.id}><td><span className={'pt-pill '+(p.status==='failed'?'red':p.status==='prepared'?'green':'amber')}>{p.status}</span> {p.repository} @ {p.commit.slice(0,12)} · plan {planLabel(p.planRevision).split(' · ')[0].toLowerCase()}{p.blockers.length>0&&<ul className="pt-list">{p.blockers.map(b=><li key={b}>{b}</li>)}</ul>}</td><td>{p.status==='prepared'?'Yes':'No'}</td><td>No{p.proposalApproval?' · proposal accepted for review':''}</td><td>No</td><td>No</td></tr>)}</tbody></table>}
    {observed.length>0&&<><hr/><p className="pt-label">Observed on GitHub</p><ul className="pt-list">{observed.map(e=><li key={e.id}>{e.claim}</li>)}</ul></>}
   </section>
  </div>;

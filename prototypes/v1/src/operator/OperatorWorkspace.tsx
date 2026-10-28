@@ -8,6 +8,7 @@ import {navigate,usePath} from '../portal-app/router';
 import {ALL_NAV,PRIMARY_NAV,Shell,type NavItem} from '../portal-app/Shell';
 import {milestoneTone} from '../portal-app/onboarding/model';
 import {useOperatorDraft} from './useOperatorDraft';
+import {planLabel} from './versions';
 import {ContextTab} from './ContextTab';
 import {GoalTab} from './GoalTab';
 import {ProgressTab} from './ProgressTab';
@@ -25,13 +26,13 @@ export function OperatorWorkspace(){
  const [accounts,setAccounts]=useState<PortalAccount[]>([]);
  const [accountId,setAccountId]=useState(''),[customer,setCustomer]=useState(''),[token,setToken]=useState('');
  const [opened,setOpened]=useState(false),[needsPublish,setNeedsPublish]=useState(false);
- const draft=useOperatorDraft();
  useEffect(()=>{document.title='Customer Onboarding · Spotify Portal';
   fetch('/portal-auth/accounts',{cache:'no-store'}).then(r=>r.ok?r.json():{accounts:[]}).then(d=>{const list=(d.accounts??[]) as PortalAccount[];setAccounts(list);if(list[0]){setAccountId(list[0].id);setCustomer(list[0].customerId);}}).catch(()=>undefined);},[]);
  const account=accounts.find(a=>a.id===accountId);
  // The operator token stays in memory only. Configured accounts route to their own API through the local proxy.
  const api=useMemo(()=>opened&&customer&&token.length>=32?activationClient(customer,token,'',account?`/operator-api/${account.id}`:'/api'):null,[opened,customer,token,account]);
  const session=useActivation(api,`${accountId}:${customer}:${token}`);
+ const draft=useOperatorDraft(api,session);
  useEffect(()=>{if(api)void session.refresh();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
  // Once the customer is known to be unpublished, keep the draft mounted through later errors (e.g. conflicts).
  useEffect(()=>{if(session.error==='NOT_FOUND')setNeedsPublish(true);if(session.state)setNeedsPublish(false);},[session.error,session.state]);
@@ -53,7 +54,7 @@ export function OperatorWorkspace(){
    <div className="pt-entity">
     <div className="pt-entity-head">
      <div><p className="pt-crumb">Customer Onboarding — {account?.label??(customer||'Choose a customer')}</p><h2>{state?state.context.agreedGoal.text:ready?'Not published yet':'Choose a customer'}</h2></div>
-     {state&&<div className="pt-meta"><div>Milestone<span><span className={'pt-pill '+milestoneTone(state.milestone.status)}>{state.milestone.status.replace('_',' ')}</span></span></div><div>Plan<span>revision {state.planRevision}</span></div></div>}
+     {state&&<div className="pt-meta"><div>Milestone<span><span className={'pt-pill '+milestoneTone(state.milestone.status)}>{state.milestone.status.replace('_',' ')}</span></span></div><div>Plan<span>{planLabel(state.planRevision).split(' · ')[0]}</span></div></div>}
     </div>
 
     <section className="pt-card" style={{marginTop:26}} aria-label="Session connection">

@@ -13,9 +13,9 @@ export function onboardingSteps(session:ActivationSession):{steps:Step[];done:nu
  const failed=!prepared&&packets.some(p=>p.status==='failed'&&p.planRevision===state.planRevision);
  const replan=state.replan.status==='pending'?'Your next step is being updated':state.replan.status==='failed'?'Chris has been asked to help with your next step':null;
  const base:Omit<Step,'status'>[]=[
-  {id:'goal',title:'Review your goal and first step',summary:session.direction.accepted?'Direction accepted':state.context.agreedGoal.text,attention:replan,to:'/activation',goLabel:'Go to Overview'},
-  {id:'repository',title:'Inspect your repository',summary:prepared?`Review packet prepared · ${prepared.repository}`:failed?'The last inspection failed':'Read-only. Nothing is written to GitHub.',attention:failed?'The last inspection failed':null,to:'/activation/repository',goLabel:'Go to Repository'},
-  {id:'report',title:'Share your progress with Chris',summary:reports?`${reports} update${reports===1?'':'s'} shared`:'Tell Chris what you reviewed or where you’re stuck.',attention:state.chrisHelp.status==='requested'?'Chris has been asked to help':null,to:'/activation/guide',goLabel:'Go to Guide'},
+  {id:'goal',title:'Review your goal and first step',summary:session.direction.accepted?'Direction accepted':state.handoff?.milestones[0]?[state.handoff.milestones[0].system.service,state.handoff.milestones[0].system.repository].filter(Boolean).join(' · '):state.context.agreedGoal.text,attention:replan,to:'/activation',goLabel:'Go to Overview'},
+  {id:'repository',title:'Inspect your repository',summary:prepared?`Review packet prepared · ${prepared.repository}`:failed?'The last inspection failed':`Read-only. Nothing is written to ${state.handoff?.milestones[0]?.system.platform??'GitHub'}.`,attention:failed?'The last inspection failed':null,to:'/activation/repository',goLabel:'Go to Repository'},
+  {id:'report',title:'Share your progress',summary:reports?`${reports} update${reports===1?'':'s'} shared`:'Tell Chris what you reviewed or where you’re stuck.',attention:state.chrisHelp.status==='requested'?'Chris has been asked to help':null,to:'/activation/guide',goLabel:'Go to Guide'},
  ];
  const complete:Record<string,boolean>={goal:session.direction.accepted,repository:!!prepared,report:reports>0};
  const firstOpen=base.findIndex(s=>!complete[s.id]);

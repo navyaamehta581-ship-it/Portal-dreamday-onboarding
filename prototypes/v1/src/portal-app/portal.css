@@ -309,3 +309,29 @@ select.pt-input{appearance:auto;height:46px}
 .pt-acc{grid-template-columns:minmax(0,1fr)}
 .pt-acc-body .pt-actions{flex-wrap:wrap}
 @media (max-width:860px){.pt-acc-body .pt-table{display:block;overflow-x:auto}.pt-acc-toggle .title small{white-space:normal}}
+/* Customer sources and analysis (Chris). Compact provenance: one chip per source, full text on demand. */
+.pt-source{margin-top:18px;padding-top:18px;border-top:1px solid #333}
+.pt-source:first-of-type{border-top:0;padding-top:0}
+.pt-source-head{display:grid;grid-template-columns:220px minmax(0,1fr) auto;gap:12px;margin-bottom:10px}
+.pt-icon{width:46px;height:46px;border-radius:6px;display:grid;place-items:center;color:#cfcfcf}
+.pt-icon:hover{background:var(--p-raised)}
+.pt-findings{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:12px}
+.pt-findings li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:start;font-size:14.5px;line-height:22px}
+.pt-findings li small{display:block;color:var(--p-subtle);font-size:13px}
+.pt-findings .pt-pill{min-width:92px;justify-content:center}
+.pt-findings.compact li{font-size:13.5px;color:#cfcfcf}
+.pt-refs{display:inline-flex;flex-wrap:wrap;gap:6px;margin-left:8px;vertical-align:middle}
+.pt-ref{height:20px;padding:0 8px;border-radius:10px;border:1px solid #444;color:#bdbdbd;font-size:11.5px;font-weight:600;cursor:pointer}
+.pt-ref:hover{border-color:#bdbdbd;color:#fff}
+.pt-backdrop{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.6);display:grid;place-items:center;padding:16px}
+.pt-dialog{width:min(720px,100%);max-height:80vh;display:flex;flex-direction:column;border-radius:8px;background:#1f1f1f;box-shadow:0 12px 40px rgba(0,0,0,.6)}
+.pt-dialog-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #333}
+.pt-dialog-head small{display:block;color:var(--p-subtle);font-size:12.5px}
+.pt-dialog-body{margin:0;padding:16px 20px;overflow:auto;white-space:pre-wrap}
+@media (max-width:860px){.pt-source-head{grid-template-columns:1fr auto}.pt-source-head select{grid-column:1/-1}}
+/* Developer technical context: one short block per topic. */
+.pt-notes{margin:14px 0 0;display:grid;gap:16px}
+.pt-notes dt{display:flex;align-items:center;gap:10px;font-size:14px;font-weight:700;color:#fff}
+.pt-notes dd{margin:4px 0 0;font-size:14.5px;line-height:22px;color:#e0e0e0}
+.pt-sub{display:block;color:var(--p-subtle);font-size:13px}
+.pt-steps-list{margin:8px 0 0;padding-left:20px;display:grid;gap:6px;font-size:15px;line-height:23px}

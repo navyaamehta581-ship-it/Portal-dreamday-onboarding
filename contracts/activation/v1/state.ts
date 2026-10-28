@@ -1,5 +1,6 @@
 // Additive browser response contract; review candidate, freeze HOLD.
 import type { CustomerContext, ActivationPlan, EvidenceRecord } from './types.ts';
+import type { DeveloperHandoff } from './handoff.ts';
 export type ActionState = { revision: number; status: 'suggested'|'prepared'|'approved'|'executed'|'verified'; kind: 'github_inspect'|'prepare_artifact'|'portal_workflow'|'deployment'; at: string; receiptId?: string; planRevision: number; blockedByIds: string[]; evidenceIds: string[] };
 export type GitHubPreparation = {
   id:string; commandDigest:string; scopeDigest:string; actionId:string; actionRevision:number; planRevision:number;
@@ -12,6 +13,8 @@ export type GitHubPreparation = {
 };
 export type ActivationState = {
   githubPreparations?: Record<string,GitHubPreparation>;
+  /** Server-built, developer-safe handoff for the published plan (additive). */
+  handoff?: DeveloperHandoff;
   contractVersion: '1.0.0'; customerId: string; developerSessionId: string; revision: number;
   contextRevision: number; planRevision: number; context: CustomerContext; plan: ActivationPlan;
   milestone: { id: string; status: 'pending'|'in_progress'|'blocked'|'reached'; requiredActions: {id:string;revision:number}[]; evidenceIds:string[] };
