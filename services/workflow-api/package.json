@@ -14,7 +14,8 @@
     "demo": "node scripts/demo.ts",
     "demo:token": "node scripts/demo.ts token",
     "demo:operator-token": "node scripts/demo.ts operator-token",
-    "demo:handoff": "node scripts/demo.ts handoff"
+    "demo:handoff": "node scripts/demo.ts handoff",
+    "handoff:scenarios": "node scripts/handoff-scenarios.ts"
   },
   "devDependencies": {
     "@types/node": "24.10.0",

@@ -8,10 +8,11 @@ import capabilities from '../capabilities.json' with {type:'json'};
 import {ActivationError,type ActivationStore,type Principal} from '../store.ts';
 import {interpretRuleBased} from './interpret.ts';
 import {proposeMilestones,validMilestone} from './milestones.ts';
+import type {Analysis} from './intelligence.ts';
 import {developerHandoff} from './project.ts';
 import type {HandoffStore} from './store.ts';
 
-const TYPES:SourceType[]=['crm','conversation','chris_notes','account_prep','technical_requirements','repository'];
+const TYPES:SourceType[]=['crm','conversation','chris_notes','account_prep','technical_requirements','repository','integration_tools'];
 const fail=(code:string):never=>{throw new ActivationError(code);};
 const CAPABILITY:Record<string,string>={service_readiness:'onboard',techdocs:'docs',scaffolder:'docs',ci_investigation:'ci'};
 
@@ -34,12 +35,15 @@ export function confidentialHits(m:MilestoneDraft,outcome:string,u:Understanding
  return fields.filter(([,t])=>money.test(t)||internal.some(s=>t.toLowerCase().includes(s.slice(0,40)))).map(([f])=>f);
 }
 
-export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>ActivationStore;interpret?:(s:SourceInput[])=>Promise<Understanding>;stage:(p:Principal,context:CustomerContext,plan:ActivationPlan)=>void;release:(p:Principal)=>void;publishEnabled?:boolean}){
- const interpret=deps.interpret??(async(s:SourceInput[])=>interpretRuleBased(s));
+export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>ActivationStore;analyze?:(s:SourceInput[])=>Promise<Analysis>;stage:(p:Principal,context:CustomerContext,plan:ActivationPlan)=>void;release:(p:Principal)=>void;publishEnabled?:boolean}){
+ const analyze=deps.analyze??(async(s:SourceInput[])=>{const understanding=interpretRuleBased(s);return {understanding,proposal:proposeMilestones(understanding)};});
  async function draft(p:Principal,input:unknown){
   const sources=parseSources(input);
-  const understanding=await interpret(sources);
-  return deps.handoffs.add(p,{status:'draft',createdAt:new Date().toISOString(),publishedVersion:null,publishedAt:null,sources,understanding,proposal:proposeMilestones(understanding),developer:null});
+  const {understanding,proposal}=await analyze(sources);
+  // Generated plans are drafts: Chris approves by publishing; the Champion step and assignments stay proposed.
+  const pending={status:'pending' as const,by:null,at:null};
+  return deps.handoffs.add(p,{status:'draft',createdAt:new Date().toISOString(),publishedVersion:null,publishedAt:null,sources,understanding,proposal,developer:null,
+   approvals:{chris:pending,champion:pending},assignments:proposal.milestones.map(m=>({milestoneId:m.id,role:m.recommendedRole??'developer',proposedAssignee:m.proposedAssignee??null,status:'proposed' as const}))});
  }
  function publish(p:Principal,input:unknown){
   if(deps.publishEnabled===false)fail('ADAPTER_UNAVAILABLE');
@@ -67,7 +71,7 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   validateContract('CustomerContext',context);validateContract('ActivationPlan',plan);
   deps.stage(p,context,plan);
   try{const state=deps.store().initialize(p,context,plan);
-   deps.handoffs.save(p,{...record,status:'published',publishedVersion:1,publishedAt:at,proposal:{...record.proposal,milestones},developer});
+   deps.handoffs.save(p,{...record,status:'published',publishedVersion:1,publishedAt:at,proposal:{...record.proposal,milestones},developer,approvals:{chris:{status:'approved',by:agreedBy,at},champion:record.approvals?.champion??{status:'pending',by:null,at:null}}});
    return state;}
   finally{deps.release(p);}
  }

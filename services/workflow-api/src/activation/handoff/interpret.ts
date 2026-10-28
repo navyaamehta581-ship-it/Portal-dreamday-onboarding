@@ -4,7 +4,7 @@
  * understanding: statements it cannot classify are kept as internal notes for Chris, never passed on. */
 import type {Contradiction,Entities,Finding,FindingCategory,FindingStatus,Goal,Playbook,SourceInput,SourceRef,SourceType,Understanding,Unknown} from '../../../../../contracts/activation/v1/handoff.ts';
 
-export const SOURCE_LABEL:Record<SourceType,string>={crm:'CRM record',conversation:'Conversation',chris_notes:'Chris’s notes',account_prep:'Account preparation',technical_requirements:'Technical requirements',repository:'Repository observation'};
+export const SOURCE_LABEL:Record<SourceType,string>={crm:'CRM record',conversation:'Conversation',chris_notes:'Chris’s notes',account_prep:'Account preparation',integration_tools:'Integration tools',technical_requirements:'Technical requirements',repository:'Repository observation'};
 const EXCERPT=80;
 
 type Statement={sourceId:string;type:SourceType;label:string;text:string;speaker:string|null};
@@ -26,6 +26,8 @@ export function statements(sources:SourceInput[]):Statement[]{
 }
 
 const STALE_BEFORE=/\b(?:used to(?: \w+)?|previously(?: \w+)?|formerly(?: \w+)?|migrat\w* (?:off|away from|from)|moving off|replaced|no longer(?: \w+)?|old)\s*(?:on|run|use|using|had)?\s*$/i;
+// Ordinary hyphenated words that look like service names but are not.
+const COMMON_HYPHENATED=new Set(['self-service','micro-service','web-service','customer-service','full-service','in-app','web-app','mobile-app','front-end','back-end','end-to-end','on-call','single-page-app']);
 const RX={
  commercial:/[$€£]\s?\d|\b\d+(?:\.\d+)?\s?(?:k|m|million)\b(?!\w)|\b(?:arr|acv|tcv|mrr|pricing|price|discount|renewal|budget|opportunity|deal size|procurement|licen[cs]e|seats?|invoice|quote|contract|commercial|close date|forecast|upsell|expansion)\b/i,
  stakeholder:/\b(?:employees|headcount|\d[\d,]*\s+(?:engineers|developers|people)|vp|svp|director|cto|ceo|cio|head of|champion|sponsor|economic buyer|decision[- ]maker|account owner|account executive|\bae\b|csm|stakeholder|reports to|org chart)\b/i,
@@ -68,7 +70,7 @@ function status(s:Statement,category:FindingCategory):FindingStatus{
 
 /** Needs expressed in business language, mapped to a technical playbook. */
 const NEEDS:{rx:RegExp;need:string;goal:string;playbook:Playbook}[]=[
- {rx:/\b(?:same|repeat\w*|again and again|every time|each team|walk(?:ing)? (?:\w+ )*through|hand-?hold\w*|self[- ]serv\w*|standardi[sz]\w*|consistent(?:ly)?|onboard(?:ing)? (?:new )?(?:teams|services))\b/i,need:'Teams need a repeatable way to get services production-ready without one-to-one help',goal:'Establish a repeatable service-readiness baseline (ownership, catalog metadata, documentation) starting with one service',playbook:'service_readiness'},
+ {rx:/\b(?:same|repeat\w*|again and again|every time|each team|walk(?:ing)? (?:\w+ )*through|hand-?hold\w*|standardi[sz]\w*|consistent(?:ly)?|onboard(?:ing)? (?:new )?(?:teams|services))\b/i,need:'Teams need a repeatable way to get services production-ready without one-to-one help',goal:'Establish a repeatable service-readiness baseline (ownership, catalog metadata, documentation) starting with one service',playbook:'service_readiness'},
  {rx:/\bonboard\w*\b.{0,40}\b(?:existing|service|api|repo\w*)\b|\bregister\w* .{0,40}\bcatalog\b|\binto (?:the )?(?:software )?catalog\b/i,need:'An existing service needs to be brought into the Software Catalog',goal:'Prepare the named service for Catalog registration with a confirmed owner',playbook:'service_readiness'},
  {rx:/\b(?:who owns|don'?t know (?:who|which team)|no (?:clear )?owner|unclear owner\w*|ownership)\b/i,need:'It is not clear which team owns services',goal:'Make service ownership explicit and discoverable in the Catalog',playbook:'service_readiness'},
  {rx:/\b(?:hard to find|can'?t find|discoverab\w*|no (?:service )?inventory|don'?t know what (?:services|apis) (?:we|they) have)\b/i,need:'Services are hard to discover',goal:'Register services in the Software Catalog with accurate metadata',playbook:'service_readiness'},
@@ -84,7 +86,7 @@ function entities(list:Statement[]){
  const values:Record<string,Map<string,Statement[]>>={scm:new Map(),sso:new Map(),docs:new Map(),ci:new Map()};const stale=new Set<string>();
  for(const s of list){
   if(categorize(s)==='commercial')continue;
-  for(const m of s.text.matchAll(SERVICE)){const name=(m[1]??m[2]??m[3]).toLowerCase();if(!e.services.includes(name)&&!/\//.test(name)&&!/^(?:node|java|type|catalog-info|spring)/.test(name))e.services.push(name);}
+  for(const m of s.text.matchAll(SERVICE)){const name=(m[1]??m[2]??m[3]).toLowerCase();if(!e.services.includes(name)&&!/\//.test(name)&&!/^(?:node|java|type|catalog-info|spring)/.test(name)&&!COMMON_HYPHENATED.has(name))e.services.push(name);}
   for(const m of s.text.matchAll(REPO)){const repo=(m[1]??m[2]??m[3]).replace(/\.git$|[.,;]$/,'');if(!e.repositories.includes(repo)&&!/^node\.js\//i.test(repo))e.repositories.push(repo);}
   for(const p of PLATFORMS){const hit=p.rx.exec(s.text);if(!hit)continue;const m=values[p.key];m.set(p.name,[...(m.get(p.name)??[]),s]);
    // Staleness belongs to the mention, not the sentence: 'on X now, we used to run Y' keeps X current.

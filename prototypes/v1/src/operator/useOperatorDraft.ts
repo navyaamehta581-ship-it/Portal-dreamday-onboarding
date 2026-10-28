@@ -28,7 +28,7 @@ export function useOperatorDraft(api:ReturnType<typeof activationClient>|null,se
   removeSource:(i:number)=>setSources(list=>list.length>1?list.filter((_,j)=>j!==i):list),
   async analyze(){if(!api)return;const r=await run(()=>api.draftHandoff(sources.filter(s=>s.text.trim())));if(r){setHistory(h=>[...h,r]);adopt(r);}},
   setMilestone:edited(setMilestoneState),setOutcome:edited(setOutcomeState),setAgreedBy:edited(setAgreedByState),
-  async publish(){if(!api||!record||!milestone)return;const s=await run(()=>api.publishHandoff({draft:record.draft,milestones:[milestone],outcome,agreedBy,agreementConfirmed:true}));
+  async publish(){if(!api||!record||!milestone)return;const s=await run(()=>api.publishHandoff({draft:record.draft,milestones:[milestone,...record.proposal.milestones.slice(1,3)],outcome,agreedBy,agreementConfirmed:true}));
    if(s){const o=await api.handoffOverview().catch(()=>null);if(o){setHistory(o.drafts);adopt(o.drafts.find(r=>r.draft===record.draft)??null);}await session.refresh();}},
   reset(){setSources([blank()]);adopt(null);setHistory([]);setAgreedByState('');setError('');}};
 }
