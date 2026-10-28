@@ -42,10 +42,22 @@ export function developerSummary(m:MilestoneDraft|null,u:Understanding):string{
  return `Your first milestone: ${m.objective.charAt(0).toLowerCase()+m.objective.slice(1)}${where}. ${m.why.split(/(?<=\.)\s/)[0]}`;
 }
 
+const WITHHELD='Milestone text withheld: it contained private customer context. Ask Chris for a revised version.';
+/** Last screen before anything reaches a developer: every milestone field passes the same check as model output,
+ * whoever wrote it (model, rule-based templates or Chris's edits). Unsafe list items are removed, unsafe prose replaced. */
+export function screenMilestone(m:MilestoneDraft,u:Understanding):MilestoneDraft{
+ const ok=(t:string)=>developerSafe(t,u),keep=(xs:string[])=>xs.filter(ok);
+ return {...m,objective:ok(m.objective)?m.objective:WITHHELD,why:ok(m.why)?m.why:'',actions:keep(m.actions),completionCriteria:keep(m.completionCriteria),
+  requiredInformation:keep(m.requiredInformation),developerUnknowns:keep(m.developerUnknowns),dependencies:keep(m.dependencies),expectedOutput:ok(m.expectedOutput)?m.expectedOutput:'',
+  prerequisites:m.prerequisites.filter(p=>ok(p.text)),...(m.expectedEvidence?{expectedEvidence:keep(m.expectedEvidence)}:{}),
+  system:{...m.system,service:m.system.service&&ok(m.system.service)?m.system.service:null,repository:m.system.repository&&ok(m.system.repository)?m.system.repository:null},
+  ...(m.proposedAssignee!==undefined?{proposedAssignee:m.proposedAssignee&&ok(m.proposedAssignee)?m.proposedAssignee:null}:{})};
+}
+
 export function developerHandoff(version:number,publishedAt:string,u:Understanding,milestones:MilestoneDraft[]):DeveloperHandoff{
- const m=milestones[0]??null;
  // Assignments stay proposed until the Champion approves them; the projection hides unapproved assignees.
- milestones=milestones.map(x=>({...x,assignmentStatus:x.assignmentStatus??'proposed'}));
+ milestones=milestones.map(x=>({...screenMilestone(x,u),assignmentStatus:x.assignmentStatus??'proposed'}));
+ const m=milestones[0]??null;
  const team=(u.stakeholders??[]).filter(s=>s.name&&technicalRole(s.role)&&developerSafe(s.role,u)).map(s=>({name:s.name!,role:s.role.slice(0,80),status:s.confidence==='reported'?'reported' as const:'inferred' as const}));
  return {...(team.length?{team}:{}),version,publishedAt,interpreter:u.interpreter,summary:developerSummary(m,u),context:technicalNotes(u,m),
   unknowns:u.unknowns.filter(x=>x.audience==='developer'&&x.priority!=='not_needed_now'&&developerSafe(x.question,u)).map(x=>({question:x.question,reason:developerSafe(x.reason,u)?x.reason:''})),milestones};

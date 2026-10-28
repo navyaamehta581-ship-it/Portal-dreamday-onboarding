@@ -22,10 +22,16 @@ export type Playbook = 'service_readiness' | 'techdocs' | 'scaffolder' | 'ci_inv
 export type EvidenceStatus = 'verified' | 'reported' | 'suggested' | 'unknown';
 /** A passage of the input and the category the model assigned. Editable later; never treated as fact. */
 export type Classification = { sourceId: string; category: SourceType; excerpt: string };
-export type Stakeholder = { name: string | null; role: string; responsibilities: string[]; confidence: 'reported' | 'inferred' | 'unknown'; sources: SourceRef[] };
+/** workBasis: 'stated' = the sources assign this work to the person; 'role_default' = what the product expects of the role (e.g. a Champion coordinates). */
+export type Stakeholder = { name: string | null; role: string; responsibilities: string[]; confidence: 'reported' | 'inferred' | 'unknown'; sources: SourceRef[]; workBasis?: 'stated' | 'role_default' | 'none' };
 export type BaselineCheck = { area: string; reason: string; status: EvidenceStatus };
 /** How the understanding was produced; failures are recorded so the fallback is visible. */
-export type ModelRun = { provider: 'ollama' | 'openai_compatible'; model: string; ok: boolean; error: string | null; durationMs: number; chunks: number; discarded: number };
+/** Why the server rejected an item from model output. Codes only; never source content. */
+export type Discard = { stage: 'interpret' | 'plan'; item: string; reason: string };
+export type ModelStage = { name: string; ms: number; attempts: number; attemptErrors: string[]; promptTokens: number | null; outputTokens: number | null;
+  promptEvalMs: number | null; evalMs: number | null; loadMs: number | null; tokensPerSecond: number | null; thinkingChars: number; numCtx: number; truncated: boolean };
+export type ModelRun = { provider: 'ollama' | 'openai_compatible'; model: string; ok: boolean; error: string | null; durationMs: number; chunks: number; discarded: number;
+  errorDetail?: string | null; discards?: Discard[]; stages?: ModelStage[] };
 
 export type Understanding = {
   interpreter: 'hosted_model' | 'rule_based';
@@ -33,6 +39,9 @@ export type Understanding = {
   company?: string | null; engineeringProblem?: string | null;
   stakeholders?: Stakeholder[]; classifications?: Classification[]; baseline?: BaselineCheck[];
   clarifications?: string[]; model?: ModelRun;
+  /** Operator-only. Distinctive word stems of each private source passage, derived from the sources (never from model
+   * text) and used to screen developer-facing text for restatements. */
+  privateStems?: string[][];
 };
 
 export type MilestoneDraft = {
@@ -44,7 +53,9 @@ export type MilestoneDraft = {
   destinations: { label: string; path: string }[];
   expectedOutput: string; completionCriteria: string[]; dependencies: string[]; developerUnknowns: string[];
   /** Role-aware proposal fields. A proposed assignee is a recommendation until the Champion approves it. */
-  recommendedRole?: string; proposedAssignee?: string | null; expectedEvidence?: string[]; evidenceStatus?: EvidenceStatus;
+  recommendedRole?: string; proposedAssignee?: string | null;
+  /** Where the proposed assignee came from: the model's plan, or the person's work as stated in the sources. */
+  assignmentBasis?: 'model' | 'stated_work'; expectedEvidence?: string[]; evidenceStatus?: EvidenceStatus;
   /** Developers see an assignee only once the assignment is approved (Champion step, not built yet). */
   assignmentStatus?: 'proposed' | 'approved';
 };

@@ -8,7 +8,7 @@ import capabilities from '../capabilities.json' with {type:'json'};
 import {ActivationError,type ActivationStore,type Principal} from '../store.ts';
 import {interpretRuleBased} from './interpret.ts';
 import {proposeMilestones,validMilestone} from './milestones.ts';
-import type {Analysis} from './intelligence.ts';
+import {unsafeReason,type Analysis} from './intelligence.ts';
 import {developerHandoff} from './project.ts';
 import type {HandoffStore} from './store.ts';
 
@@ -27,12 +27,12 @@ export function parseSources(input:unknown):SourceInput[]{
  });
 }
 
-/** Developer-facing text must not contain internal findings or commercial terms. */
+/** Developer-facing text must not contain commercial terms, private comments, deal stage or restated private passages. */
 export function confidentialHits(m:MilestoneDraft,outcome:string,u:Understanding):string[]{
- const fields:[string,string][]=[['Objective',m.objective],['Why',m.why],['Expected output',m.expectedOutput],['Outcome',outcome],...m.actions.map((a,i)=>[`Action ${i+1}`,a] as [string,string]),...m.completionCriteria.map((c,i)=>[`Completion ${i+1}`,c] as [string,string]),...m.requiredInformation.map((c,i)=>[`Required information ${i+1}`,c] as [string,string])];
- const internal=u.findings.filter(f=>f.audience!=='developer').map(f=>f.statement.toLowerCase()).filter(s=>s.length>=24);
+ const fields:[string,string][]=[['Objective',m.objective],['Why',m.why],['Expected output',m.expectedOutput],['Outcome',outcome],...m.actions.map((a,i)=>[`Action ${i+1}`,a] as [string,string]),...m.completionCriteria.map((c,i)=>[`Completion ${i+1}`,c] as [string,string]),...m.requiredInformation.map((c,i)=>[`Required information ${i+1}`,c] as [string,string]),...m.prerequisites.map((c,i)=>[`Prerequisite ${i+1}`,c.text] as [string,string])];
+ // Same screen as model output: the customer's engineering problem is shareable, private context is not.
  const money=/[$€£]\s?\d|\b\d+(?:\.\d+)?\s?(?:k|m)\b(?!\w)|\b(?:arr|acv|tcv|discount|pricing|renewal|opportunity|deal size|procurement)\b/i;
- return fields.filter(([,t])=>money.test(t)||internal.some(s=>t.toLowerCase().includes(s.slice(0,40)))).map(([f])=>f);
+ return fields.filter(([,t])=>money.test(t)||unsafeReason(t,u)!==null).map(([f])=>f);
 }
 
 export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>ActivationStore;analyze?:(s:SourceInput[])=>Promise<Analysis>;stage:(p:Principal,context:CustomerContext,plan:ActivationPlan)=>void;release:(p:Principal)=>void;publishEnabled?:boolean}){
