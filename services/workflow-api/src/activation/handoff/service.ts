@@ -30,7 +30,8 @@ export function parseSources(input:unknown):SourceInput[]{
 /** Developer-facing text must not contain internal findings or commercial terms. */
 export function confidentialHits(m:MilestoneDraft,outcome:string,u:Understanding):string[]{
  const fields:[string,string][]=[['Objective',m.objective],['Why',m.why],['Expected output',m.expectedOutput],['Outcome',outcome],...m.actions.map((a,i)=>[`Action ${i+1}`,a] as [string,string]),...m.completionCriteria.map((c,i)=>[`Completion ${i+1}`,c] as [string,string]),...m.requiredInformation.map((c,i)=>[`Required information ${i+1}`,c] as [string,string])];
- const internal=u.findings.filter(f=>f.audience!=='developer').map(f=>f.statement.toLowerCase()).filter(s=>s.length>=24);
+ // Only internal findings are private; the customer's engineering problem is shareable technical context.
+ const internal=u.findings.filter(f=>f.audience==='internal').map(f=>f.statement.toLowerCase().replace(/…$/,'')).filter(s=>s.length>=24);
  const money=/[$€£]\s?\d|\b\d+(?:\.\d+)?\s?(?:k|m)\b(?!\w)|\b(?:arr|acv|tcv|discount|pricing|renewal|opportunity|deal size|procurement)\b/i;
  return fields.filter(([,t])=>money.test(t)||internal.some(s=>t.toLowerCase().includes(s.slice(0,40)))).map(([f])=>f);
 }

@@ -25,7 +25,11 @@ export type Classification = { sourceId: string; category: SourceType; excerpt: 
 export type Stakeholder = { name: string | null; role: string; responsibilities: string[]; confidence: 'reported' | 'inferred' | 'unknown'; sources: SourceRef[] };
 export type BaselineCheck = { area: string; reason: string; status: EvidenceStatus };
 /** How the understanding was produced; failures are recorded so the fallback is visible. */
-export type ModelRun = { provider: 'ollama' | 'openai_compatible'; model: string; ok: boolean; error: string | null; durationMs: number; chunks: number; discarded: number };
+/** Why the server rejected an item from model output. Codes only; never source content. */
+export type Discard = { stage: 'interpret' | 'plan'; item: string; reason: string };
+export type ModelStage = { name: string; ms: number; attempts: number; promptTokens: number | null; outputTokens: number | null; thinkingChars: number; loadMs: number | null; numCtx: number; truncated: boolean };
+export type ModelRun = { provider: 'ollama' | 'openai_compatible'; model: string; ok: boolean; error: string | null; durationMs: number; chunks: number; discarded: number;
+  errorDetail?: string | null; discards?: Discard[]; stages?: ModelStage[] };
 
 export type Understanding = {
   interpreter: 'hosted_model' | 'rule_based';

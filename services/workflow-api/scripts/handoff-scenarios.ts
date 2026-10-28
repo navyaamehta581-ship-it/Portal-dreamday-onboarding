@@ -20,9 +20,12 @@ for(const [name,s] of Object.entries(scenarios)){
  const h=developerHandoff(1,new Date().toISOString(),u,p.milestones);
  console.log(`\n=== ${name}\nExpected: ${s.expect}`);
  console.log(`Produced by: ${u.model?.ok?`model ${u.model.model} (${u.model.chunks} chunk(s), ${u.model.discarded} item(s) discarded by validation)`:u.model?`RULE-BASED FALLBACK — model failed: ${u.model.error}`:'RULE-BASED (no model configured)'} · ${Date.now()-started} ms`);
+ for(const st of u.model?.stages??[])console.log(`  stage ${st.name}: ${st.ms} ms · attempts ${st.attempts} · prompt ${st.promptTokens??'?'} tok · output ${st.outputTokens??'?'} tok · thinking ${st.thinkingChars} chars · load ${st.loadMs??'?'} ms · num_ctx ${st.numCtx}${st.truncated?' · OUTPUT TRUNCATED':''}`);
+ if(u.model?.errorDetail)console.log('  failure detail:',u.model.errorDetail);
+ if(u.model?.discards?.length)console.log('  discarded (reason codes only):',Object.entries(u.model.discards.reduce<Record<string,number>>((a,d)=>{const k=`${d.stage}/${d.item}/${d.reason}`;a[k]=(a[k]??0)+1;return a;},{})).map(([k,n])=>`${k}×${n}`).join(', '));
  if(u.classifications?.length)console.log('Classified passages:',u.classifications.map(c=>`${c.category}: “${c.excerpt}”`).join(' | '));
  if(u.engineeringProblem)console.log('Engineering problem:',u.engineeringProblem);
- if(u.stakeholders?.length)console.log('Stakeholders:',u.stakeholders.map(x=>`${x.name??'(unnamed)'} — ${x.role} [${x.confidence}]`).join('; '));
+ if(u.stakeholders?.length)console.log('Stakeholders:',u.stakeholders.map(x=>`${x.name??'(unnamed)'} — ${x.role} [${x.confidence}]${x.responsibilities[0]?` · work: ${x.responsibilities[0]}`:''}`).join('; '));
  if(u.baseline?.length)console.log('Baseline checks:',u.baseline.map(b=>`${b.area} (${b.status})`).join(', '));
  if(u.contradictions.length)console.log('Contradictions:',u.contradictions.map(c=>c.summary).join(' | '));
  for(const m of p.milestones)console.log(`Milestone: ${m.objective}\n  role: ${m.recommendedRole??'—'} · proposed assignee: ${m.proposedAssignee??'not confirmed'} · evidence: ${m.evidenceStatus??'—'}\n  actions: ${m.actions.join(' → ')}\n  done when: ${m.completionCriteria.join(' / ')}${m.dependencies.length?`\n  depends on: ${m.dependencies.join(', ')}`:''}`);
