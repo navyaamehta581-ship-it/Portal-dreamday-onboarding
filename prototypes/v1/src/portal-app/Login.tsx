@@ -6,11 +6,11 @@ import {demoAccounts,signIn,type PortalAccount} from './session';
  * It is a simulated sign-in. Nothing is collected; access comes from the operator-configured demo account. */
 export function Login({onSignedIn,onBack}:{onSignedIn:(a:PortalAccount)=>void;onBack:()=>void}){
  const [accounts,setAccounts]=useState<PortalAccount[]|null>(null),[selected,setSelected]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
- useEffect(()=>{demoAccounts().then(list=>{setAccounts(list);setSelected(list[0]?.id??'');}).catch(()=>{setAccounts([]);setError('Sign-in is unavailable. Start the Portal with a configured demo account.');});},[]);
+ useEffect(()=>{demoAccounts().then(list=>{setAccounts(list);setSelected(list[0]?.id??'');}).catch(()=>{setAccounts([]);setError('Sign-in is unavailable right now.');});},[]);
  async function submit(e:FormEvent){
   e.preventDefault();if(!selected)return;setBusy(true);setError('');
   try{onSignedIn(await signIn(selected));}
-  catch(err){setError(err instanceof Error&&err.message==='ACCOUNT_UNAVAILABLE'?'This demo account is not ready yet. Start its activation API, then try again.':'Sign-in failed. Try again.');}
+  catch(err){setError(err instanceof Error&&err.message==='ACCOUNT_UNAVAILABLE'?'This account isn’t available right now. Try again later.':'Sign-in failed. Try again.');}
   finally{setBusy(false);}
  }
  return <main className="pt-entry">
@@ -23,7 +23,7 @@ export function Login({onSignedIn,onBack}:{onSignedIn:(a:PortalAccount)=>void;on
    </fieldset>}
    {error&&<div className="pt-alert" role="alert">{error}</div>}
    <div className="pt-entry-actions"><button className="pt-btn" type="submit" disabled={!selected||busy}>{busy?'Signing in…':'Continue'}</button><button type="button" className="pt-link" onClick={onBack}>Back</button></div>
-   <p className="pt-entry-note">Simulated sign-in for this demo. No Spotify account, email or password is used.</p>
+   <p className="pt-entry-note">Demo sign-in. No password needed.</p>
   </form>
  </main>;
 }

@@ -6,7 +6,6 @@ export function IntegrationTools({session}:{session:ActivationSession}){
  const [blocker,setBlocker]=useState(''),[progress,setProgress]=useState(''),[initial,setInitial]=useState('');
  const rb=session.reviewedBlocker,rp=session.reviewedProgress;
  return <section className="pt-card pt-span" style={{marginTop:26}}><details className="pt-details" style={{marginTop:0}}><summary>Integration tools</summary>
-  <p className="pt-note">For reviewers using exact, evidence-admitted commands. The server checks scope, revisions, proof and authority.</p>
   {session.state?<>
    <label className="pt-form-field"><span>Reviewed blocker command</span><textarea className="pt-textarea" aria-label="Blocker command" rows={5} value={rb.pending?JSON.stringify(rb.pending):blocker} disabled={!!rb.pending} onChange={e=>setBlocker(e.target.value)} placeholder="Reviewed blocker JSON"/></label>
    <div className="pt-actions"><button className="pt-btn sm ghost" disabled={!session.ready||(!rb.pending&&!blocker)||rb.accepted} onClick={()=>void rb.submit(blocker)}>Submit / retry reviewed blocker</button><button className="pt-link" disabled={session.busy} onClick={()=>{rb.clear();setBlocker('');}}>Clear</button>{rb.accepted&&<span className="pt-note" style={{marginTop:0}} role="status">Blocker accepted.</span>}</div>

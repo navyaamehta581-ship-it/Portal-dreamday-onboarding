@@ -31,11 +31,7 @@ export function GuideTab({session,account}:{session:ActivationSession;account:Po
  return <div className="pt-chat">
   <div className="pt-chat-scroll" aria-live="polite">
    {turns.length===0&&!draft?<div className="pt-hello"><p><Flag size={22} color="#63d46d" aria-hidden="true"/>Hello {account.user},</p><h2>What can I help you with?</h2></div>:null}
-   <article className="pt-msg-guide" aria-label="Onboarding guide summary">
-    <h4>Based on the context shared for your team</h4>
-    <ul><li><strong>Goal:</strong> {state.context.agreedGoal.text}</li><li><strong>Next action:</strong> {state.plan.suggestedNextAction.description}</li>{state.context.unknowns.length>0&&<li><strong>Still unknown:</strong> {state.context.unknowns.length} item(s) — ask before assuming.</li>}</ul>
-    <p className="pt-note">Rule-based guide using your published context. Not AiKA; no AI model answers here.</p>
-   </article>
+   {turns.length===0&&!draft&&<p className="pt-note" style={{textAlign:'center'}}>Answers come from your team’s published context. Not AiKA.</p>}
    {turns.map(turn=><Turn key={turn.id} turn={turn}/>)}
    {draft&&!(mode==='blocker'?blocker.accepted:progress.accepted)&&<><div className="pt-msg-user"><div>{draft.message}<small>{session.busy?'Sending…':'Not saved yet'}</small></div></div>
     {session.busy?<p style={{marginTop:18}}><span className="pt-running"><ChevronRight size={14} aria-hidden="true"/><LoaderCircle size={14} className="pt-spin" aria-hidden="true"/>Saving…</span></p>:null}</>}
@@ -44,7 +40,7 @@ export function GuideTab({session,account}:{session:ActivationSession;account:Po
   {turns.length===0&&!draft&&<div className="pt-suggest" aria-label="Suggested prompts">{suggestions.map(s=><button key={s.text} onClick={()=>{setMode(s.mode);setText(s.text);}}>{s.text}</button>)}</div>}
   <form className="pt-composer" onSubmit={e=>{e.preventDefault();send();}}>
    {session.error&&<div className="pt-banner error" role="alert" style={{marginBottom:10}}>{actionProblem(session.error)}</div>}
-   {mode==='blocker'&&<p className="pt-note" style={{margin:'0 0 8px'}}>Blockers are saved as your attributed report and Chris is asked to help. A report can’t prove repository state, approval or success.</p>}
+   {mode==='blocker'&&<p className="pt-note" style={{margin:'0 0 8px'}}>Chris is asked to help, and your next step is updated.</p>}
    <div className="pt-composer-box">
     <label className="pt-sr" htmlFor="guide-input">{mode==='blocker'?'Blocker note':'Question or update'}</label>
     <textarea id="guide-input" aria-label={mode==='blocker'?'Blocker note':'Question or update'} rows={2} maxLength={4000} disabled={!!draft} value={value} placeholder={mode==='blocker'?'Describe what is blocking you…':'Type your question…'}
@@ -57,8 +53,8 @@ export function GuideTab({session,account}:{session:ActivationSession;account:Po
      <button type="submit" className="pt-send" aria-label={draft?'Retry sending':mode==='blocker'?'Submit blocker':'Send'} disabled={!session.ready||!value.trim()||replanBlocked}><Play size={18} aria-hidden="true"/></button>
     </div>
    </div>
-   {replanBlocked&&<p className="pt-note" role="status">A revised plan is still being prepared for your last blocker. You can report another blocker once it’s ready.</p>}
-   {draft&&!session.busy&&session.error&&<p className="pt-note">Your message is kept exactly as written. Retry sends the same report; it won’t be duplicated.</p>}
+   {replanBlocked&&<p className="pt-note" role="status">Your next step is still being updated. You can report another blocker once it’s ready.</p>}
+   {draft&&!session.busy&&session.error&&<p className="pt-note">Your message is kept. Retrying won’t send it twice.</p>}
   </form>
  </div>;
 }

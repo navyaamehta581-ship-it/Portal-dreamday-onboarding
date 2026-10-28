@@ -7,7 +7,9 @@ export type GuideTurn={id:string;at:string;kind:'question'|'blocker';message:str
  reply:{status:'recorded'|'pending'|'replanned'|'failed'|'superseded';title:string;lines:string[];matches:ContextMatch[]}};
 
 const STOP=new Set(['about','after','again','also','because','been','before','being','cannot','could','does','doing','don\'t','from','have','having','into','just','know','like','make','more','need','should','that','their','them','then','there','they','this','what','when','where','which','while','with','would','your','will','want','how','who','why','can']);
-const words=(text:string)=>new Set(text.toLowerCase().match(/[a-z0-9][a-z0-9.+#-]{3,}/g)?.filter(w=>!STOP.has(w))??[]);
+// Three-letter terms count too (SSO, API, CLI); common short words are ignored.
+const SHORT=new Set(['all','and','any','are','but','can','did','for','get','got','had','has','her','him','his','how','its','let','may','not','now','our','out','own','see','she','the','too','use','was','way','who','why','yet','you']);
+const words=(text:string)=>new Set(text.toLowerCase().match(/[a-z0-9][a-z0-9.+#-]{2,}/g)?.filter(w=>!STOP.has(w)&&!SHORT.has(w))??[]);
 
 export function contextMatches(state:ActivationState,question:string,limit=3):ContextMatch[]{
  const asked=words(question);if(!asked.size)return [];

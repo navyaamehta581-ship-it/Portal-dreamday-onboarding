@@ -25,3 +25,32 @@ Agreement and customer context in these acceptance sessions are explicitly ficti
 72 frontend tests cover canonical outcome labels, contrasting contexts, polling completion, 409 preservation, exact uncertain retry, mismatched reviewed command rejection, honest local review/submitted state, and proof links/metadata. Backend/report, contract, inspector and conversation suites are documented in handoff.md.
 
 A dedicated artifact diff viewer, native Portal/AiKA execution, production identity and customer adoption acceptance remain unavailable. Artifact review currently means inspectable admitted proof metadata plus safe source/reference navigation; missing contents remain missing. Local screenshots and walkthrough output are delivery evidence outside Git, not implementation assets.
+
+## Onboarding refinement and copy cleanup — 28 October 2026
+
+Base: `rollback/pre-ignition-20261028-0001` (3e40c86, same tree as PR #23 merge c685250). Branch `claude/onboarding-refinement-i04hn5`.
+
+**Developer onboarding.** Home and Onboarding › Overview now share one step model (`src/portal-app/onboarding/steps.ts`), following references 011, 023 and 036: setup card with progress and “N of 3 completed”, one row per step (completed rows muted with a check and a “Go to …” action, the current step expanded with its single action, upcoming steps collapsed, steps needing attention marked amber, Team locked until the existing gate opens), and the 036 completion banner. Steps complete only from recorded state:
+
+| Step | Completed when |
+|---|---|
+| Review your goal and first step | The direction is accepted (a local, per-session choice; no server record) |
+| Inspect your repository | A packet is prepared for the current plan revision |
+| Share your progress with Chris | An attributed developer report exists |
+| Bring your team along | Never counted; unlocked by an accepted direction or a report |
+
+The page heading shows the agreed goal; the generated milestone text appears inside the first step. Team context, unknowns and success criteria sit below the guide as flat sections. Capability availability moved to the Evidence tab.
+
+**Copy moved out of the interface.** These facts remain true but are no longer repeated on screen:
+- Accepting a direction selects a proposed direction only and completes nothing.
+- The Guide is rule-based over published context; no model answers (the screen keeps a short “Not AiKA” note).
+- Reports, blockers and help requests are attributed records; they do not prove repository state, approval, execution or success.
+- Prepared packets are local review artifacts; proposal acceptance records consent only and needs a separate grant.
+- The kickoff message is not saved or sent; team roles and milestones are proposals, not adoption.
+- Chris’s token stays in tab memory; publishing never overwrites an existing session; extraction is keyword-based quoting.
+
+Simulation limits that affect a user’s decision stay visible in short form (demo sign-in, read-only inspection, nothing written to GitHub, kickoff not sent from Portal).
+
+**Guide matching.** Three-letter terms (SSO, API) now match published context; common short words are ignored.
+
+References 013, 015, 016, 022, 025, 026, 034 and 035 are not in the Drive folder and were not used.

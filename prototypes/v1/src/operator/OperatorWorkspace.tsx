@@ -46,13 +46,13 @@ export function OperatorWorkspace(){
  const user={name:'Chris',detail:'Customer onboarding · operator access',actionLabel:'Lock workspace',onAction:()=>change(()=>setToken(''))};
 
  return <div className="pt"><Shell active={feature?feature[1]:'customer-onboarding'} user={user} homeHref="/operator" primaryNav={OPERATOR_NAV} href={operatorHref}>
-  {feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2><p>Only Customer Onboarding is functional in this workspace.</p></div></div></div>:
+  {feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2></div></div></div>:
   <div className="pt-page">
    <div className="pt-pagebar"><h1><span className="icon"><Flag size={16} aria-hidden="true"/></span>Customer Onboarding</h1>
     <div className="tools">{opened&&<button className="pt-tool" disabled={busy} onClick={()=>void session.refresh()}><RefreshCw size={15} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button>}</div></div>
    <div className="pt-entity">
     <div className="pt-entity-head">
-     <div><p className="pt-crumb">Customer Onboarding — {account?.label??(customer||'Choose a customer')}</p><h2>{state?state.context.agreedGoal.text:ready?'Not published yet':'Prepare a customer’s developer onboarding'}</h2></div>
+     <div><p className="pt-crumb">Customer Onboarding — {account?.label??(customer||'Choose a customer')}</p><h2>{state?state.context.agreedGoal.text:ready?'Not published yet':'Choose a customer'}</h2></div>
      {state&&<div className="pt-meta"><div>Milestone<span><span className={'pt-pill '+milestoneTone(state.milestone.status)}>{state.milestone.status.replace('_',' ')}</span></span></div><div>Plan<span>revision {state.planRevision}</span></div></div>}
     </div>
 
@@ -64,7 +64,7 @@ export function OperatorWorkspace(){
       <label className="pt-form-field"><span>Operator access token</span><input className="pt-input" aria-label="Operator access token" type="password" autoComplete="off" value={token} onChange={e=>change(()=>setToken(e.target.value))} placeholder="Kept in this tab only"/></label>
       <button className="pt-btn sm" style={{height:46}} disabled={!customer||token.length<32||busy} onClick={()=>opened?void session.refresh():setOpened(true)}>{busy?'Loading…':opened?'Reload customer':'Open workspace'}</button>
      </div>
-     <p className="pt-note">{state?`Saved session revision ${state.revision} · plan revision ${state.planRevision}. Refreshing is safe.`:'Operator access only. The token stays in this tab’s memory and is never shown to developers.'}</p>
+     {!state&&<p className="pt-note">Your token stays in this tab and is never shown to developers.</p>}
     </section>
 
     {error&&error!=='NOT_FOUND'&&<div className="pt-banner error" role="alert">{error==='FORBIDDEN'?'This token is not authorized for this customer.':error}</div>}

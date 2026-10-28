@@ -1,48 +1,46 @@
-import {BookOpenText,Check,Clock3,Lock} from 'lucide-react';
+import {BookOpenText,Check,Clock3,Lock,TriangleAlert,Users} from 'lucide-react';
 import type {ActivationSession} from '../activation/useActivation';
 import {Link,navigate} from './router';
-import {STAGES,currentStage,loadProblem} from './onboarding/model';
+import {loadProblem} from './onboarding/model';
+import {onboardingSteps} from './onboarding/steps';
 
-/** “Welcome to Portal” with the Setup Guide card pattern, filled from the published customer context. */
+/** “Welcome to Portal” with the Setup Guide card (011, 036), filled from the developer's onboarding steps. */
 export function Home({session}:{session:ActivationSession}){
  const {state,busy,error}=session;
  return <div className="pt-home">
   <h1>Welcome to Portal</h1>
-  <section className="pt-guide" aria-label="Your onboarding">
-   <div className="pt-guide-head"><span className="icon"><BookOpenText size={20} aria-hidden="true"/></span><h2>Get started with your team’s onboarding</h2></div>
-   {!state?<div className="pt-step" role={error?'alert':'status'}><h3>{busy||!error?'Loading your onboarding…':loadProblem(error).title}</h3>{error&&!busy&&<p>{loadProblem(error).detail}</p>}{error&&!busy&&<button className="pt-btn" onClick={()=>void session.refresh()}>Try again</button>}</div>:<HomeGuide session={session}/>}
-  </section>
+  {!state?<section className="pt-guide" aria-label="Your onboarding">
+   <div className="pt-guide-head"><span className="icon"><BookOpenText size={20} aria-hidden="true"/></span><h2>Get started with your onboarding</h2></div>
+   <div className="pt-step" role={error?'alert':'status'}><h3>{busy||!error?'Loading your onboarding…':loadProblem(error).title}</h3>{error&&!busy&&<p>{loadProblem(error).detail}</p>}{error&&!busy&&<button className="pt-btn" onClick={()=>void session.refresh()}>Try again</button>}</div>
+  </section>:<HomeGuide session={session}/>}
  </div>;
 }
 
 function HomeGuide({session}:{session:ActivationSession}){
  const state=session.state!;
- const stage=currentStage(state);
- const reports=state.evidence.filter(e=>e.kind==='developer_report').length;
- const prepared=Object.values(state.githubPreparations??{}).some(p=>p.status==='prepared'&&p.planRevision===state.planRevision);
- const teamOpen=session.teamUnlocked;
+ const {steps,done,total,current}=onboardingSteps(session);
  return <>
-  <div className="pt-progress" aria-hidden="true"><span style={{width:`${(stage+1)/STAGES.length*100}%`}}/></div>
-  <div className="pt-guide-meta"><span>Next action: {STAGES[stage]} · {stage+1} of {STAGES.length} stages</span><span className="pt-chip"><Clock3 size={15} aria-hidden="true"/>Milestone {state.milestone.status.replace('_',' ')}</span></div>
-  <div className="pt-step">
-   <h3>First up: {state.plan.selectedMilestone.outcome}</h3>
-   <p>Your team agreed: {state.context.agreedGoal.text}</p>
-   <button className="pt-btn" onClick={()=>navigate('/activation')}>Open your onboarding</button>
-  </div>
-  <div className="pt-rows">
-   <Row done={false} label="Review your context and next action" detail={state.plan.suggestedNextAction.description} to="/activation" cta="Go to Overview"/>
-   <Row done={reports>0} label="Ask a question or report a blocker" detail={reports?`${reports} report(s) saved`:'Nothing reported yet'} to="/activation/guide" cta="Go to Guide"/>
-   <Row done={prepared} label="Inspect the repository" detail={prepared?'Review packet prepared · not executed':'No inspection requested yet'} to="/activation/repository" cta="Go to Repository"/>
-   {teamOpen?<Row done={false} label="Bring your team along" detail="Suggested roles, a kickoff message and proposed milestones" to="/activation/team" cta="Go to Team"/>:
-    <div className="pt-row locked"><Lock size={18} aria-hidden="true"/>&nbsp;Accept an onboarding direction to unlock Bring your team along</div>}
-  </div>
+  {!current&&<section className="pt-done" aria-label="Onboarding complete">
+   <p className="pt-done-mark" aria-hidden="true">🎉</p><h3>You’re all done!</h3>
+   <p>Chris can see your progress. Bring your team along next.</p>
+   <button className="pt-btn" onClick={()=>navigate('/activation/team')}>Go to Team</button>
+  </section>}
+  <section className="pt-guide" aria-label="Your onboarding">
+   <div className="pt-guide-head"><span className="icon"><BookOpenText size={20} aria-hidden="true"/></span><h2>Get started with your onboarding</h2></div>
+   <div className="pt-progress" aria-hidden="true"><span style={{width:`${done/total*100}%`}}/></div>
+   <div className="pt-guide-meta"><span>{done} of {total} completed</span><span className="pt-chip"><Clock3 size={15} aria-hidden="true"/>Milestone {state.milestone.status.replace('_',' ')}</span></div>
+   {current&&<div className="pt-step">
+    <h3>First up: {current.title.charAt(0).toLowerCase()+current.title.slice(1)}</h3>
+    <p className="pt-clamp">{current.attention??(current.id==='goal'?state.context.agreedGoal.text:current.summary)}</p>
+    <button className="pt-btn" onClick={()=>navigate('/activation')}>Open your onboarding</button>
+   </div>}
+   <div className="pt-rows">{steps.filter(s=>s!==current).map(s=>s.status==='locked'?
+    <div key={s.id} className="pt-row locked"><Lock size={18} aria-hidden="true"/>&nbsp;Accept your direction or share an update to unlock {s.title}</div>:
+    <div key={s.id} className={'pt-row '+s.status}>
+     <span className="check" aria-label={s.status==='done'?'Completed':'Not started'}>{s.status==='done'?<Check size={20} strokeWidth={2.6}/>:s.attention?<TriangleAlert size={18}/>:s.id==='team'?<Users size={18}/>:<span className="num">{steps.indexOf(s)+1}</span>}</span>
+     <span className="label">{s.title}<small className="pt-clamp">{s.attention??s.summary}</small></span>
+     {(s.status==='done'||s.id==='team')&&<Link className="pt-btn" to={s.to}>{s.goLabel}</Link>}
+    </div>)}</div>
+  </section>
  </>;
-}
-
-function Row({done,label,detail,to,cta}:{done:boolean;label:string;detail:string;to:string;cta:string}){
- return <div className="pt-row">
-  <span className="check" aria-label={done?'Recorded':'Not recorded'}>{done&&<Check size={20} strokeWidth={2.6}/>}</span>
-  <span className="label">{label}<small className="pt-clamp">{detail}</small></span>
-  <Link className="pt-btn" to={to}>{cta}</Link>
- </div>;
 }

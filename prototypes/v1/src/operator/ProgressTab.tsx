@@ -15,14 +15,13 @@ export function ProgressTab({state}:{state:ActivationState|null}){
    <h3>Activation at a glance</h3>
    <dl className="pt-fields">
     <div className="pt-field"><dt>Milestone</dt><dd><span className={'pt-pill '+milestoneTone(state.milestone.status)}>{state.milestone.status.replace('_',' ')}</span></dd></div>
-    <div className="pt-field"><dt>Plan</dt><dd>revision {state.planRevision} · replanning {state.replan.status}</dd></div>
-    <div className="pt-field"><dt>Chris help</dt><dd><span className={'pt-pill '+(helping?'amber':'')}>{state.chrisHelp.status}</span></dd></div>
+    <div className="pt-field"><dt>Plan</dt><dd>revision {state.planRevision}{state.replan.status==='pending'?' · updating':state.replan.status==='failed'?' · update failed':''}</dd></div>
+    <div className="pt-field"><dt>Help requested</dt><dd><span className={'pt-pill '+(helping?'amber':'')}>{helping?'Yes':'No'}</span></dd></div>
     <div className="pt-field"><dt>Outcome</dt><dd data-testid="outcome-status">{state.outcome.status}</dd></div>
     <div className="pt-field"><dt>Developer reports</dt><dd>{reports.length}</dd></div>
-    <div className="pt-field"><dt>Session</dt><dd>revision {state.revision}</dd></div>
+    
    </dl>
    {state.outcome.summary&&<p className="pt-note">Latest reported outcome text: “{state.outcome.summary.slice(0,300)}”</p>}
-   <p className="pt-note">“Reported” means a developer submitted an attributed report (any update or question counts). It is not independent verification of success.</p>
   </section>
 
   <section className="pt-card pt-span" aria-label="Follow-up">
@@ -31,8 +30,8 @@ export function ProgressTab({state}:{state:ActivationState|null}){
      <div className="pt-field wide"><dt>Request</dt><dd>{state.chrisHelp.reason??'Developer needs assistance.'}</dd></div>
      <div className="pt-field"><dt>Owner</dt><dd>{state.chrisHelp.owner??'Not assigned'}</dd></div>
      <div className="pt-field wide"><dt>Blocker IDs</dt><dd>{state.chrisHelp.blockerIds.join(', ')||'none'}</dd></div>
-     <div className="pt-field wide"><dt>Suggested next step</dt><dd className="plain">Review the attributed blocker or help request with the customer’s technical owner; involve a solutions engineer for deep configuration.</dd></div>
-    </dl>:<p className="pt-note">No help requested. Review the developer’s next report before deciding whether direct help is needed.</p>}
+     <div className="pt-field wide"><dt>Suggested next step</dt><dd className="plain">Review the developer’s blocker with the customer’s technical owner. Bring in a solutions engineer for deep configuration.</dd></div>
+    </dl>:<p className="pt-note">No help requested.</p>}
    {state.replan.errorCode&&<div className="pt-banner error" role="status">Replan failed: {state.replan.errorCode}</div>}
   </section>
 
@@ -45,9 +44,9 @@ export function ProgressTab({state}:{state:ActivationState|null}){
    </dl>
   </section>
   <section className="pt-card" aria-label="Chris team handoff summary">
-   <h3>Team handoff · proposed</h3>
+   <h3>Team handoff</h3>
    <p style={{marginTop:18}}>{team.verified?'First technical milestone verified; team adoption unverified.':team.blocked?'First developer outcome blocked or awaiting replanning.':'First developer outcome not verified.'}</p>
-   <p className="pt-note">Suggested roles: {team.roles.map(r=>r.role).join(', ')||'None supported yet'}. {team.issues.length} unresolved requirement(s). Technical review and repeat onboarding remain proposed. Chris follow-up: {helping?'requested, not completed':'proposed, not achieved'}.</p>
+   <p className="pt-note">Suggested roles: {team.roles.map(r=>r.role).join(', ')||'none yet'}. {team.issues.length} open requirement(s).</p>
   </section>
 
   <section className="pt-card pt-span" aria-label="Developer activity">
@@ -58,7 +57,7 @@ export function ProgressTab({state}:{state:ActivationState|null}){
 
   <section className="pt-card pt-span" aria-label="Chris GitHub action evidence">
    <h3>Technical evidence</h3>
-   {packets.length===0?<p className="pt-note">No repository inspection requested.</p>:<table className="pt-table"><thead><tr><th>Packet</th><th>Prepared</th><th>Approved</th><th>Executed</th><th>Verified</th></tr></thead>
+   {packets.length===0?<p className="pt-note">No repository inspection yet.</p>:<table className="pt-table"><thead><tr><th>Packet</th><th>Prepared</th><th>Approved</th><th>Executed</th><th>Verified</th></tr></thead>
     <tbody>{packets.map(p=><tr key={p.id}><td><span className={'pt-pill '+(p.status==='failed'?'red':p.status==='prepared'?'green':'amber')}>{p.status}</span> {p.repository} @ {p.commit.slice(0,12)} · plan {p.planRevision}{p.blockers.length>0&&<ul className="pt-list">{p.blockers.map(b=><li key={b}>{b}</li>)}</ul>}</td><td>{p.status==='prepared'?'Yes':'No'}</td><td>No{p.proposalApproval?' · proposal accepted for review':''}</td><td>No</td><td>No</td></tr>)}</tbody></table>}
    {observed.length>0&&<><hr/><p className="pt-label">Observed on GitHub</p><ul className="pt-list">{observed.map(e=><li key={e.id}>{e.claim}</li>)}</ul></>}
   </section>
