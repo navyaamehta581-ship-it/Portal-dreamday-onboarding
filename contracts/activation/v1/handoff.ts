@@ -22,12 +22,14 @@ export type Playbook = 'service_readiness' | 'techdocs' | 'scaffolder' | 'ci_inv
 export type EvidenceStatus = 'verified' | 'reported' | 'suggested' | 'unknown';
 /** A passage of the input and the category the model assigned. Editable later; never treated as fact. */
 export type Classification = { sourceId: string; category: SourceType; excerpt: string };
-export type Stakeholder = { name: string | null; role: string; responsibilities: string[]; confidence: 'reported' | 'inferred' | 'unknown'; sources: SourceRef[] };
+/** workBasis: 'stated' = the sources assign this work to the person; 'role_default' = what the product expects of the role (e.g. a Champion coordinates). */
+export type Stakeholder = { name: string | null; role: string; responsibilities: string[]; confidence: 'reported' | 'inferred' | 'unknown'; sources: SourceRef[]; workBasis?: 'stated' | 'role_default' | 'none' };
 export type BaselineCheck = { area: string; reason: string; status: EvidenceStatus };
 /** How the understanding was produced; failures are recorded so the fallback is visible. */
 /** Why the server rejected an item from model output. Codes only; never source content. */
 export type Discard = { stage: 'interpret' | 'plan'; item: string; reason: string };
-export type ModelStage = { name: string; ms: number; attempts: number; promptTokens: number | null; outputTokens: number | null; thinkingChars: number; loadMs: number | null; numCtx: number; truncated: boolean };
+export type ModelStage = { name: string; ms: number; attempts: number; attemptErrors: string[]; promptTokens: number | null; outputTokens: number | null;
+  promptEvalMs: number | null; evalMs: number | null; loadMs: number | null; tokensPerSecond: number | null; thinkingChars: number; numCtx: number; truncated: boolean };
 export type ModelRun = { provider: 'ollama' | 'openai_compatible'; model: string; ok: boolean; error: string | null; durationMs: number; chunks: number; discarded: number;
   errorDetail?: string | null; discards?: Discard[]; stages?: ModelStage[] };
 

@@ -5,8 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {createServer,type IncomingMessage} from 'node:http';
-import {ModelError,createOllama,ollamaConfigFromEnv} from '../src/llm/ollama.ts';
-import {aikaContext,analyzeWithModel,chunk,contextFor,developerSafe,numberLines,peopleFromLines,planInput,ruleBasedAnalysis} from '../src/activation/handoff/intelligence.ts';
+import {ModelError,createOllama,fit,grammarSchema,ollamaConfigFromEnv} from '../src/llm/ollama.ts';
+import {aikaContext,analyzeWithModel,chunk,contextFor,developerSafe,interpretSchema,numberLines,peopleFromLines,planInput,roleBelongsTo,ruleBasedAnalysis,workBelongsTo} from '../src/activation/handoff/intelligence.ts';
 import {developerHandoff} from '../src/activation/handoff/project.ts';
 import {parseSources} from '../src/activation/handoff/service.ts';
 
@@ -234,4 +234,118 @@ test('rule-based fallback never invents a milestone for unfamiliar or thin conte
   assert.equal(u.interpreter,'rule_based');assert.equal(u.model,undefined,'never labelled as model output');
   assert.deepEqual(p.milestones,[],`${name}: no invented milestone`);assert.ok(p.missing.length>0,`${name}: asks Chris instead`);
  }
+});
+
+// Regressions shaped like the first real qwen3:4b retest on scenario A (reason codes reported: segment/unknown_line ×3,
+// milestone/account_owner_task ×1, Maya credited with Alex's assessment, no milestone surviving). The raw output was
+// not captured, so these replies reproduce the reported shape on the real fixture rather than an ideal answer.
+const SCENARIOS=JSON.parse(readFileSync(new URL('./fixtures/scenarios.json',import.meta.url),'utf8'));
+const A=parseSources({sources:SCENARIOS['A-northstar-commerce'].sources});
+const realShape={
+ company:'Northstar Commerce',
+ problems:[{statement:'Nobody can tell who owns a service; runbooks are inconsistent or missing',status:'reported',lines:['s2.1']}],
+ // Speaker and mixed-line errors: Maya gets the account-owner label from s1.4 and Alex's work from s2.3; Alex gets none.
+ people:[{name:'Maya Chen',role:'Account owner',assigned_work:'Initial repository readiness assessment',lines:['s1.4','s2.3']},
+  {name:'Alex Rivera',role:'Developer',assigned_work:null,lines:['s2.3']},
+  {name:'Jordan Lee',role:'Developer',assigned_work:'Check whether people can find the service and its docs',lines:['s2.3']},
+  {name:'Chris',role:'Account owner',assigned_work:null,lines:['s1.4']}],
+ facts:[{area:'ownership',fact:'Service ownership is unclear',status:'reported',lines:['s2.1']},{area:'repository',fact:'payments-api is on GitHub',status:'reported',lines:['s2.2']}],
+ contradictions:[{topic:'CI/CD',summary:'GitHub Actions or Jenkins for payments-api deploys',lines:['s3.1']}],
+ unknowns:[{question:'Is the payments-api catalog file up to date?',why:'Readiness depends on it',blocks_first_step:false,ask:'developer'}],
+ confidential:[{line:'s1.3',kind:'commercial'},{line:'s1.2',kind:'company_statistic'},{line:'s2.4',kind:'stakeholder_comment'}],
+ // Bare source ids, as the model produced from "SOURCE s1" headers.
+ segments:[{line:'s1',category:'crm'},{line:'s2',category:'conversation'},{line:'s3',category:'chris_notes'}],
+ services:['payments-api'],repositories:[],
+};
+const assess=(over:Record<string,unknown>={})=>milestone({title:'Assess payments-api repository readiness',proposed_assignee:'Alex Rivera',...over});
+
+test('real failure shape: bare source ids in segments are accepted, other items still need real line ids',async()=>{
+ const s=await stub(b=>isPlan(b)?{...plan,milestones:[assess()]}:{...realShape,facts:[...realShape.facts,{area:'ci_cd',fact:'payments-api uses GitHub Actions',status:'reported',lines:['s2']}]});
+ try{
+  const {understanding:u}=await analyzeWithModel(model(s.url),A);
+  assert.deepEqual(u.classifications!.map(c=>[c.sourceId,c.category]),[['s1','crm'],['s2','conversation'],['s3','chris_notes']]);
+  const reasons=u.model!.discards!.map(d=>`${d.item}:${d.reason}`);
+  assert.ok(!reasons.includes('segment:unknown_line'));
+  assert.ok(reasons.includes('fact:unknown_line'),'a fact citing a bare source id is still rejected');
+  assert.match(s.calls[0].messages[0].content,/never bare source ids/);
+ }finally{await s.close();}
+});
+
+test('real failure shape: work and role written next to another person are reattributed, never to the speaker',async()=>{
+ const lines=numberLines(A),line=(id:string)=>lines.filter(l=>l.id===id);
+ assert.equal(workBelongsTo('Maya Chen','Initial repository readiness assessment',line('s2.3')),false,'the speaker does not own the work');
+ assert.equal(workBelongsTo('Alex Rivera','Initial repository readiness assessment',line('s2.3')),true);
+ assert.equal(roleBelongsTo('Maya Chen','Account owner',line('s1.4')),false);
+ assert.equal(roleBelongsTo('Maya Chen','Champion, Director of Platform Engineering',line('s1.4')),true);
+ assert.equal(roleBelongsTo('Chris','Account owner',line('s1.4')),true);
+ const s=await stub(b=>isPlan(b)?{...plan,milestones:[assess()]}:realShape);
+ try{
+  const {understanding:u}=await analyzeWithModel(model(s.url),A);
+  const who=(n:string)=>u.stakeholders!.find(x=>x.name===n)!;
+  assert.match(who('Maya Chen').role,/^Champion/);assert.equal(who('Maya Chen').workBasis,'role_default');assert.match(who('Maya Chen').responsibilities[0],/Coordinate the technical evaluation/);
+  assert.match(who('Alex Rivera').responsibilities[0],/initial repository readiness assessment/);assert.equal(who('Alex Rivera').workBasis,'stated');
+  assert.match(who('Jordan Lee').responsibilities[0],/find the service/);
+  const reasons=u.model!.discards!.map(d=>`${d.item}:${d.reason}`);
+  assert.ok(reasons.includes('person_work:work_not_attributed_to_person'));assert.ok(reasons.includes('person_role:role_not_attributed_to_person'));
+  const sent=s.calls.find(isPlan)!.messages[1].content;
+  assert.match(sent,/Maya Chen — Champion, Director of Platform Engineering — role: Coordinate/);
+  assert.match(sent,/Alex Rivera — Developer — assigned work: do the initial repository readiness assessment/);
+  assert.ok(!/Chris/.test(sent),'the account owner never reaches the planner');
+ }finally{await s.close();}
+});
+
+test('real failure shape: an account-owner milestone stays as an unassigned draft and does not remove valid milestones',async()=>{
+ const s=await stub(b=>isPlan(b)?{...plan,milestones:[
+   assess({recommended_role:'account_owner',proposed_assignee:'Maya Chen'}),
+   milestone({title:'Validate that payments-api and its docs are discoverable',proposed_assignee:'Jordan Lee',actions:['Search for payments-api in the Catalog','Open its docs and runbook links'],expected_evidence:['A discoverability check'],completion_criteria:['payments-api and its docs are found by someone who did not register them'],depends_on:'Assess payments-api repository readiness'}),
+   milestone({title:'Check payments-api ownership metadata',proposed_assignee:'Chris',actions:['Inspect catalog-info.yaml']})]}:realShape);
+ try{
+  const {understanding:u,proposal:p}=await analyzeWithModel(model(s.url),A);
+  assert.equal(u.model!.ok,true);
+  assert.deepEqual(p.milestones.map(m=>[m.objective,m.recommendedRole,m.proposedAssignee]),[
+   ['Assess payments-api repository readiness','unassigned',null],
+   ['Validate that payments-api and its docs are discoverable','developer','Jordan Lee']]);
+  const reasons=u.model!.discards!.map(d=>`${d.stage}/${d.item}/${d.reason}`);
+  assert.ok(reasons.includes('plan/milestone_role/account_owner_role_rejected'));
+  assert.ok(reasons.includes('plan/assignee/assignee_role_mismatch'),'the champion is not handed execution work');
+  assert.ok(reasons.includes('plan/milestone/too_few_actions'),'the broken third milestone alone is dropped');
+  assert.ok(!reasons.includes('plan/milestone/account_owner_task'));
+  assert.ok(p.milestones.every(m=>m.proposedAssignee!=='Chris'));
+  const role=(interpretSchema as any).properties.people.items.properties.role;assert.equal(role.type,'string');
+ }finally{await s.close();}
+ // Chris as a model-proposed assignee is refused even when the model lists him as a person.
+ const s2=await stub(b=>isPlan(b)?{...plan,milestones:[assess({proposed_assignee:'Chris'})]}:realShape);
+ try{
+  const {understanding:u,proposal:p}=await analyzeWithModel(model(s2.url),A);
+  assert.equal(p.milestones[0].proposedAssignee,null);assert.ok(u.model!.discards!.some(d=>d.reason==='assignee_not_technical'));
+ }finally{await s2.close();}
+});
+
+test('client: size limits are enforced by the server, not the sampling grammar',async()=>{
+ const sent=JSON.stringify(grammarSchema(interpretSchema));
+ assert.ok(!/maxLength|maxItems|minLength|minItems/.test(sent));
+ assert.ok(JSON.stringify(interpretSchema).includes('maxItems'),'the original schema keeps its limits');
+ assert.deepEqual(fit({a:['x','y','z'],b:'abcdef',c:null},{type:'object',properties:{a:{type:'array',items:{type:'string'},maxItems:2},b:{type:'string',maxLength:4},c:{anyOf:[{type:'string',maxLength:2},{type:'null'}]}}}),{a:['x','y'],b:'abc…',c:null});
+ const s=await stub(()=>({xs:['1','2','3','4']}));
+ try{
+  const r=await model(s.url).run({name:'t',system:'',user:'x',schema:{type:'object',properties:{xs:{type:'array',items:{type:'string'},maxItems:2}}},validate:v=>v as {xs:string[]}});
+  assert.deepEqual(r.value.xs,['1','2']);assert.deepEqual(s.calls[0].format,{type:'object',properties:{xs:{type:'array',items:{type:'string'}}}});
+ }finally{await s.close();}
+});
+
+test('client: Ollama timing fields are summed over attempts; throughput comes from eval_duration',async()=>{
+ let n=0;
+ const s=await stub(()=>n++===0?'{"cut':JSON.stringify({ok:true}),{raw:true,extra:{prompt_eval_duration:2e9,eval_duration:4e10,eval_count:240,load_duration:1e9}});
+ try{
+  const r=await model(s.url).run({name:'plan',system:'',user:'x',schema:{},validate:v=>v});
+  assert.equal(r.stats.attempts,2);assert.deepEqual(r.stats.attemptErrors,['INVALID_MODEL_OUTPUT:invalid_json']);
+  assert.deepEqual([r.stats.outputTokens,r.stats.evalMs,r.stats.promptEvalMs,r.stats.loadMs],[480,80000,4000,2000]);
+  assert.equal(r.stats.tokensPerSecond,6,'480 tokens in 80 s of generation');
+ }finally{await s.close();}
+ // A stage that fails still reports its timings to the run summary.
+ const bad=await stub(()=>'nope',{raw:true,extra:{eval_duration:1e9}});
+ try{
+  const {understanding:u}=await analyzeWithModel(model(bad.url),A);
+  assert.equal(u.model!.ok,false);assert.equal(u.model!.stages![0].attempts,2);assert.equal(u.model!.stages![0].evalMs,2000);
+ }finally{await bad.close();}
 });
