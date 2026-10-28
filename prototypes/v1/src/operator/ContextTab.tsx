@@ -51,12 +51,15 @@ function Analysis({record,onView,onContinue}:{record:HandoffRecord;onView:(id:st
  const m=record.proposal.milestones[0];
  return <>
   <section className="pt-card" aria-label="Known and unknown">
-   <div className="pt-card-head"><h3>What we know</h3><span className="pt-note" style={{marginTop:0}}>{u.interpreter==='hosted_model'?'Model-assisted analysis':'Rule-based analysis'}</span></div>
+   <div className="pt-card-head"><h3>What we know</h3><span className="pt-note" style={{marginTop:0}}>{u.model?.ok?`Local model · ${u.model.model}`:u.interpreter==='hosted_model'?'Model-assisted analysis':'Rule-based analysis · no language model'}</span></div>
+   {u.model&&!u.model.ok&&<div className="pt-banner warn" role="status">The local model wasn’t available ({u.model.error}), so this is the rule-based analysis. Check that Ollama is running, then analyze again.</div>}
    {u.contradictions.map(c=><div key={c.topic} className="pt-banner warn" role="status"><strong>{c.topic}:</strong>&nbsp;{c.summary}</div>)}
    <ul className="pt-findings">{known.map(f=><li key={f.id}><span className={'pt-pill '+STATUS[f.status][1]}>{STATUS[f.status][0]}</span><span>{f.statement}<Refs refs={f.sources} onView={onView}/></span></li>)}</ul>
    {u.goals.length>0&&<><p className="pt-label" style={{marginTop:22}}>Technical goal</p><p style={{marginTop:6}}>{u.goals[0].technicalGoal}</p></>}
+   {(u.baseline??[]).length>0&&<><p className="pt-label" style={{marginTop:22}}>Suggested checks</p><ul className="pt-findings">{u.baseline!.map(b=><li key={b.area+b.reason}><span className={'pt-pill '+(b.status==='verified'?'green':b.status==='suggested'?'blue':b.status==='unknown'?'amber':'')}>{b.status==='suggested'?'Suggested':b.status==='verified'?'Verified':b.status==='unknown'?'Unknown':'Reported'}</span><span>{b.area}<small>{b.reason}</small></span></li>)}</ul></>}
    <hr/>
    <h3>Still unknown</h3>
+   {(u.clarifications??[]).length>0&&<><p className="pt-label" style={{marginTop:16}}>Ask the customer</p><ul className="pt-list">{u.clarifications!.map(q=><li key={q}>{q}</li>)}</ul></>}
    {PRIORITY.map(([p,label])=>{const items=u.unknowns.filter(x=>x.priority===p);return items.length?<div key={p} aria-label={label}><p className="pt-label" style={{marginTop:16}}>{label}</p>
     <ul className="pt-findings">{items.map(x=><li key={x.id}><span className="pt-pill">{x.audience==='developer'?'Developer can check':'Ask the customer'}</span><span>{x.question}<small>{x.reason}</small></span></li>)}</ul></div>:null;})}
   </section>

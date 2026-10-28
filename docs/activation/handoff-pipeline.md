@@ -28,6 +28,35 @@ Types: `contracts/activation/v1/handoff.ts` (additive, outside the frozen 1.0.0 
 
 **Model-assisted (optional).** When the server has `PORTAL_LLM_ENDPOINT`/`PORTAL_LLM_MODEL` and a key (`PORTAL_LLM_API_KEY`, or `OPENAI_API_KEY` for the OpenAI endpoint), `hosted.ts` asks for structured findings and goals against a strict JSON schema. Every quote must be a literal substring of its source and every service/repository name must appear in the sources; any violation or provider error falls back to the rule-based result. Model findings are shown to Chris only; developer text is still template-generated. The demo launcher clears model credentials, so it always uses rule-based interpretation. Sources are sent to the configured provider only when an operator configures one.
 
+## Local model (Ollama) — Phase 1
+
+`services/workflow-api/src/llm/ollama.ts` is the shared server-side client (customer interpretation, planning, and later AiKA). Configuration, all server-side:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PORTAL_LLM_PROVIDER` | unset | `ollama` turns the local model on; unset means rule-based only |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | Loopback HTTP or HTTPS only |
+| `OLLAMA_MODEL` | `qwen3:4b` | Any pulled Ollama model |
+| `OLLAMA_TIMEOUT_MS` | `180000` | Per request; a timeout is not retried |
+| `OLLAMA_RETRIES` | `1` | Retries after invalid output or an unavailable server |
+| `OLLAMA_NUM_CTX` | `16384` | Context window requested from Ollama |
+
+Requests use `/api/chat` with `stream:false`, `think:false`, `temperature:0` and the task's JSON schema as `format`. Prompts and responses are never logged. The browser never talks to Ollama.
+
+`handoff/intelligence.ts` runs two tasks with separate prompts and inputs:
+1. **Interpret** (sources, chunked at about 9,000 characters on line boundaries, results merged): passages classified into the seven categories (conversation, CRM, Chris's notes, account preparation, technical requirements, repository observation, integration tools), engineering problems, technical facts, stakeholders, contradictions, unknowns and confidential passages. Every item must quote its source exactly; items that don't are discarded and counted. Only repository observations may be *verified*.
+2. **Plan** (receives technical facts, problems, stakeholder roles, unknowns and verified repository findings only — never commercial or confidential passages): baseline checks marked verified/reported/suggested/unknown, up to four role-aware milestones, clarification questions. The server drops vague titles, work assigned to the account owner, commercial text, and milestones without concrete actions, evidence and completion criteria. A proposed assignee must be a person named in the sources.
+
+Try it: `ollama pull qwen3:4b`, then `PORTAL_LLM_PROVIDER=ollama npm run handoff:scenarios --prefix services/workflow-api` (scenarios A–D in `test/fixtures/scenarios.json`), or start the demo with `PORTAL_LLM_PROVIDER=ollama` set.
+
+**Fallback.** Any model failure (`MODEL_UNAVAILABLE`, `MODEL_TIMEOUT`, `INVALID_MODEL_OUTPUT`, `CONTEXT_LIMIT`) produces the rule-based analysis with `understanding.model.ok=false` and the error code. Chris sees “Rule-based analysis · no language model” and a warning naming the error. The rule path proposes no milestone unless a concrete service or repository is named.
+
+**People.** Technical stakeholders (champion, platform, developers, service owners, security) are kept by name and role and reach developers as `handoff.team`. People in commercial or executive roles stay internal, and text naming them is blocked from developer fields.
+
+**Approvals (prepared, no UI).** Each draft carries `approvals` (Chris, Champion: pending) and `assignments` (status `proposed`). Publishing records Chris's approval; the Champion approval stays pending. Developers see an assignee only when its `assignmentStatus` is `approved`, which nothing sets yet.
+
+**Tested vs not tested.** Tested against a local stub of Ollama's API: request shape, timeout, unavailable server, invalid JSON with retry, non-loopback refusal, chunking, quote validation, commercial/injection screening, assignment gating, fallback labelling and HTTP-level leak checks. **Not tested:** a real model's reasoning, classification accuracy, role-aware planning quality and response times — Ollama could not be installed in the build environment.
+
 ## Milestones
 
 Playbooks: `service_readiness`, `techdocs`, `scaffolder`, `ci_investigation`. Each milestone has an objective, system (service, repository, platform), why it matters in engineering terms, concrete actions, prerequisites, required information, Portal destinations, expected output, completion criteria, dependencies and developer-resolvable unknowns. If no concrete service or repository is named, no milestone is produced and Chris sees what to collect instead.
@@ -45,4 +74,4 @@ Drafts are numbered (“Draft 2 · not published”); publishing freezes one as 
 
 ## Not in this change
 
-Champion Insights, task assignment, AiKA integration, Developer Insights, automatic progress events, workflow notifications, role selection and deeper repository analysis are separate, later steps.
+Champion approval UI, Champion Insights, task assignment UI, AiKA integration, Developer Insights, automatic progress events, workflow notifications, role selection and deeper repository analysis are separate, later steps.

@@ -73,6 +73,8 @@ export function proposeMilestones(u:Understanding):MilestoneProposal{
    completionCriteria:['A repository inspection is recorded against the current plan.','The failing step and cause are recorded as evidence.','A proposed fix is ready for review; nothing is merged.'],
    dependencies:['Pipeline log access'],
   };break;
+  // Model-proposed goals are planned by the model; the rule path never produces them.
+  default:return {milestones:[],missing:blocking};
  }
  return {milestones:[m],missing:blocking};
 }

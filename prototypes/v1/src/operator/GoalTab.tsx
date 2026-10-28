@@ -22,7 +22,7 @@ export function GoalTab({draft,session}:{draft:OperatorDraft;session:ActivationS
  </section>;
  if(!draft.record)return <section className="pt-card"><h3>Analyze the customer sources first</h3><p className="pt-note">The milestone is proposed from your sources and published with your agreement.</p>
   <div className="pt-actions"><button className="pt-btn sm" onClick={()=>navigate('/operator')}>Go to Customer Context</button></div></section>;
- const m=draft.milestone,set=(patch:Partial<MilestoneDraft>)=>m&&draft.setMilestone({...m,...patch});
+ const m=draft.milestone,others=draft.record.proposal.milestones.slice(1,3),set=(patch:Partial<MilestoneDraft>)=>m&&draft.setMilestone({...m,...patch});
  const ready=session.ready&&!draft.busy&&draft.confirmed&&!!m&&!!draft.outcome.trim()&&!!draft.agreedBy.trim()&&m.actions.length>0&&m.completionCriteria.length>0;
  return <section className="pt-card" aria-label="Agreed outcome">
   <div className="pt-card-head"><h3>Proposed first milestone</h3><span className="pt-pill">{versionLabel(draft.record)}</span></div>
@@ -35,6 +35,8 @@ export function GoalTab({draft,session}:{draft:OperatorDraft;session:ActivationS
     <div className="pt-field"><dt>Service</dt><dd>{m.system.service??'Not identified'}</dd></div>
     <div className="pt-field"><dt>Repository</dt><dd>{m.system.repository??'Not identified'}</dd></div>
     <div className="pt-field"><dt>Platform</dt><dd>{m.system.platform??'Not identified'}</dd></div>
+    {m.recommendedRole&&<div className="pt-field"><dt>Recommended role</dt><dd>{m.recommendedRole.replace('_',' ')}</dd></div>}
+    {m.recommendedRole&&<div className="pt-field"><dt>Proposed assignee</dt><dd>{m.proposedAssignee??'Not confirmed'}{m.proposedAssignee&&<small className="pt-sub">Needs Champion approval</small>}</dd></div>}
    </dl>
    <label className="pt-form-field"><span>Why it matters</span><textarea className="pt-textarea" aria-label="Why it matters" rows={3} maxLength={700} value={m.why} onChange={e=>set({why:e.target.value})}/></label>
    <label className="pt-form-field"><span>Actions · one per line</span><textarea className="pt-textarea" aria-label="Milestone actions" rows={5} value={m.actions.join('\n')} onChange={e=>set({actions:splitLines(e.target.value)})}/></label>
@@ -42,6 +44,8 @@ export function GoalTab({draft,session}:{draft:OperatorDraft;session:ActivationS
    <label className="pt-form-field"><span>Completion criteria · one per line</span><textarea className="pt-textarea" aria-label="Completion criteria" rows={4} value={m.completionCriteria.join('\n')} onChange={e=>set({completionCriteria:splitLines(e.target.value)})}/></label>
    <p className="pt-label" style={{marginTop:18}}>Before starting</p>
    <ul className="pt-list">{m.prerequisites.map(p=><li key={p.text}>{p.text} <span className={'pt-pill '+(p.state==='met'?'green':p.state==='unmet'?'red':'amber')}>{p.state}</span></li>)}</ul>
+   {others.length>0&&<><p className="pt-label" style={{marginTop:18}}>Dependent milestones · published with the first</p>
+    <ul className="pt-findings">{others.map(o=><li key={o.id}><span className="pt-pill">{o.recommendedRole?.replace('_',' ')??'developer'}</span><span>{o.objective}<small>{o.proposedAssignee?`Proposed: ${o.proposedAssignee} · needs Champion approval`:'Assignee not confirmed'}{o.dependencies.length?` · after: ${o.dependencies.join(', ')}`:''}</small></span></li>)}</ul></>}
    <hr/>
    <label className="pt-form-field"><span>Agreed activation outcome</span><textarea className="pt-textarea" style={{minHeight:72}} aria-label="Agreed activation outcome" rows={2} maxLength={300} value={draft.outcome} onChange={e=>draft.setOutcome(e.target.value)}/></label>
    <label className="pt-form-field"><span>Who agreed, when, and where it was recorded</span><input className="pt-input" aria-label="Agreement attribution" maxLength={200} value={draft.agreedBy} onChange={e=>draft.setAgreedBy(e.target.value)} placeholder="e.g. Platform lead, 14 Oct discovery call"/></label>

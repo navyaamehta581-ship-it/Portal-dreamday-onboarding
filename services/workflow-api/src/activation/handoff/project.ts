@@ -6,10 +6,17 @@ import type {DeveloperHandoff,MilestoneDraft,TechnicalNote,Understanding} from '
 import type {EvidenceRecord} from '../../../../../contracts/activation/v1/types.ts';
 import {interpretRuleBased} from './interpret.ts';
 import {proposeMilestones} from './milestones.ts';
+import {developerSafe,technicalRole} from './intelligence.ts';
 
 const plain=(s:string)=>s.replace(/\.$/,'');
 /** Two or three sentences per topic, written for the developer's current milestone. */
 export function technicalNotes(u:Understanding,m:MilestoneDraft|null):TechnicalNote[]{
+ if(u.interpreter==='hosted_model'&&u.model?.ok){
+  // Model facts reach developers only after the same screen as milestone text; one note per topic.
+  const seen=new Set<string>();
+  return u.findings.filter(f=>f.audience==='developer'&&f.status!=='outdated'&&developerSafe(f.statement,u)&&!seen.has(f.topic)&&seen.add(f.topic)).slice(0,6)
+   .map(f=>({topic:f.topic,text:f.statement,status:f.status==='verified'?'verified':f.status==='reported'?'reported':'assumption'}));
+ }
  const dev=u.findings.filter(f=>f.audience==='developer');
  const pick=(topic:string)=>dev.find(f=>f.topic===topic&&f.status!=='outdated');
  const status=(t:string)=>{const f=pick(t);return f?.status==='verified'?'verified':f?.status==='assumption'||f?.status==='contradicted'?'assumption':'reported';};
@@ -37,8 +44,11 @@ export function developerSummary(m:MilestoneDraft|null,u:Understanding):string{
 
 export function developerHandoff(version:number,publishedAt:string,u:Understanding,milestones:MilestoneDraft[]):DeveloperHandoff{
  const m=milestones[0]??null;
- return {version,publishedAt,interpreter:u.interpreter,summary:developerSummary(m,u),context:technicalNotes(u,m),
-  unknowns:u.unknowns.filter(x=>x.audience==='developer'&&x.priority!=='not_needed_now').map(x=>({question:x.question,reason:x.reason})),milestones};
+ // Assignments stay proposed until the Champion approves them; the projection hides unapproved assignees.
+ milestones=milestones.map(x=>({...x,assignmentStatus:x.assignmentStatus??'proposed'}));
+ const team=(u.stakeholders??[]).filter(s=>s.name&&technicalRole(s.role)&&developerSafe(s.role,u)).map(s=>({name:s.name!,role:s.role.slice(0,80),status:s.confidence==='reported'?'reported' as const:'inferred' as const}));
+ return {...(team.length?{team}:{}),version,publishedAt,interpreter:u.interpreter,summary:developerSummary(m,u),context:technicalNotes(u,m),
+  unknowns:u.unknowns.filter(x=>x.audience==='developer'&&x.priority!=='not_needed_now'&&developerSafe(x.question,u)).map(x=>({question:x.question,reason:developerSafe(x.reason,u)?x.reason:''})),milestones};
 }
 
 const SAFE_KINDS=new Set(['github_observation','developer_report','action_record','verified_outcome']);
@@ -82,6 +92,7 @@ export function developerState(state:ActivationState,stored:DeveloperHandoff|nul
   if(money.test(s.plan.selectedMilestone.outcome))s.plan.selectedMilestone={...s.plan.selectedMilestone,outcome:'First milestone'};
  }
  s.outcome={...s.outcome,scope:m?.objective??'First milestone'};
- s.handoff=h;
+ // Field-level rule: an assignee is visible to developers only after the assignment is approved.
+ s.handoff={...h,milestones:h.milestones.map(x=>x.assignmentStatus==='approved'?x:{...x,proposedAssignee:null})};
  return s;
 }

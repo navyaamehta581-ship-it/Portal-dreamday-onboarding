@@ -13,6 +13,9 @@ import { createReplanWorker } from './worker.ts';
 import { openHandoffStore } from './handoff/store.ts';
 import { createHandoffService } from './handoff/service.ts';
 import { hostedInterpreter } from './handoff/hosted.ts';
+import { analyzeWithModel } from './handoff/intelligence.ts';
+import { proposeMilestones } from './handoff/milestones.ts';
+import { createOllama, ollamaConfigFromEnv } from '../llm/ollama.ts';
 /** Explicit loopback development mode, not production authentication. */
 export function developmentActivation(goalFilename:string) {
   if(process.env.ACTIVATION_DEV!=='1')return null;
@@ -33,8 +36,11 @@ export function developmentActivation(goalFilename:string) {
   store=openActivationStore(filename,setupApprovalPolicy(github.policy,process.env.ACTIVATION_SETUP_APPROVAL_GRANTS?JSON.parse(readFileSync(process.env.ACTIVATION_SETUP_APPROVAL_GRANTS,'utf8')) as SetupApprovalGrant[]:[]));
   // Server-built report replacements or exact operator-reviewed plans; both remain suggestions.
   const handoffs=openHandoffStore(filename);
-  const model=hostedInterpreter();
-  const handoff=createHandoffService({handoffs,store:()=>store,interpret:model.interpret,stage:intake.stage,release:intake.release,publishEnabled:process.env.ACTIVATION_INTAKE==='1'});
+  // PORTAL_LLM_PROVIDER=ollama uses the local model; otherwise an OpenAI-compatible endpoint if configured, else rules.
+  const ollama=ollamaConfigFromEnv();
+  const hosted=hostedInterpreter();
+  const analyze=ollama?(s:import('../../../../contracts/activation/v1/handoff.ts').SourceInput[])=>analyzeWithModel(createOllama(ollama),s):async(s:import('../../../../contracts/activation/v1/handoff.ts').SourceInput[])=>{const understanding=await hosted.interpret(s);return {understanding,proposal:proposeMilestones(understanding)};};
+  const handoff=createHandoffService({handoffs,store:()=>store,analyze,stage:intake.stage,release:intake.release,publishEnabled:process.env.ACTIVATION_INTAKE==='1'});
   const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);
   const stop=worker.start();
   return {options:{handoff,isOperator:(request:import('node:http').IncomingMessage)=>!!operatorToken&&request.headers.authorization===`Bearer ${operatorToken}`,store,prepareGitHub:github.prepare,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:(p:import('./store.ts').Principal,context:import('../../../../contracts/activation/v1/types.ts').CustomerContext)=>bundles.find(b=>isDeepStrictEqual(b.principal,p)&&isDeepStrictEqual(b.context,context))?.plans.find(plan=>plan.contextRevision===context.revision&&plan.revision===0&&plan.supersedesRevision===null)??null,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>(request.headers.authorization===`Bearer ${token}`||(!!operatorToken&&request.headers.authorization===`Bearer ${operatorToken}`))&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},async close(){await stop();handoffs.close();store.close();}};
