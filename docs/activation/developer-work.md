@@ -1,5 +1,7 @@
 # Developer work and AiKA (Phase 5)
 
+> **Updated by the role redesign and the non-blocking flow.** Where this page talks about Champion approval, submitting for Champion review, assigned work, the Repository, Evidence or Team tabs, inspecting repositories by hand, "Ask Chris" or developer Insights, [roles-and-opportunities.md](roles-and-opportunities.md) is current: Chris's **Finalize and publish** publishes the plan to the Champion and developers with no approval step ("approved" on this page now means "published"), developers choose their work, the Portal observes repositories itself, and progress is what people record in Portal (nothing is detected automatically).
+
 After Maya approves the plan in [Dream Day](dream-day.md), Alex and Jordan each work through their own approved milestones inside the developer Portal. AiKA helps them, using approved, developer-safe context only.
 
 ## What each person sees

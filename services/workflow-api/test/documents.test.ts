@@ -150,14 +150,14 @@ test('upload errors: specific codes, nothing saved, and the workflow state is re
   assert.equal((await h.call('aperture','handoff','op')).json.workspace.revision,0,'nothing was saved by a refused upload');
   const first=await up(aperturePdf());assert.equal(first.status,202);
   for(let i=0;i<100&&(await h.call('aperture','handoff-analyses','op')).json.job.status==='running';i++)await new Promise(x=>setTimeout(x,10));
-  // Submitted for Champion review: the information can't change until Chris withdraws it.
+  // Finalized (and so published): the information can no longer change.
   const o=(await h.call('aperture','handoff','op')).json,d=o.drafts.at(-1);
   const review={...d.review,stakeholders:[{id:'p1',name:'Maya Chen',role:'Champion',responsibilities:'Coordinate',basis:'stated',sources:[],technical:true},{id:'p2',name:'Alex Rivera',role:'Developer',responsibilities:'',basis:'stated',sources:[],technical:true}],
    milestones:d.review.milestones.map((m:object)=>({...m,assignee:'Alex Rivera'}))};
   await h.call('aperture','handoff-reviews','op',{draft:d.draft,expectedRevision:d.reviewRevision??0,review});
   const s=await h.call('aperture','handoff-submissions','op',{draft:d.draft,reviewRevision:(d.reviewRevision??0)+1,action:'submit',confirmed:true},'Chris');
   assert.equal(s.status,200,s.raw);
-  const blocked=await up(aperturePdf());assert.equal(blocked.status,409);assert.equal(blocked.json.error.code,'AWAITING_CHAMPION_REVIEW');
+  const blocked=await up(aperturePdf());assert.equal(blocked.status,409);assert.equal(blocked.json.error.code,'ALREADY_PUBLISHED');
  }finally{await h.close();}
 });
 

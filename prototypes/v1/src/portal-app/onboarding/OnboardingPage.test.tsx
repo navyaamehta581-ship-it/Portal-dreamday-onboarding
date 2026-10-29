@@ -4,67 +4,71 @@ import {act} from 'react';
 import {OnboardingPage,type Tab} from './OnboardingPage';
 import {useActivation,type ActivationSession} from '../../activation/useActivation';
 import {useMilestoneWork} from '../work/useMilestoneWork';
-import {byLabel,click,fixtureState,mockApi,mount,type} from '../../activation/testing';
-import type {ActivationState} from '../../../../../contracts/activation/v1/state';
+import {useOpportunities} from '../adoption/useOpportunities';
+import {click,fixtureState,flush,mockApi,mount} from '../../activation/testing';
+import type {Opportunities,TeamProgress} from '../../../../../contracts/activation/v1/handoff';
 
 let api:ReturnType<typeof mockApi>,m:ReturnType<typeof mount>,session:ActivationSession;
 const account={id:'a',label:'Orbit',user:'Alex',customerId:'orbit'};
-function Harness({tab}:{tab:Tab}){session=useActivation(api,'scope');const work=useMilestoneWork(api);return <OnboardingPage session={session} tab={tab} account={account} work={work}/>;}
-async function load(state:ActivationState,tab:Tab='overview'){api.read.mockResolvedValue(state);await m.render(<Harness tab={tab}/>);await act(async()=>{await session.refresh();});}
-beforeEach(()=>{vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);api=mockApi();m=mount();});
+function Harness({tab}:{tab:Tab}){session=useActivation(api,'scope');const work=useMilestoneWork(api),opps=useOpportunities(api);return <OnboardingPage session={session} tab={tab} account={account} work={work} opps={opps}/>;}
+async function load(tab:Tab='overview'){api.read.mockResolvedValue(fixtureState('orbit'));await m.render(<Harness tab={tab}/>);await act(async()=>{await session.refresh();});await flush();await flush();}
+const text=()=>m.host.textContent??'';
+
+// An approved plan: Alex is the suggested owner of one milestone; nobody has picked up the other.
+const outline=(t:string)=>({description:`${t} for the pilot`,system:'payments-api',actions:[`Start: ${t}`,'Record findings'],completionCriteria:['Each item is marked verified, missing or inaccessible']});
+const progress=(patch:Partial<TeamProgress['milestones'][number]>={}):TeamProgress=>({viewer:{role:'developer',name:'Alex Rivera'},approval:{by:'Maya Chen',at:'2026-10-29T10:00:00Z'},objective:{problem:'Nobody can tell who owns a service.',goals:['Make ownership discoverable'],questions:[]},
+ milestones:[{id:'m-1',title:'Assess payments-api readiness',assignee:'Alex Rivera',status:'not_started',openBlockers:0,mine:true,suggestedForMe:true,workingOn:[],revision:0,dependsOn:[],outline:outline('Assess payments-api readiness'),actionsCompleted:0,actionsTotal:2,
+   detail:{description:'',system:'payments-api',actions:[{index:0,text:'Start',status:'not_started',at:null,by:null},{index:1,text:'Record findings',status:'not_started',at:null,by:null}],completionCriteria:[],updates:[],revision:0,updatedAt:null,updatedBy:null}},
+  {id:'m-2',title:'Register payments-api in the Catalog',assignee:null,status:'not_started',openBlockers:0,mine:false,suggestedForMe:false,workingOn:[],revision:2,dependsOn:[],outline:outline('Register payments-api in the Catalog'),detail:null,...patch}]});
+const opportunities=(mine=false):Opportunities=>({viewer:{role:'developer',name:'Alex Rivera'},observedAt:'2026-10-29T12:30:00Z',
+ goals:[{id:'g1',text:'Make ownership discoverable',priority:'high',milestones:[{id:'m-1',title:'Assess payments-api readiness',status:'not_started'}],completed:0,total:1}],
+ opportunities:[{id:'o-owners',kind:'improvement',title:'Record who owns payments-api’s code',why:'Supports your goal: Make ownership discoverable',basis:'verified',evidence:['No CODEOWNERS file found (live, read-only).'],steps:['Add a CODEOWNERS file listing the owning team.','Ask AiKA to check the owner shown in Portal.'],service:'payments-api',goal:'g1',priority:'high',highlighted:true,pursuers:mine?1:0,mine},
+  {id:'o-techdocs',kind:'integration',title:'Publish payments-api docs in TechDocs',why:'Your plan mentions scattered docs.',basis:'hypothesis',evidence:['From the onboarding plan'],steps:['Add mkdocs.yml next to the docs.'],service:'payments-api',goal:null,priority:null,highlighted:false,pursuers:0,mine:false}]});
+beforeEach(()=>{vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);api=mockApi();m=mount();window.history.replaceState(null,'','/activation');});
 afterEach(async()=>{await m.unmount();vi.unstubAllGlobals();sessionStorage.clear();});
 
-it('shows the customer-specific milestone, context and unknowns with no credential or operator fields',async()=>{
- const s=fixtureState('orbit');await load(s);
- expect(m.host.textContent).toContain(s.plan.selectedMilestone.outcome);
- expect(m.host.textContent).toContain(s.context.agreedGoal.text);
- expect(m.host.textContent).toContain(s.context.constraints[0]);
- expect(m.host.querySelector('input[type=password]')).toBeNull();
- expect(m.host.textContent).not.toMatch(/Raw account|Activation at a glance|access token/);
- expect(m.host.querySelector('[role=tab]#tab-team')).toBeNull();
- await click(m.host,'Accept this onboarding direction');
- expect(m.host.querySelector('[role=tab]#tab-team')).not.toBeNull();
- expect(m.host.textContent).toContain('Direction accepted');expect(m.host.textContent).toContain('1 of 3 completed');
+it('before the plan is published: says so, with no tabs, credentials, setup or operator fields',async()=>{
+ api.opportunities.mockRejectedValue(new Error('NO_APPROVED_PLAN'));
+ await load();
+ expect(text()).toContain('Your team’s onboarding plan isn’t published yet');expect(text()).not.toMatch(/approv/i);
+ expect(m.host.querySelector('[role=tab]')).toBeNull();
+ expect(m.host.querySelector('input[type=password],input[type=file]')).toBeNull();
+ expect(text()).not.toMatch(/Chris|access token|Raw account/);
 });
 
-it('sends a guide question as an attributed report and a blocker through the blocker route',async()=>{
- await load(fixtureState('orbit'),'guide');
- expect(m.host.textContent).toContain('Not AiKA');
- api.reportProgress.mockResolvedValue(fixtureState('orbit',{revision:1}));
- await type(byLabel<HTMLTextAreaElement>(m.host,'Question or update')!,'Who owns the catalog metadata?');
- await click(m.host,'Send');
- expect(api.reportProgress).toHaveBeenCalledWith(expect.objectContaining({message:'Who owns the catalog metadata?',needsChris:false,expectedRevision:0}));
- await type(byLabel<HTMLSelectElement>(m.host,'Message type')!,'blocker');
- api.reportBlocker.mockResolvedValue(fixtureState('orbit',{revision:2}));
- await type(byLabel<HTMLTextAreaElement>(m.host,'Blocker note')!,'No staging deploy permission');
- await click(m.host,'Submit blocker');
- expect(api.reportBlocker).toHaveBeenCalledWith(expect.objectContaining({message:'No staging deploy permission',expectedRevision:1}));
+it('overview: goals, engineering opportunities labelled verified or hypothesis, and milestones to choose; nothing assigned, no Chris',async()=>{
+ api.milestoneWork.mockResolvedValue(progress());api.opportunities.mockResolvedValue(opportunities());
+ await load();
+ expect(Array.from(m.host.querySelectorAll('[role=tab]')).map(t=>t.textContent)).toEqual(['Overview','My milestones','Guide']);
+ expect(m.host.querySelector('[aria-label="Goal: Make ownership discoverable"]')!.textContent).toContain('0 of 1 related milestone completed');
+ const card=(t:string)=>m.host.querySelector(`[aria-label="Opportunity: ${t}"]`) as HTMLElement;
+ expect(card('Record who owns payments-api’s code').querySelector('[data-basis]')!.textContent).toBe('Verified');
+ expect(card('Record who owns payments-api’s code').textContent).toContain('Recommended by your Champion');
+ expect(card('Publish payments-api docs in TechDocs').querySelector('[data-basis]')!.textContent).toBe('Hypothesis');
+ // What backs it is one click away.
+ await click(card('Record who owns payments-api’s code'),'Show details: Record who owns payments-api’s code');
+ expect(card('Record who owns payments-api’s code').textContent).toContain('No CODEOWNERS file found (live, read-only).');
+ const choices=m.host.querySelector('[aria-label="Milestones to choose from"]')!.textContent!;
+ expect(choices).toContain('Suggested for you');expect(choices).toContain('Nobody has picked it up yet');
+ expect(text()).not.toMatch(/Chris|Share your progress|Team & Evidence|Upload|Repository|kickoff|assigned to you/i);
+ // Choosing a milestone that isn't theirs uses its outline's revision.
+ api.updateMilestone.mockResolvedValue(progress({mine:true,workingOn:['Alex Rivera'],revision:3}));
+ await click(m.host.querySelector('[aria-label="Milestones to choose from"] [aria-label="Milestone: Register payments-api in the Catalog"]') as HTMLElement,'Choose this milestone');await flush();
+ expect(api.updateMilestone).toHaveBeenCalledWith('m-2',2,{pursue:true});
+ // Pursuing an opportunity is the developer's choice.
+ api.pursueOpportunity.mockResolvedValue(opportunities(true));
+ await click(card('Record who owns payments-api’s code'),'Pursue this');await flush();
+ expect(api.pursueOpportunity).toHaveBeenCalledWith('o-owners',true);
+ expect(card('Record who owns payments-api’s code').textContent).toContain('1 developer pursuing (including you)');
 });
 
-it('labels prepared packets as not approved, executed or verified and gates proposal acceptance on review',async()=>{
- const base=fixtureState('orbit');
- const packet={id:'prepare:1',commandDigest:'c',scopeDigest:'s',actionId:base.plan.suggestedNextAction.id,actionRevision:0,planRevision:0,startedRevision:1,status:'prepared' as const,repository:'acme/app',commit:'a'.repeat(40),templatePath:'t.yaml',templateBlob:null,observedAt:'2026-01-01T00:00:00Z',completedAt:'2026-01-01T00:00:01Z',evidenceIds:[],artifact:'file',artifactDigest:'d'.repeat(64),blockers:['Deploy permission missing'],errorCode:null,
-  setupProposal:{version:1 as const,sourceTree:'x',kind:'fictional_recommendation_service_setup' as const,targetPath:'p',proposedFile:'f',diff:'+x',templateReview:'reviewed_known_template' as const,dependencies:[],missingPrerequisites:['Owner unknown'],semantics:[],readyToRun:false as const},
-  authorization:'inspect_prepare_only' as const,approved:false as const,executed:false as const,verified:false as const,prUrl:null};
- await load(fixtureState('orbit',{githubPreparations:{[packet.id]:packet}}),'repository');
- expect(m.host.querySelector('[aria-label="Packet state"]')!.textContent).toContain('YesNoNoNoNone');
- const accept=()=>Array.from(m.host.querySelectorAll('button')).find(b=>b.textContent==='Accept proposal only')!;
- expect(accept().disabled).toBe(true);
- await act(async()=>{byLabel(m.host,'Reviewed proposal prepare:1')!.click();});
- expect(accept().disabled).toBe(false);
- api.acceptSetupProposal.mockResolvedValue(fixtureState('orbit'));
- await click(m.host,'Accept proposal only');
- expect(api.acceptSetupProposal).toHaveBeenCalledWith(expect.objectContaining({preparationId:'prepare:1',artifactDigest:'d'.repeat(64),decision:'accept_proposal_only'}));
-});
-
-it('edits and copies the kickoff message, and handles unavailable clipboard',async()=>{
- await load(fixtureState('orbit'),'team');await act(async()=>{session.direction.accept();});
- await m.render(<Harness tab="team"/>);
- const box=byLabel<HTMLTextAreaElement>(m.host,'Champion kickoff message')!;
- expect(box.value).toContain('isn’t verified yet');
- await type(box,'Edited kickoff');
- const write=vi.fn().mockRejectedValue(new Error('denied'));vi.stubGlobal('navigator',{clipboard:{writeText:write}});
- await click(m.host,'Copy kickoff message');
- expect(write).toHaveBeenCalledWith('Edited kickoff');
- expect(m.host.textContent).toContain('Copy unavailable');
+it('guide: step-by-step help for each opportunity, the pursued ones first, with AiKA for anything specific',async()=>{
+ api.milestoneWork.mockResolvedValue(progress());api.opportunities.mockResolvedValue({...opportunities(),opportunities:[...opportunities().opportunities].reverse().map(o=>o.id==='o-owners'?{...o,mine:true,pursuers:1}:o)});
+ await load('guide');
+ const guides=Array.from(m.host.querySelectorAll('[aria-label^="Guide: "]'));
+ expect(guides.map(g=>g.getAttribute('aria-label'))).toEqual(['Guide: Record who owns payments-api’s code','Guide: Publish payments-api docs in TechDocs']);
+ expect(guides[0].textContent).toContain('Add a CODEOWNERS file listing the owning team.');
+ await click(guides[0] as HTMLElement,'Ask AiKA about this');
+ expect(window.location.pathname+window.location.search).toBe('/aika?opportunity=o-owners');
+ expect(text()).not.toMatch(/Chris|Not AiKA|Submit blocker/);
 });

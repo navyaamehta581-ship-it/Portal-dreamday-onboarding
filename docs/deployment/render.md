@@ -123,6 +123,28 @@ If Chris's analysis says *"The AI model isn't set up correctly on this server â€
 
 After changing a variable, Render restarts the service, which runs the check again. On the free plan the restart also clears demo rooms.
 
+### One Gemini model for the analysis and AiKA
+
+The same `GEMINI_API_KEY` and `GEMINI_MODEL` power Chris's analysis and AiKA's answers, and both count against `PORTAL_AI_DAILY_REQUEST_LIMIT`. Without a key, the analysis is labelled rule-based and AiKA says it isn't connected to a model.
+
+For local development, `PORTAL_LLM_PROVIDER=gemini` with `GEMINI_API_KEY` (and optional `GEMINI_MODEL`) uses Gemini for both in the dev server too. `AIKA_LLM_PROVIDER=gemini` uses it for AiKA only.
+
+### Live check with the fictional sample PDF
+
+With a real key in the environment (never on the command line), run this from `services/workflow-api`:
+
+```
+npm run verify:gemini
+```
+
+It starts the hosted server in-process and goes through the workflow with the fictional sample PDF:
+1. Gemini accepts the key and model.
+2. The analysis is produced by Gemini, not the rule-based fallback.
+3. Chris finalizes and publishes.
+4. AiKA answers a developer's question through Gemini.
+
+It makes about 4â€“8 real requests and prints only codes, counts and AiKA's first sentence; the key, prompts and document text are never printed. It exits non-zero if any step fails, with the code from the table above.
+
 ## Day-to-day
 
 | Task | How |

@@ -1,4 +1,5 @@
-import {ArrowDown,ArrowUp,Plus,Trash2,X} from 'lucide-react';
+import {useEffect,useState,type ReactNode} from 'react';
+import {ArrowDown,ArrowUp,ChevronDown,ChevronUp,Plus,Trash2,X} from 'lucide-react';
 import type {ReviewItem,ReviewMilestone} from '../../../../contracts/activation/v1/handoff';
 
 /** Review editors shared by Chris's Onboarding Draft and the Champion's Dream Day review. Each item shows where it
@@ -13,6 +14,20 @@ const id=newId;
 export function Origin({item,suggestion,customerLabel='From customer sources',viewer='chris'}:{item:{origin:string;edited?:boolean};suggestion:string;customerLabel?:string;viewer?:Viewer}){
  const label=item.origin==='customer'?customerLabel:item.origin==='ai'?suggestion:item.origin===viewer?'Added by you':item.origin==='chris'?'Added by Chris':'Added by Champion';
  return <span className={'pt-pill '+(item.origin==='customer'?'':item.origin==='ai'?'blue':'green')}>{label}{item.edited&&item.origin!==viewer?' · edited':''}</span>;
+}
+/** A collapsible section: the scannable header (title, count, one-line summary) always shows; the detail opens on
+ * demand. `forceOpen` opens it whenever it contains something that must be fixed, so a toggle never hides an error. */
+export function Section({id,title,count,summary,defaultOpen=false,forceOpen=false,children}:{id:string;title:string;count?:number;summary?:ReactNode;defaultOpen?:boolean;forceOpen?:boolean;children:ReactNode}){
+ const [open,setOpen]=useState(defaultOpen||forceOpen);
+ useEffect(()=>{if(forceOpen)setOpen(true);},[forceOpen]);
+ return <section className={'pt-card pt-section'+(open?' open':'')} aria-label={title} id={id}>
+  <button className="pt-section-head" aria-expanded={open} aria-controls={id+'-body'} onClick={()=>setOpen(!open)}>
+   <span className="pt-section-title"><h3>{title}</h3>{count!==undefined&&<span className="pt-count" aria-label={`${count} item${count===1?'':'s'}`}>{count}</span>}</span>
+   {summary&&<span className="pt-section-summary">{summary}</span>}
+   <span className="chev" aria-hidden="true">{open?<ChevronUp size={18}/>:<ChevronDown size={18}/>}</span>
+  </button>
+  {open&&<div className="pt-section-body" id={id+'-body'}>{children}</div>}
+ </section>;
 }
 export const STATUS:Record<string,[string,string]>={verified:['Verified','green'],reported:['Reported',''],unconfirmed:['Unconfirmed','amber']};
 
@@ -34,35 +49,45 @@ export function Items({label,title,hint,items,suggestion,customerLabel,single,vi
  </div>;
 }
 
-export function Milestones({milestones:ms,people,suggestion,viewer='chris',hint='In the order the team should work. Proposed assignees stay proposals until the Champion approves them.',onChange}:{milestones:ReviewMilestone[];people:string[];suggestion:string;viewer?:Viewer;hint?:string;onChange:(x:ReviewMilestone[])=>void}){
+/** Milestones as scannable rows (title, suggested owner, what it waits for); a row opens to edit its detail.
+ * `open` lists milestone ids to open (for example ones with a problem to fix). */
+export function Milestones({milestones:ms,people,suggestion,viewer='chris',hint='In the order the team should work. A suggested owner is optional: developers choose the work they pursue.',open:forced=[],onChange}:{milestones:ReviewMilestone[];people:string[];suggestion:string;viewer?:Viewer;hint?:string;open?:string[];onChange:(x:ReviewMilestone[])=>void}){
+ const [expanded,setExpanded]=useState<string[]>([]);
+ useEffect(()=>{if(forced.length)setExpanded(e=>[...new Set([...e,...forced])]);},[forced.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
  const edit=(i:number,patch:Partial<ReviewMilestone>)=>onChange(ms.map((m,j)=>j===i?{...m,...patch,...(m.origin!==viewer?{edited:true}:{})}:m));
  const move=(i:number,by:number)=>{const next=[...ms];[next[i],next[i+by]]=[next[i+by],next[i]];onChange(next);};
  const remove=(i:number)=>onChange(ms.filter((_,j)=>j!==i).map(m=>({...m,dependsOn:m.dependsOn.filter(d=>d!==ms[i].id)})));
- return <section className="pt-card" aria-label="Onboarding milestones">
-  <h3>Onboarding milestones</h3><p className="pt-note">{hint}</p>
+ const toggle=(id:string)=>setExpanded(e=>e.includes(id)?e.filter(x=>x!==id):[...e,id]);
+ const title=new Map(ms.map((m,i)=>[m.id,`Milestone ${i+1}`]));
+ return <div className="pt-milestones-edit">
+  <p className="pt-note" style={{marginTop:0}}>{hint}</p>
   {ms.length===0&&<p className="pt-note">No milestones yet. Add one, or analyze again with more technical detail.</p>}
-  {ms.map((m,i)=><article className="pt-milestone" key={m.id} aria-label={`Milestone ${i+1}`}>
+  {ms.map((m,i)=>{const isOpen=expanded.includes(m.id);return <article className={'pt-milestone'+(isOpen?' open':'')} key={m.id} aria-label={`Milestone ${i+1}`}>
    <div className="pt-milestone-head">
-    <strong>Milestone {i+1}</strong><Origin item={m} suggestion={suggestion} viewer={viewer}/>
-    <span className="grow"/>
+    <span className="pt-milestone-num">{i+1}</span>
+    <div className="pt-milestone-sum"><strong>{m.title||'Untitled milestone'}</strong>
+     <small>{m.assignee?`Suggested owner: ${m.assignee}`:'No suggested owner yet'}{m.dependsOn.length?` · after ${m.dependsOn.map(d=>title.get(d)).filter(Boolean).join(', ')}`:''}{m.system?` · ${m.system}`:''}</small></div>
+    <Origin item={m} suggestion={suggestion} viewer={viewer}/>
+    <button className="pt-tool" aria-expanded={isOpen} aria-label={`${isOpen?'Close':'Edit'} milestone ${i+1}`} onClick={()=>toggle(m.id)}>{isOpen?'Close':'Edit'}</button>
     <button className="pt-tool" aria-label={`Move milestone ${i+1} up`} disabled={i===0} onClick={()=>move(i,-1)}><ArrowUp size={15}/></button>
     <button className="pt-tool" aria-label={`Move milestone ${i+1} down`} disabled={i===ms.length-1} onClick={()=>move(i,1)}><ArrowDown size={15}/></button>
     <button className="pt-tool" aria-label={`Remove milestone ${i+1}`} onClick={()=>remove(i)}><Trash2 size={15}/></button>
    </div>
+   {isOpen&&<div className="pt-milestone-body">
    <label className="pt-form-field"><span>Title</span><input className="pt-input" aria-label={`Milestone ${i+1} title`} maxLength={200} value={m.title} onChange={e=>edit(i,{title:e.target.value})}/></label>
    <label className="pt-form-field"><span>Description</span><textarea className="pt-textarea compact" aria-label={`Milestone ${i+1} description`} rows={rowsFor(m.description,3)} maxLength={1200} value={m.description} onChange={e=>edit(i,{description:e.target.value})}/></label>
    <label className="pt-form-field"><span>System</span><input className="pt-input" aria-label={`Milestone ${i+1} system`} maxLength={200} value={m.system} placeholder="e.g. payments-api · aperture/payments" onChange={e=>edit(i,{system:e.target.value})}/></label>
    <label className="pt-form-field"><span>Actions · one per line</span><textarea className="pt-textarea compact" aria-label={`Milestone ${i+1} actions`} rows={Math.max(3,m.actions.length+1)} value={m.actions.join('\n')} onChange={e=>edit(i,{actions:e.target.value.split('\n')})}/></label>
    <label className="pt-form-field"><span>Completion criteria · one per line</span><textarea className="pt-textarea compact" aria-label={`Milestone ${i+1} completion criteria`} rows={Math.max(2,m.completionCriteria.length+1)} value={m.completionCriteria.join('\n')} onChange={e=>edit(i,{completionCriteria:e.target.value.split('\n')})}/></label>
    <div className="pt-form-row two">
-    <label className="pt-form-field"><span>Proposed assignee</span><select className="pt-input" aria-label={`Milestone ${i+1} proposed assignee`} value={m.assignee??''} onChange={e=>edit(i,{assignee:e.target.value||null})}>
-     <option value="">Not decided</option>{[...new Set([...people,...(m.assignee?[m.assignee]:[])])].map(n=><option key={n} value={n}>{n}{people.includes(n)?'':' (not a technical stakeholder)'}</option>)}</select></label>
+    <label className="pt-form-field"><span>Suggested owner (optional)</span><select className="pt-input" aria-label={`Milestone ${i+1} suggested owner`} value={m.assignee??''} onChange={e=>edit(i,{assignee:e.target.value||null})}>
+     <option value="">Not decided · anyone can pick it up</option>{[...new Set([...people,...(m.assignee?[m.assignee]:[])])].map(n=><option key={n} value={n}>{n}{people.includes(n)?'':' (not a technical stakeholder)'}</option>)}</select></label>
     <label className="pt-form-field"><span>Role</span><select className="pt-input" aria-label={`Milestone ${i+1} role`} value={m.role} onChange={e=>edit(i,{role:e.target.value})}>{ROLES.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label>
    </div>
    {ms.length>1&&<fieldset className="pt-depends"><legend>Depends on</legend>{ms.filter(o=>o.id!==m.id).map(o=><label className="pt-check" key={o.id}>
     <input type="checkbox" checked={m.dependsOn.includes(o.id)} onChange={e=>edit(i,{dependsOn:e.target.checked?[...m.dependsOn,o.id]:m.dependsOn.filter(d=>d!==o.id)})}/>Milestone {ms.indexOf(o)+1}: {o.title||'Untitled'}</label>)}</fieldset>}
-  </article>)}
-  <button className="pt-btn sm ghost" style={{marginTop:18}} disabled={ms.length>=8} onClick={()=>onChange([...ms,{id:id('chris'),title:'',description:'',system:'',actions:[''],completionCriteria:[''],assignee:null,role:'developer',dependsOn:[],origin:viewer}])}><Plus size={15} aria-hidden="true"/>Add milestone</button>
- </section>;
+   </div>}
+  </article>;})}
+  <button className="pt-btn sm ghost" style={{marginTop:18}} disabled={ms.length>=8} onClick={()=>{const nid=id(viewer);setExpanded(e=>[...e,nid]);onChange([...ms,{id:nid,title:'',description:'',system:'',actions:[''],completionCriteria:[''],assignee:null,role:'developer',dependsOn:[],origin:viewer}]);}}><Plus size={15} aria-hidden="true"/>Add milestone</button>
+ </div>;
 }
-

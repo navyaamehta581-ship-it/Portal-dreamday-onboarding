@@ -31,32 +31,33 @@ export async function harness({file=':memory:',modelUrl=null as string|null,time
  const {createApp}=await import('../../src/app.ts');const {openGoalStore}=await import('../../src/store.ts');
  const {openActivationStore}=await import('../../src/activation/store.ts');const {createIntake}=await import('../../src/activation/intake.ts');
  const {openHandoffStore}=await import('../../src/activation/handoff/store.ts');const {createHandoffService}=await import('../../src/activation/handoff/service.ts');
- const {createWorkService,openWorkStore}=await import('../../src/activation/handoff/work.ts');const {createRepositoryService,openRepositoryStore}=await import('../../src/activation/repository.ts');const {createInsights}=await import('../../src/activation/insights.ts');const {createAika}=await import('../../src/activation/handoff/aika.ts');
+ const {createWorkService,openWorkStore}=await import('../../src/activation/handoff/work.ts');const {createRepositoryService,openRepositoryStore}=await import('../../src/activation/repository.ts');const {createInsights}=await import('../../src/activation/insights.ts');const {createAika}=await import('../../src/activation/handoff/aika.ts');const {createOpportunities,openOpportunityStore}=await import('../../src/activation/opportunities.ts');
  const intake=createIntake({admit:()=>false});
  const store=openActivationStore(file,intake.policy),handoffs=openHandoffStore(file),workStore=openWorkStore(file),repoStore=openRepositoryStore(file),goals=openGoalStore(':memory:');
  const handoff=createHandoffService({handoffs,store:()=>store,analyze:analysisDelayMs?async(src,onStage)=>{await new Promise(r=>setTimeout(r,analysisDelayMs));return rule(src,onStage);}:rule,stage:intake.stage,release:intake.release});
  const work=createWorkService({published:p=>handoffs.published(p),work:workStore,verifiedEvidence:p=>p.customerId==='aperture'?evidence:[]});
  const repos=createRepositoryService({config:repositories,store:repoStore,published:p=>handoffs.published(p),github:{fetchImpl:github,token:githubToken},...(now?{now}:{})});
  const insights=createInsights({work,repositories:repos,records:p=>handoffs.all(p),published:p=>handoffs.published(p)});
- const aika=createAika({model:modelUrl?createOllama({endpoint:modelUrl,model:'qwen3:1.7b',timeoutMs,retries:0,numCtx:8192}):null,work,
+ const oppStore=openOpportunityStore(file),opportunities=createOpportunities({published:p=>handoffs.published(p),work,repositories:repos,store:oppStore,...(now?{now}:{})});
+ const aika=createAika({opportunities:(p,v)=>opportunities.list(p,v).opportunities,model:modelUrl?createOllama({endpoint:modelUrl,model:'qwen3:1.7b',timeoutMs,retries:0,numCtx:8192}):null,work,
   publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,repositoryEvidence:(p,v)=>repos.forAika(p,v),repositoryCount:(p,v)=>{try{return repos.view(p,v).repositories.length;}catch{return 0;}}});
  const north={tenantId:'t',customerId:'aperture',sessionId:'s'},lumen={...north,customerId:'lumen'};
  // One credential per developer (identity), plus the shared developer credential, the Champion and Chris.
  const tokens:Record<string,{p:typeof north;role:'dev'|'op'|'champ';name?:string}>={dev:{p:north,role:'dev'},op:{p:north,role:'op'},champ:{p:north,role:'champ'},
   alex:{p:north,role:'dev',name:'Alex Rivera'},jordan:{p:north,role:'dev',name:'Jordan Lee'},'lumen-alex':{p:lumen,role:'dev',name:'Alex Rivera'},'lumen-champ':{p:lumen,role:'champ'}};
  const who=(r:{headers:{authorization?:string}})=>tokens[(r.headers.authorization??'').replace('Bearer ','')];
- const server=createApp(goals,undefined,{store,handoff,work,aika,repositories:repos,insights,championApproval:true,authorize:(r,c)=>who(r)?.p.customerId===c?who(r)!.p:null,
+ const server=createApp(goals,undefined,{store,handoff,work,aika,repositories:repos,insights,opportunities,championApproval:true,authorize:(r,c)=>who(r)?.p.customerId===c?who(r)!.p:null,
   isOperator:r=>who(r)?.role==='op',isChampion:r=>who(r)?.role==='champ',developerName:r=>who(r)?.name??null});
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
  const base=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/activation/v1/customers/`;
  const call:Call=async(customer,path,token,body,actor)=>{const r=await fetch(base+customer+'/'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(actor?{'X-Portal-Actor':actor}:{})},body:body===undefined?undefined:JSON.stringify(body)});const raw=await r.text();return {status:r.status,json:raw?JSON.parse(raw):null,raw};};
  // Chris's PDF upload: the raw file as the request body.
  const upload=async(customer:string,token:string,bytes:Uint8Array,{type='application/pdf',name='customer.pdf'}:{type?:string;name?:string}={})=>{const r=await fetch(base+customer+'/handoff-documents',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':type,'X-File-Name':encodeURIComponent(name)},body:new Blob([bytes as Uint8Array<ArrayBuffer>])});const raw=await r.text();return {status:r.status,json:raw?JSON.parse(raw):null,raw};};
- return {call,upload,close:async()=>{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();workStore.close();repoStore.close();goals.close();}};
+ return {call,upload,close:async()=>{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();workStore.close();repoStore.close();oppStore.close();goals.close();}};
 }
 
 /** Chris submits; Maya assigns Alex the repository assessment and Jordan the dependent discoverability check, and approves. */
-export async function approvedPlan(call:Call,approve=true){
+export async function approvedPlan(call:Call,finalize=true){
  await call('aperture','handoff-workspace','op',{expectedRevision:0,sources:[{type:'conversation',label:'Discovery call',text:CALL},{type:'chris_notes',label:'My pricing notes',text:NOTES}]});
  await call('aperture','handoff-analyses','op',{workspaceRevision:1});
  for(let i=0;i<50&&(await call('aperture','handoff-analyses','op')).json.job.status==='running';i++)await new Promise(r=>setTimeout(r,5));
@@ -66,10 +67,11 @@ export async function approvedPlan(call:Call,approve=true){
   stakeholders:[{id:'p1',name:'Maya Chen',role:'Champion',responsibilities:'Coordinate',basis:'stated',sources:[],technical:true},{id:'p2',name:'Alex Rivera',role:'Developer',responsibilities:'',basis:'stated',sources:[],technical:true},{id:'p3',name:'Jordan Lee',role:'Developer',responsibilities:'',basis:'stated',sources:[],technical:true}],
   milestones:[m('m-alex','Assess payments-api repository readiness','Alex Rivera'),m('m-jordan','Validate payments-api discoverability','Jordan Lee',['m-alex'])]};
  await call('aperture','handoff-reviews','op',{draft:1,expectedRevision:0,review});
- await call('aperture','handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true},'Chris');
- if(!approve)return;
- const view=(await call('aperture','champion-review','champ')).json;
- const r=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen');
+ if(finalize)await finalizePlan(call);
+}
+/** Chris finalizes the saved draft: that publishes it to the Champion and developers; nobody approves it. */
+export async function finalizePlan(call:Call){
+ const r=await call('aperture','handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true},'Chris');
  assert.equal(r.json.status,'published',r.raw);
 }
 export const work=async(call:Call,token:string)=>(await call('aperture','milestone-work',token)).json as TeamProgress;

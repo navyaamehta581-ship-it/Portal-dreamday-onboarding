@@ -36,7 +36,7 @@ Vite proxies activation requests to port 7007 and inspector/conversation request
 For the persona demo (one entry for Chris, Maya, Alex and Jordan), follow the
 [private fictional demo bootstrap](services/workflow-api/LOCAL_DEMO.md). The local
 Portal session layer holds the generated tokens server-side; nothing is pasted in
-the browser. Routing and access rules: [personas](docs/activation/personas.md).
+the browser. Routing and access rules: [personas](docs/activation/personas.md). What each role sees and does: [roles, opportunities and adoption](docs/activation/roles-and-opportunities.md).
 
 Use **Node 24.12 or later in the Node 24 line** and npm. There is no root npm workspace. From a fresh clone, install each independently:
 

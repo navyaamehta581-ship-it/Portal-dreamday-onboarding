@@ -121,14 +121,14 @@ export function useCustomerWorkspace(api:ReturnType<typeof activationClient>|nul
 }
 export type CustomerWorkspace=ReturnType<typeof useCustomerWorkspace>;
 
-/** Account status through the Dream Day review. A plan published before Dream Day is labelled as such, never as approved. */
+/** Account status from upload to publication. A plan with no recorded publisher came from an earlier version. */
 export function accountStatus(w:CustomerWorkspace,published:boolean):{label:string;tone:string}{
- const r=w.latest,approved=r?.approvals?.champion.status==='approved';
- if(published)return approved?{label:'Approved · Published to developers',tone:'green'}:{label:'Published before Dream Day',tone:''};
+ const r=w.latest,by=!!r?.developer?.approval||r?.approvals?.champion.status==='approved';
+ if(published)return by?{label:'Published to the Champion and developers',tone:'green'}:{label:'Published before Dream Day',tone:''};
  if(w.running)return {label:'Analyzing',tone:'blue'};
- if(r?.status==='approved')return {label:'Approved',tone:'green'};
- if(r?.status==='submitted')return {label:'Submitted for Champion review',tone:'blue'};
- if(r?.status==='resubmitted')return {label:'Resubmitted for Champion review',tone:'blue'};
+ if(r?.status==='approved')return {label:'Finalized',tone:'green'};
+ // Steps from the earlier Champion-review flow, kept readable for older records.
+ if(r?.status==='submitted'||r?.status==='resubmitted')return {label:'Sent for review (earlier version)',tone:'blue'};
  if(r?.status==='changes_requested')return {label:'Changes requested',tone:'amber'};
  if(r)return {label:'Analysis ready',tone:'amber'};
  if(w.overview?.workspace.revision)return {label:'Draft',tone:''};

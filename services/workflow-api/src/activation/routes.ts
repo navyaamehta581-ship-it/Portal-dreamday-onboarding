@@ -8,10 +8,11 @@ import type {WorkService} from './handoff/work.ts';
 import type {AikaService} from './handoff/aika.ts';
 import type {RepositoryService} from './repository.ts';
 import type {InsightsService} from './insights.ts';
+import type {OpportunityService} from './opportunities.ts';
 export type ActivationOptions={handoff?:HandoffService;isOperator?:(request:IncomingMessage,principal:Principal)=>boolean;
   /** Dream Day: the customer's authorized Champion (a separate server-held credential). */
   isChampion?:(request:IncomingMessage,principal:Principal)=>boolean;
-  /** When set, new developer plans are published only by a Champion approval: direct publication, intake and initialization are refused. */
+  /** When set, new developer plans are published only by finalizing the Onboarding Draft: direct publication, intake and initialization are refused. */
   championApproval?:boolean;
   /** Phase 5: the developer named by this request's own credential, or null for a shared or non-developer credential. */
   developerName?:(request:IncomingMessage,principal:Principal)=>string|null;
@@ -19,9 +20,11 @@ export type ActivationOptions={handoff?:HandoffService;isOperator?:(request:Inco
   /** Phase 7: read-only repository evidence for configured repositories. */
   repositories?:RepositoryService;
   /** Phase 8: onboarding insights computed from stored records. */
-  insights?:InsightsService;prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
+  insights?:InsightsService;
+  /** Role redesign: engineering opportunities, the Champion's priorities, developers' choices and adoption. */
+  opportunities?:OpportunityService;prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
 export async function activationRoute(request:IncomingMessage,response:ServerResponse,path:string,options:ActivationOptions,readJson:(r:IncomingMessage)=>Promise<unknown>) {
-  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-documents|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions|aika-capabilities|repository-evidence|repository-inspections|insights)$/.exec(path);
+  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-documents|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions|aika-capabilities|repository-evidence|repository-inspections|insights|opportunities|opportunity-priorities|opportunity-pursuits|adoption)$/.exec(path);
   if(!match)return false;
   response.setHeader('Access-Control-Expose-Headers','ETag');
   const send=(status:number,value:unknown)=>{response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});response.end(JSON.stringify(value));};
@@ -39,6 +42,16 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
     if(options.championApproval&&(match[2]==='handoff-publications'||match[2]==='intake'||(match[2]==='state'&&request.method==='POST'))){send(403,{error:{code:'CHAMPION_APPROVAL_REQUIRED'}});return true;}
     // Who is reading or acting. A developer's name comes only from their own credential, never from a header.
     const viewer=operator?{role:'operator' as const,name:actor}:champion?{role:'champion' as const,name:actor}:{role:'developer' as const,name:options.developerName?.(request,p)??null};
+    if(['opportunities','opportunity-priorities','opportunity-pursuits','adoption'].includes(match[2])){
+      const o=options.opportunities;
+      if(!o){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}
+      const route=`${request.method} ${match[2]}`;
+      if(route==='GET opportunities'){send(200,await o.view(p,viewer));return true;}
+      if(route==='POST opportunity-priorities'){send(200,o.prioritize(p,viewer,await readJson(request)));return true;}
+      if(route==='POST opportunity-pursuits'){send(200,o.pursue(p,viewer,await readJson(request)));return true;}
+      if(route==='GET adoption'){send(200,o.adoption(p,viewer));return true;}
+      response.setHeader('Allow',match[2]==='opportunities'||match[2]==='adoption'?'GET':'POST');send(405,{error:{code:'METHOD_NOT_ALLOWED'}});return true;
+    }
     if(match[2]==='insights'){
       if(!options.insights){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}
       if(request.method==='GET'){send(200,options.insights.view(p,viewer));return true;}
@@ -78,8 +91,11 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
       if(!h){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}
       const route=`${request.method} ${match[2]}`;
       if(route==='GET champion-review'){send(200,h.championView(p));return true;}
-      if(route==='POST champion-reviews'){send(200,h.saveChampionReview(p,await readJson(request)));return true;}
-      if(route==='POST champion-decisions'){send(200,h.championDecision(p,await readJson(request),actor??undefined));return true;}
+      if(route==='POST champion-reviews'){send(200,h.saveChampionReview(p,await readJson(request),actor??undefined));return true;}
+      if(route==='POST champion-decisions'){const v=h.championDecision(p,await readJson(request),actor??undefined);
+        // Once published, the Portal observes the plan's repositories itself (Spotify's integration); nobody has to.
+        if(v.status==='published')void options.repositories?.observe(p).catch(()=>undefined);
+        send(200,v);return true;}
       response.setHeader('Allow',match[2]==='champion-review'?'GET':'POST');send(405,{error:{code:'METHOD_NOT_ALLOWED'}});return true;
     }
     // Operator-only workspace routes: they return operator records, never activation state.
@@ -94,7 +110,10 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
       if(route==='GET handoff-analyses'){send(200,{job:h.analysisStatus(p)});return true;}
       if(route==='POST handoff-analyses'){const r=h.startAnalysis(p,await readJson(request));send(r.duplicate?200:202,r);return true;}
       if(route==='POST handoff-reviews'){send(200,h.saveReview(p,await readJson(request)));return true;}
-      if(route==='POST handoff-submissions'){send(200,h.submission(p,await readJson(request),actor??undefined));return true;}
+      if(route==='POST handoff-submissions'){const r=h.submission(p,await readJson(request),actor??undefined);
+        // Finalizing publishes; the Portal then observes the team's repositories itself (read-only).
+        if(r.status==='published')void options.repositories?.observe(p).catch(()=>undefined);
+        send(200,r);return true;}
       response.setHeader('Allow',match[2]==='handoff'?'GET':match[2]==='handoff-analyses'?'GET, POST':'POST');send(405,{error:{code:'METHOD_NOT_ALLOWED'}});return true;
     }
     let state;

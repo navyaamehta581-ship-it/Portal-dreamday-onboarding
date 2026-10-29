@@ -9,7 +9,7 @@ import {ActivationError,type ActivationStore,type Principal} from '../store.ts';
 import {interpretRuleBased} from './interpret.ts';
 import {proposeMilestones,validMilestone} from './milestones.ts';
 import {unsafeReason,type Analysis,type StageListener} from './intelligence.ts';
-import {applyChampionEdits,approvalIssues,championPlan,reviewFromAnalysis,reviewIssues,toMilestoneDrafts,validateReview} from './review.ts';
+import {applyChampionEdits,approvalIssues,championChanges,championPlan,reviewFromAnalysis,reviewIssues,toMilestoneDrafts,validateReview} from './review.ts';
 import {developerHandoff} from './project.ts';
 import type {HandoffStore} from './store.ts';
 
@@ -142,7 +142,7 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   return {job:snapshot(entry),duplicate:false};
  }
 
- // ---- Chris's review of the latest analysis, then submission for Champion review.
+ // ---- Chris's review of the latest analysis, then finalizing it (which publishes it).
  function editable(p:Principal,draftNumber:unknown){
   if(!Number.isSafeInteger(draftNumber))fail('INVALID_REQUEST');
   const record=deps.handoffs.get(p,draftNumber as number)??fail('NOT_FOUND');
@@ -181,37 +181,43 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   const review=record.review??reviewFromAnalysis(record);
   const issues=reviewIssues(review,record.understanding);
   if(issues.length)refuse(issues);
-  // Submitting records Chris's approval for Champion review. Nothing is shared with developers.
-  const again=(record.history??[]).some(e=>e.action==='submitted'||e.action==='resubmitted');
-  const status=again?'resubmitted' as const:'submitted' as const;
-  const saved:HandoffRecord={...record,review,status,submittedAt:at,reviewRevision:bump(record),approvals:{chris:{status:'approved',by:actor,at},champion:pending},
-   assignments:review.milestones.map(m=>({milestoneId:m.id,role:m.role,proposedAssignee:m.assignee,status:'proposed' as const})),history:event(record,{action:status,at,by:actor})};
-  deps.handoffs.save(p,saved);return saved;
+  // Finalizing publishes the goals and milestones to the Champion and developers straight away. The Champion's
+  // Dream Day is optional: nobody has to approve the plan before developers can start.
+  const finalized:HandoffRecord={...record,review,submittedAt:at,reviewRevision:bump(record),approvals:{chris:{status:'approved',by:actor,at},champion:pending},
+   assignments:review.milestones.map(m=>({milestoneId:m.id,role:m.role,proposedAssignee:m.assignee,status:'approved' as const}))};
+  if(deps.publishEnabled===false){const saved={...finalized,status:'approved' as const,history:event(record,{action:'approved',at,by:actor})};deps.handoffs.save(p,saved);return saved;}
+  const milestones=toMilestoneDrafts(review,record).map(m=>({...m,assignmentStatus:'approved' as const}));
+  const outcome=(review.goals[0]?.text||milestones[0].objective).slice(0,300);
+  publishRecord(p,{...finalized,history:event(record,{action:'published',at,by:actor})},milestones,outcome,`${actor} (Spotify account operator), finalized onboarding`,{by:actor,at});
+  return deps.handoffs.get(p,record.draft)!;
  }
 
  // ---- Dream Day: the Champion reviews, edits, requests changes or approves. The view is built here.
  function championView(p:Principal):ChampionReview{
   const r=latest(p);
   if(!r)return {draft:null,status:'not_submitted',reviewRevision:0,submittedAt:null,analysis:null,history:[],approval:null,plan:null};
-  const championApproved=r.approvals?.champion.status==='approved';
-  const status:ChampionReview['status']=r.status==='draft'?((r.history??[]).length?'revising':'not_submitted'):r.status==='published'&&!championApproved?'published_before_dream_day':r.status;
-  const visible=underReview(r.status)||(championApproved&&(r.status==='approved'||r.status==='published'));
+  // Who finalized it: Chris (the developer handoff records who published it), or a Champion approval in older records.
+  const by=r.developer?.approval??(r.approvals?.champion.status==='approved'?{by:r.approvals.champion.by!,at:r.approvals.champion.at!}:r.status==='approved'&&r.approvals?.chris.status==='approved'?{by:r.approvals.chris.by!,at:r.approvals.chris.at!}:null);
+  const status:ChampionReview['status']=r.status==='draft'?((r.history??[]).length?'revising':'not_submitted'):r.status==='published'&&!by?'published_before_dream_day':r.status;
+  const visible=underReview(r.status)||(!!by&&(r.status==='approved'||r.status==='published'));
   const m=r.understanding.model;
   return {draft:r.draft,status,reviewRevision:r.reviewRevision??0,submittedAt:r.submittedAt??null,
    analysis:m?(m.ok?'model':'rule_based_fallback'):r.understanding.interpreter==='hosted_model'?'model':'rule_based',
    // Only review steps and the Champion's own comments; never operator content.
    history:(r.history??[]).map(e=>({action:e.action,at:e.at,by:e.by,...(e.comment?{comment:e.comment}:{})})),
-   approval:championApproved?{by:r.approvals!.champion.by!,at:r.approvals!.champion.at!}:null,
+   approval:by,
    plan:visible?championPlan(r):null};
  }
- function saveChampionReview(p:Principal,input:unknown){
+ function saveChampionReview(p:Principal,input:unknown,actor='Customer Champion'){
   const b=input as {draft?:unknown;expectedRevision?:unknown;plan?:unknown};
   if(!b||typeof b!=='object'||!Number.isSafeInteger(b.expectedRevision))fail('INVALID_REQUEST');
   const record=editable(p,b.draft);
   if(!underReview(record.status))fail('NOT_UNDER_REVIEW');
   if((record.reviewRevision??0)!==b.expectedRevision)fail('REVISION_CONFLICT');
-  const review=applyChampionEdits(record.review??reviewFromAnalysis(record),b.plan);
-  deps.handoffs.save(p,{...record,review,reviewRevision:bump(record),reviewUpdatedAt:stamp()});
+  const before=record.review??reviewFromAnalysis(record),review=applyChampionEdits(before,b.plan);
+  // Chris sees what the Champion changed in the history, by count; he doesn't approve it again.
+  const changes=championChanges(before,review);
+  deps.handoffs.save(p,{...record,review,reviewRevision:bump(record),reviewUpdatedAt:stamp(),...(changes?{history:event(record,{action:'edited',at:stamp(),by:actor,comment:changes})}:{})});
   return championView(p);
  }
  function championDecision(p:Principal,input:unknown,actor='Customer Champion'){
@@ -242,7 +248,7 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   return championView(p);
  }
 
- /** The pre-Dream Day direct publication. Refused: new developer plans are published only by a Champion approval. */
+ /** The old direct publication without the reviewed draft. Refused: plans are published by finalizing the Onboarding Draft. */
  function publish(_p:Principal,_input:unknown):never{return fail('CHAMPION_APPROVAL_REQUIRED');}
  function publishRecord(p:Principal,record:HandoffRecord,milestones:MilestoneDraft[],outcome:string,agreedBy:string,approval:{by:string;at:string}){
   if(deps.handoffs.all(p).some(r=>r.status==='published'))fail('REVISION_CONFLICT');
@@ -250,13 +256,14 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   if(milestones.some(m=>confidentialHits(m,outcome,record.understanding).length))fail('CONFIDENTIAL_CONTENT');
   // The broader objective developers may see: the approved problem, goals and open questions, screened again.
   const safe=(t:string)=>!!t.trim()&&!unsafeReason(t,record.understanding),r=record.review;
-  const objective=r?{problem:safe(r.problem.summary)?r.problem.summary:null,goals:r.goals.map(g=>g.text).filter(safe),questions:r.questions.map(q=>q.text).filter(safe)}:undefined;
+  const more=(r?.moreProblems??[]).map(x=>x.summary).filter(x=>x.trim()&&safe(x));
+  const objective=r?{problem:safe(r.problem.summary)?r.problem.summary:null,goals:r.goals.map(g=>g.text).filter(safe),questions:r.questions.map(q=>q.text).filter(safe),...(more.length?{problems:more}:{})}:undefined;
   const at=approval.at,id=randomUUID(),developer={...developerHandoff(1,at,record.understanding,milestones),approval,...(objective?{objective}:{})},m=milestones[0];
   const proof={type:'none' as const,actionId:'none',actionRevision:0,reference:'none',verifier:'none',result:'not_checked' as const};
   const ev=(suffix:string,kind:EvidenceRecord['kind'],claim:string,basisIds:string[]=[]):EvidenceRecord=>({id:`${id}-${suffix}`,kind,claim,source:'Chris activation intake',observedAt:at,sourceRevision:id,scope:m.objective,producer:'authenticated local intake operator',basisIds,proof});
   const kinds=[...new Set(record.sources.map(s=>s.type))].join(', ');
-  const brief=ev('brief','customer_report',`Customer context from ${record.sources.length} source(s) (${kinds}) reviewed by Chris.`),agreement=ev('agreement','customer_report',`Approved by ${agreedBy}: ${outcome}`);
-  const inference=ev('reason','ai_inference',`${record.understanding.interpreter==='hosted_model'?'Model-assisted':'Rule-based'} interpretation proposed the plan; reviewed by Chris and approved by the Champion.`,[brief.id,agreement.id]);
+  const brief=ev('brief','customer_report',`Customer context from ${record.sources.length} source(s) (${kinds}) reviewed by Chris.`),agreement=ev('agreement','customer_report',`Finalized by ${agreedBy}: ${outcome}`);
+  const inference=ev('reason','ai_inference',`${record.understanding.interpreter==='hosted_model'?'Model-assisted':'Rule-based'} interpretation proposed the plan; reviewed and finalized by Chris.`,[brief.id,agreement.id]);
   const capability=capabilities.find(c=>c.id===CAPABILITY[record.understanding.goals[0]?.playbook??'service_readiness'])??capabilities[0];
   const context:CustomerContext={contractVersion:'1.0.0',customerId:p.customerId,revision:0,evidence:[brief,agreement],briefing:developer.summary,briefingEvidenceIds:[brief.id],
    agreedGoal:{text:outcome,agreedBy,agreedAt:at,evidenceIds:[agreement.id]},unknowns:developer.unknowns.map(u=>u.question),constraints:developer.context.map(n=>`${n.topic}: ${n.text}`)};

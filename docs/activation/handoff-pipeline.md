@@ -77,7 +77,7 @@ Diagnosing a real run (fictional fixtures only):
 
 **People.** Technical stakeholders (champion, platform, developers, service owners, security) are kept by name and role and reach developers as `handoff.team`. People in commercial or executive roles stay internal, and text naming them is blocked from developer fields.
 
-**Approvals (prepared, no UI).** Each draft carries `approvals` (Chris, Champion: pending) and `assignments` (status `proposed`). Publishing records Chris's approval; the Champion approval stays pending. Developers see an assignee only when its `assignmentStatus` is `approved`, which nothing sets yet.
+**Approvals (prepared, no UI).** Each draft carries `approvals` (Chris, Champion: pending) and `assignments` (status `proposed`). Publishing records Chris's approval; the Champion approval stays pending. Developers see an assignee only when its `assignmentStatus` is `approved`, which nothing sets yet. (Now: Chris's **Finalize and publish** sets suggested owners to `approved` and publishes directly, with no Champion approval; see [roles-and-opportunities.md](roles-and-opportunities.md).)
 
 **Tested vs not tested.** Tested against a local stub of Ollama's API:
 - request shape, grammar stripping, timeout, unavailable server, invalid JSON with retry, timing sums and non-loopback refusal;

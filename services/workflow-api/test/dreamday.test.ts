@@ -1,5 +1,5 @@
-/** Dream Day (Phase 4): Chris submits → the Champion reviews, edits, assigns, requests changes or approves →
- * developers receive only their approved work. Exercised over HTTP with separate credentials per role and customer. */
+/** Chris finalizes → the plan is published to the Champion and developers at once; Dream Day is the Champion's optional,
+ * non-blocking view of it. Exercised over HTTP with separate credentials per role and customer. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
@@ -41,146 +41,116 @@ async function harness(file=':memory:',publishEnabled=true){
 }
 const milestone=(id:string,title:string,assignee:string|null,dependsOn:string[]=[]):ReviewMilestone=>({id,title,description:`${title} for the pilot`,system:'payments-api',
  actions:[`Start: ${title}`,'Record what was found'],completionCriteria:['Each item is marked verified, missing or inaccessible'],assignee,role:'developer',dependsOn,origin:'ai'});
-/** Chris: analyse, name the technical team, keep Jamie (AE) as an internal person, submit. */
-async function chrisSubmits(call:Call){
+/** Chris: analyse, name the technical team, keep Jamie (AE) as an internal person, suggest owners, finalize. */
+async function chrisDraft(call:Call,milestones=[milestone('m-1','Assess payments-api repository readiness','Alex Rivera'),milestone('m-jordan','Validate payments-api and docs discoverability','Jordan Lee',['m-1'])]){
  await call('aperture','handoff-workspace','op',{expectedRevision:0,sources:SOURCES});
  await call('aperture','handoff-analyses','op',{workspaceRevision:1});
  for(let i=0;i<50&&(await call('aperture','handoff-analyses','op')).json.job.status==='running';i++)await new Promise(r=>setTimeout(r,5));
  const record:HandoffRecord=(await call('aperture','handoff','op')).json.drafts[0];
  const review:ReviewDraft={...record.review!,goals:[{id:'g1',text:'Establish a service-readiness baseline for payments-api',origin:'ai'}],
-  stakeholders:[{id:'p1',name:'Maya Chen',role:'Champion, Director of Platform Engineering',responsibilities:'Coordinate and approve',basis:'stated',sources:['Call with Maya'],technical:true},
+  stakeholders:[{id:'p1',name:'Maya Chen',role:'Champion, Director of Platform Engineering',responsibilities:'Coordinate',basis:'stated',sources:['Call with Maya'],technical:true},
    {id:'p2',name:'Alex Rivera',role:'Developer',responsibilities:'Initial repository readiness assessment',basis:'stated',sources:['Call with Maya'],technical:true},
    {id:'p3',name:'Jordan Lee',role:'Developer',responsibilities:'Independent discoverability check',basis:'stated',sources:['Call with Maya'],technical:true},
    {id:'p4',name:'Jamie Park',role:'Account executive',responsibilities:'Owns the commercial relationship',basis:'stated',sources:['Pricing notes for Jamie'],technical:false}],
-  milestones:[milestone('m-1','Assess payments-api repository readiness',null)],questions:[{id:'q1',text:'Which CI system deploys payments-api today?',origin:'ai'}]};
+  milestones,questions:[{id:'q1',text:'Which CI system deploys payments-api today?',origin:'ai'}]};
  assert.equal((await call('aperture','handoff-reviews','op',{draft:1,expectedRevision:0,review})).status,200);
- const sub=await call('aperture','handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true},'Chris');
- assert.equal(sub.status,200,sub.raw);return sub.json as HandoffRecord;
 }
+const finalize=(call:Call,reviewRevision=1)=>call('aperture','handoff-submissions','op',{draft:1,reviewRevision,action:'submit',confirmed:true},'Chris');
 
-test('Dream Day end to end: review, edit and assign, request changes, resubmit, approve; each persona sees the same approved plan',async()=>{
+test('Chris finalizes and the plan is published at once: the Champion and every developer see it, nobody approves it',async()=>{
  const h=await harness();
  try{
   const {call}=h;
   assert.equal((await call('aperture','champion-review','champ')).json.status,'not_submitted');
-  await chrisSubmits(call);
-  // 1–2. Maya opens Dream Day: a server-built, customer-safe view.
-  let view:ChampionReview=(await call('aperture','champion-review','champ')).json;
-  assert.equal(view.status,'submitted');
+  await chrisDraft(call);
+  // Saving the draft publishes nothing.
+  assert.equal((await call('aperture','state','dev')).status,404);
+  assert.equal((await finalize(call,1).then(r=>r)).json.status,'published');
+  // The Champion's Dream Day shows the published plan, customer-safe, with who finalized it.
+  const view:ChampionReview=(await call('aperture','champion-review','champ')).json;
+  assert.equal(view.status,'published');assert.equal(view.approval!.by,'Chris');
   for(const x of PRIVATE)assert.ok(!JSON.stringify(view).includes(x),'champion view leaked '+x);
   assert.deepEqual(view.plan!.stakeholders.map(s=>s.name),['Maya Chen','Alex Rivera','Jordan Lee'],'internal people stay with Chris');
   assert.ok(view.plan!.stakeholders.every(s=>s.sources.every(x=>x==='Conversational Transcript')),'source names become categories');
-  // 3. Maya edits, adds Jordan's milestone with a dependency, assigns both, adds a question, and saves.
-  const plan={goals:view.plan!.goals,questions:[...view.plan!.questions,{id:'q-maya',text:'Who owns the runbooks today?',origin:'champion'}],
-   milestones:[{...view.plan!.milestones[0],assignee:'Alex Rivera',edited:true},milestone('m-jordan','Validate payments-api and docs discoverability','Jordan Lee',['m-1'])].map(m=>m.id==='m-jordan'?{...m,origin:'champion'}:m)};
-  const saved=await call('aperture','champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan});
-  assert.equal(saved.status,200,saved.raw);
-  assert.equal((await call('aperture','champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan})).json.error.code,'REVISION_CONFLICT','stale save refused');
-  view=(await call('aperture','champion-review','champ')).json;
   assert.deepEqual(view.plan!.milestones.map(m=>[m.title,m.assignee,m.dependsOn]),[['Assess payments-api repository readiness','Alex Rivera',[]],['Validate payments-api and docs discoverability','Jordan Lee',['m-1']]]);
-  // Saving is not approving: developers still see nothing.
-  assert.equal((await call('aperture','state','dev')).status,404);
-  // 4. Request changes needs a reason; Chris sees it, revises and resubmits.
-  assert.equal((await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'request_changes',comment:''})).json.error.code,'COMMENT_REQUIRED');
-  const back=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'request_changes',comment:'Please confirm which CI system deploys payments-api before Alex starts.'},'Maya Chen');
-  assert.equal(back.json.status,'changes_requested');assert.equal(back.json.plan,null,'Chris’s revision in progress is not shown');
-  assert.equal((await call('aperture','state','dev')).status,404,'returned plans never reach developers');
-  const chris:HandoffRecord=(await call('aperture','handoff','op')).json.drafts[0];
-  assert.equal(chris.status,'changes_requested');
-  assert.deepEqual(chris.history!.map(e=>[e.action,e.by]),[['submitted','Chris'],['changes_requested','Maya Chen']]);assert.match(chris.history![1].comment!,/which CI system/);
-  assert.equal(chris.review!.milestones[1].assignee,'Jordan Lee','Maya’s edits carry back to Chris');
-  const revised={...chris.review!,problem:{...chris.review!.problem,unknowns:[...chris.review!.problem.unknowns,{id:'u-ci',text:'Deploys use GitHub Actions; Jenkins is retired (confirmed with Maya)',origin:'chris' as const}]}};
-  assert.equal((await call('aperture','handoff-reviews','op',{draft:1,expectedRevision:chris.reviewRevision,review:revised})).status,200);
-  const resub=await call('aperture','handoff-submissions','op',{draft:1,reviewRevision:chris.reviewRevision!+1,action:'submit',confirmed:true},'Chris');
-  assert.equal(resub.json.status,'resubmitted');
-  // A stale Maya page (revision from before the resubmission) cannot approve.
-  assert.equal((await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true})).json.error.code,'REVISION_CONFLICT');
-  view=(await call('aperture','champion-review','champ')).json;assert.equal(view.status,'resubmitted');
-  // 5. Approve the revised plan: an explicit decision, recorded with who and when.
-  assert.equal((await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve'})).status,400,'confirmation required');
-  const approved=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen');
-  assert.equal(approved.json.status,'published',approved.raw);assert.equal(approved.json.approval.by,'Maya Chen');
-  assert.equal((await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+1,decision:'approve',confirmed:true})).json.error.code,'ALREADY_APPROVED');
-  // 6–7. Alex and Jordan each see only their approved work; 8. Chris sees the approval; Maya sees the whole plan.
+  // There is nothing to approve or send back, and the published plan is not edited in place.
+  assert.equal((await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true})).json.error.code,'ALREADY_APPROVED');
+  assert.equal((await call('aperture','champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan:{}})).json.error.code,'NOT_UNDER_REVIEW');
+  assert.equal((await call('aperture','handoff-reviews','op',{draft:1,expectedRevision:view.reviewRevision,review:{}})).json.error.code,'ALREADY_APPROVED','published plans are final');
+  // Alex and Jordan see the whole plan, the work suggested for them first; a teammate with no suggestion too.
   const state=async(token:string,actor:string)=>{const r=await call('aperture','state',token,undefined,actor);for(const x of PRIVATE)assert.ok(!r.raw.includes(x),`${actor} state leaked ${x}`);return r.json;};
   const alex=await state('alex','Alex Rivera'),jordan=await state('jordan','Jordan Lee'),maya=await state('champ','Maya Chen');
-  assert.deepEqual(alex.handoff.milestones.map((m:{objective:string})=>m.objective),['Assess payments-api repository readiness']);
-  assert.deepEqual(jordan.handoff.milestones.map((m:{objective:string;dependencies:string[]})=>[m.objective,m.dependencies]),[['Validate payments-api and docs discoverability',['Assess payments-api repository readiness']]]);
+  assert.deepEqual(alex.handoff.milestones.map((m:{objective:string})=>m.objective),['Assess payments-api repository readiness','Validate payments-api and docs discoverability']);
+  assert.deepEqual(jordan.handoff.milestones.map((m:{objective:string;dependencies:string[]})=>[m.objective,m.dependencies]),[['Validate payments-api and docs discoverability',['Assess payments-api repository readiness']],['Assess payments-api repository readiness',[]]]);
   assert.equal(jordan.plan.selectedMilestone.outcome,'Validate payments-api and docs discoverability');
   assert.deepEqual(maya.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Alex Rivera','Jordan Lee']);
-  assert.equal(alex.handoff.approval.by,'Maya Chen');
+  assert.equal(alex.handoff.approval.by,'Chris');
   const sam=await state('sam','Sam Nobody');
   // A forged name header on the shared credential grants no identity: no personal filtering, no work updates.
-  assert.equal((await call('aperture','milestone-updates','dev',{milestoneId:'m-1',expectedRevision:0,action:{index:0,status:'started'}},'Alex Rivera')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED');assert.deepEqual(sam.handoff.milestones,[]);assert.equal(sam.plan.selectedMilestone.outcome,'No approved work is assigned to you yet');
+  assert.equal((await call('aperture','milestone-updates','dev',{milestoneId:'m-1',expectedRevision:0,action:{index:0,status:'started'}},'Alex Rivera')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED');
+  assert.equal(sam.handoff.milestones.length,2,'every developer on the team sees the plan');assert.equal(sam.plan.selectedMilestone.outcome,'Assess payments-api repository readiness','nothing suggested for Sam: the plan’s first milestone');
   const final:HandoffRecord=(await call('aperture','handoff','op')).json.drafts[0];
-  assert.equal(final.status,'published');assert.equal(final.approvals!.champion.by,'Maya Chen');
-  assert.deepEqual(final.history!.map(e=>e.action),['submitted','changes_requested','resubmitted','approved','published']);
-  // The same milestones in every view.
-  assert.deepEqual(maya.handoff.milestones.map((m:{id:string})=>m.id),[...alex.handoff.milestones,...jordan.handoff.milestones].map((m:{id:string})=>m.id));
+  assert.equal(final.status,'published');assert.equal(final.approvals!.champion.status,'pending','no Champion approval is involved');
+  assert.deepEqual(final.history!.map(e=>[e.action,e.by]),[['published','Chris']]);
+  const ids=(x:{handoff:{milestones:{id:string}[]}})=>x.handoff.milestones.map(m=>m.id).sort();
+  assert.deepEqual(ids(alex),ids(maya));assert.deepEqual(ids(jordan),ids(maya));
  }finally{await h.close();}
 });
 
-test('authorization: only the customer’s Champion can review or decide; the old publishing paths are closed; customers stay isolated',async()=>{
+test('authorization: only the customer’s Champion opens Dream Day; the old publishing paths are closed; customers stay isolated; finalizing is screened',async()=>{
  const h=await harness();
  try{
-  const {call}=h;await chrisSubmits(call);
-  const rev=(await call('aperture','champion-review','champ')).json.reviewRevision;
-  for(const token of ['dev','op'])for(const [path,body] of [['champion-review',undefined],['champion-reviews',{draft:1,expectedRevision:rev,plan:{}}],['champion-decisions',{draft:1,reviewRevision:rev,decision:'approve',confirmed:true}]] as const){
+  const {call}=h;
+  // A suggested owner outside the technical team (the account executive) is refused when Chris finalizes.
+  await chrisDraft(call,[milestone('m-1','Assess payments-api repository readiness','Jamie Park')]);
+  const wrong=await finalize(call);
+  assert.deepEqual(wrong.json.error.details.issues.map((i:{reason:string})=>i.reason),['not_a_technical_stakeholder']);
+  assert.equal((await call('aperture','state','dev')).status,404,'nothing published');
+  for(const token of ['dev','op'])for(const [path,body] of [['champion-review',undefined],['champion-reviews',{draft:1,expectedRevision:1,plan:{}}],['champion-decisions',{draft:1,reviewRevision:1,decision:'approve',confirmed:true}]] as const){
    const r=await call('aperture',path,token,body);assert.equal(r.status,403,`${token} on ${path}`);assert.equal(r.json.error.code,'CHAMPION_REQUIRED');
   }
-  // Another customer's Champion and developers are refused for Aperture; their own customer has nothing to review.
   assert.equal((await call('aperture','champion-review','lumen-champ')).status,403);
-  assert.equal((await call('aperture','champion-decisions','lumen-champ',{draft:1,reviewRevision:rev,decision:'approve',confirmed:true})).status,403);
   assert.equal((await call('lumen','champion-review','lumen-champ')).json.status,'not_submitted');
-  // Removed bypasses: direct publication, intake and initialization are refused on the server.
+  // Removed bypasses: direct publication without the reviewed draft, intake and initialization are refused.
   for(const [path,body] of [['handoff-publications',{draft:1,fromReview:true,outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true}],['intake',{briefing:'x',outcome:'y',agreedBy:'z',agreementConfirmed:true}],['state',{context:{}}]] as const)
    assert.equal((await call('aperture',path,'op',body)).json.error.code,'CHAMPION_APPROVAL_REQUIRED',path);
-  assert.equal((await call('aperture','state','dev')).status,404);
-  // Approval needs an explicit assignee on every milestone.
-  const incomplete=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:rev,decision:'approve',confirmed:true});
-  assert.equal(incomplete.json.error.code,'REVIEW_INCOMPLETE');assert.deepEqual(incomplete.json.error.details.issues.map((i:{label:string;reason:string})=>[i.label,i.reason]),[['Milestone 1 · assignee','unassigned']]);
-  // A Champion can't assign work to someone outside the technical team (e.g. the account executive).
-  const view=(await call('aperture','champion-review','champ')).json;
-  await call('aperture','champion-reviews','champ',{draft:1,expectedRevision:rev,plan:{goals:view.plan.goals,questions:view.plan.questions,milestones:[{...view.plan.milestones[0],assignee:'Jamie Park'}]}});
-  const wrong=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:rev+1,decision:'approve',confirmed:true});
-  assert.deepEqual(wrong.json.error.details.issues.map((i:{reason:string})=>i.reason),['not_a_technical_stakeholder']);assert.ok(!wrong.raw.includes('Jamie'));
+  // Developers and the Champion cannot finalize.
+  for(const token of ['dev','champ','alex'])assert.equal((await call('aperture','handoff-submissions',token,{draft:1,reviewRevision:1,action:'submit',confirmed:true})).status,403,token);
  }finally{await h.close();}
 });
 
-test('withdrawn or changed drafts cannot be approved; edits and decisions survive a restart',async()=>{
+test('a published plan survives a restart; a draft left with the Champion by the earlier flow can be withdrawn and finalized',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'dreamday-'));
  try{
   let h=await harness(join(dir,'db.sqlite'));
-  await chrisSubmits(h.call);
-  let view=(await h.call('aperture','champion-review','champ')).json;
-  await h.call('aperture','champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan:{goals:view.plan.goals,questions:view.plan.questions,milestones:[{...view.plan.milestones[0],assignee:'Alex Rivera'}]}});
-  // Chris withdraws while Maya still has the page open.
+  await chrisDraft(h.call);
+  // An older record still waiting for the Champion (the earlier approval flow): Chris withdraws it and finalizes.
+  const P={tenantId:'t',customerId:'aperture',sessionId:'s'},old=h.handoffs.all(P)[0];
+  h.handoffs.save(P,{...old,status:'submitted',reviewRevision:2,history:[{action:'submitted',at:'2026-10-29T09:00:00Z',by:'Chris'}]});
+  assert.equal((await h.call('aperture','champion-review','champ')).json.status,'submitted');
   assert.equal((await h.call('aperture','handoff-submissions','op',{draft:1,action:'withdraw'},'Chris')).json.status,'draft');
-  assert.equal((await h.call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+1,decision:'approve',confirmed:true})).json.error.code,'NOT_UNDER_REVIEW');
-  assert.equal((await h.call('aperture','champion-review','champ')).json.status,'revising');
-  const chris:HandoffRecord=(await h.call('aperture','handoff','op')).json.drafts[0];
-  await h.call('aperture','handoff-submissions','op',{draft:1,reviewRevision:chris.reviewRevision,action:'submit',confirmed:true},'Chris');
+  assert.equal((await finalize(h.call,3)).json.status,'published');
   await h.close();
-  // Restart: the review, Maya's assignment and the history are still there.
   h=await harness(join(dir,'db.sqlite'));
-  view=(await h.call('aperture','champion-review','champ')).json;
-  assert.equal(view.status,'resubmitted');assert.equal(view.plan.milestones[0].assignee,'Alex Rivera');
-  assert.deepEqual(view.history.map((e:{action:string})=>e.action),['submitted','withdrawn','resubmitted']);
+  const view=(await h.call('aperture','champion-review','champ')).json;
+  assert.equal(view.status,'published');assert.equal(view.plan.milestones[0].assignee,'Alex Rivera');
+  assert.deepEqual(view.history.map((e:{action:string})=>e.action),['submitted','withdrawn','published']);
+  assert.equal((await h.call('aperture','state','alex')).status,200);
   await h.close();
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
-test('approval without publication is recorded as Approved; plans published before Dream Day are not shown as approved',async()=>{
+test('finalizing on a server that doesn’t publish is recorded as finalized, not published; plans published before Dream Day stay labelled',async()=>{
  const h=await harness(':memory:',false);
  try{
-  await chrisSubmits(h.call);
+  await chrisDraft(h.call);
+  const r=await finalize(h.call);
+  assert.equal(r.json.status,'approved');assert.equal((await h.call('aperture','state','dev')).status,404,'not published: developers see nothing');
   const view=(await h.call('aperture','champion-review','champ')).json;
-  await h.call('aperture','champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan:{goals:view.plan.goals,questions:view.plan.questions,milestones:[{...view.plan.milestones[0],assignee:'Alex Rivera'}]}});
-  const r=await h.call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+1,decision:'approve',confirmed:true},'Maya Chen');
-  assert.equal(r.json.status,'approved');assert.equal((await h.call('aperture','state','dev')).status,404,'approved but not published: developers see nothing');
-  // Legacy: a record published by the old direct path, with no Champion approval.
-  const legacy=h.handoffs.all({tenantId:'t',customerId:'aperture',sessionId:'s'})[0];
-  h.handoffs.save({tenantId:'t',customerId:'aperture',sessionId:'s'},{...legacy,status:'published',approvals:{chris:legacy.approvals!.chris,champion:{status:'pending',by:null,at:null}}});
+  assert.equal(view.status,'approved');assert.equal(view.approval.by,'Chris');
+  // Legacy: a record published by the old direct path, with nobody recorded as having finalized it.
+  const P={tenantId:'t',customerId:'aperture',sessionId:'s'},legacy=h.handoffs.all(P)[0];
+  h.handoffs.save(P,{...legacy,status:'published',developer:null,approvals:{chris:{status:'pending',by:null,at:null},champion:{status:'pending',by:null,at:null}}});
   const old=(await h.call('aperture','champion-review','champ')).json;
   assert.equal(old.status,'published_before_dream_day');assert.equal(old.approval,null);assert.equal(old.plan,null);
  }finally{await h.close();}

@@ -1,7 +1,7 @@
 /** Chris's editable review of one analysis. Built from the analysis once, then edited by Chris and stored with the
  * operator-only record. Every item keeps where it came from (customer sources, analysis suggestion, Chris). Before
  * submission for Champion review the review must be complete and contain nothing the Champion may not see. */
-import type {ChampionPlan,Finding,HandoffRecord,MilestoneDraft,ReviewDraft,ReviewItem,ReviewMilestone,ReviewOrigin,ReviewStakeholder,SourceRef,SourceType,Understanding} from '../../../../../contracts/activation/v1/handoff.ts';
+import type {ChampionPlan,Finding,HandoffRecord,MilestoneDraft,ReviewDraft,ReviewItem,ReviewMilestone,ReviewOrigin,ReviewProblem,ReviewProblemBody,ReviewStakeholder,SourceRef,SourceType,Understanding} from '../../../../../contracts/activation/v1/handoff.ts';
 import {ActivationError} from '../store.ts';
 import {technicalRole,unsafeReason} from './intelligence.ts';
 
@@ -15,20 +15,34 @@ export function reviewFromAnalysis({understanding:u,proposal}:Pick<HandoffRecord
  const item=(text:string,origin:ReviewOrigin,extra:Partial<ReviewItem>={}):ReviewItem=>({id:id('i'),text,origin,...extra});
  const shared=u.findings.filter(f=>f.audience!=='internal');
  const fromRequirements=(f:Finding)=>f.category==='technical_requirement'||f.sources.some(s=>s.type==='technical_requirements');
- const challenges=shared.filter(f=>f.category==='business_need').map(f=>item(f.statement,'customer',{status:status(f),sources:labels(f.sources)}));
+ const needs=shared.filter(f=>f.category==='business_need');
+ const challenges=needs.map(f=>item(f.statement,'customer',{status:status(f),sources:labels(f.sources)}));
  const e=u.entities;
  const systems=[...e.services.map(s=>`${s} (service)`),...e.repositories.map(r=>`${r} (repository)`),
   ...(e.scm?[`${e.scm} (source control)`]:[]),...(e.ci?[`${e.ci} (CI/CD)`]:[]),...(e.docs?[`${e.docs} (documentation)`]:[]),...(e.sso?[`${e.sso} (sign-in)`]:[])].map(t=>item(t,'customer'));
+ // Distinct customer needs (by topic) are separate engineering problems: the first stays the main problem, each other
+ // topic becomes its own problem with its own challenges and the systems its statements name. Nothing is invented:
+ // every problem is a stated need, and its summary is the customer's own statement.
+ const topics=[...new Set(needs.map(f=>norm(f.topic)))];
+ const topicOf=new Map(needs.map((f,i)=>[challenges[i].id,norm(f.topic)]));
+ const mentions=(texts:string[])=>systems.filter(x=>{const name=x.text.replace(/\s*\([^)]*\)$/,'').toLowerCase();return texts.some(t=>t.toLowerCase().includes(name));});
+ const moreProblems:ReviewProblem[]=topics.slice(1).map(t=>{
+  const own=challenges.filter(c=>topicOf.get(c.id)===t);
+  return {id:id('problem'),summary:own[0].text,challenges:own,systems:mentions(own.map(c=>c.text)),contradictions:[],unknowns:[]};
+ });
+ const mainChallenges=topics.length>1?challenges.filter(c=>topicOf.get(c.id)===topics[0]):challenges;
  const milestoneIds=new Map(proposal.milestones.map(m=>[norm(m.objective),m.id]));
  return {
   problem:{
    summary:u.engineeringProblem??challenges[0]?.text??'',
-   challenges,systems,
+   challenges:mainChallenges,systems,
    contradictions:u.contradictions.map(c=>item(`${c.topic}: ${c.summary}`,'ai')),
    unknowns:u.unknowns.filter(x=>x.audience==='developer').map(x=>item(x.question,'ai')),
   },
+  ...(moreProblems.length?{moreProblems}:{}),
   facts:shared.filter(f=>f.category!=='business_need'&&!fromRequirements(f)).map(f=>item(f.statement,'customer',{status:status(f),sources:labels(f.sources)})),
-  stakeholders:(u.stakeholders??[]).filter(s=>s.name).map(s=>({id:id('p'),name:s.name!,role:s.role,responsibilities:s.responsibilities.join('; '),
+  // Responsibilities only where the sources state them; a role's usual duties are not presented as this person's.
+  stakeholders:(u.stakeholders??[]).filter(s=>s.name).map(s=>({id:id('p'),name:s.name!,role:s.role,responsibilities:s.workBasis==='role_default'?'':s.responsibilities.join('; '),
    basis:s.workBasis==='role_default'?'role_default':s.confidence==='inferred'?'inferred':'stated',sources:labels(s.sources),technical:technicalRole(s.role)})),
   goals:uniq([...shared.filter(fromRequirements).map(f=>item(f.statement,'customer',{status:status(f),sources:labels(f.sources)})),
    ...u.goals.map(g=>item(g.technicalGoal,'ai'))],x=>norm(x.text)),
@@ -60,7 +74,9 @@ export function validateReview(v:unknown):ReviewDraft{
    assignee:m.assignee===null?null:text(m.assignee,80,1),role:text(m.role,40,1),dependsOn:list(m.dependsOn,8,d=>ID.test(String(d))?String(d):invalid()),
    origin:origin(m.origin),...(m.edited===true?{edited:true}:{})};});
  if(new Set(milestones.map(m=>m.id)).size!==milestones.length)invalid();
- return {problem:{summary:text(r.problem.summary,2000),challenges:items(r.problem.challenges),systems:items(r.problem.systems),contradictions:items(r.problem.contradictions),unknowns:items(r.problem.unknowns)},
+ const body=(x:Record<string,any>):ReviewProblemBody=>({summary:text(x.summary,2000),challenges:items(x.challenges),systems:items(x.systems),contradictions:items(x.contradictions),unknowns:items(x.unknowns)});
+ const more=r.moreProblems===undefined?[]:list(r.moreProblems,6,(v):ReviewProblem=>{const x=v as Record<string,any>;if(!x||typeof x!=='object')invalid();return {id:ID.test(String(x.id))?String(x.id):invalid(),...body(x)};});
+ return {problem:body(r.problem),...(more.length?{moreProblems:more}:{}),
   facts:items(r.facts,60),
   stakeholders:list(r.stakeholders,20,(v):ReviewStakeholder=>{const s=v as Record<string,unknown>;if(!s||typeof s!=='object')invalid();
    const role=text(s.role,120,1);
@@ -89,9 +105,12 @@ export function reviewIssues(r:ReviewDraft,u:Pick<Understanding,'findings'|'stak
  if(hasCycle(r.milestones))add('milestones','Onboarding milestones','circular_dependencies');
  // Everything that would reach the Champion is screened; Chris's internal people (non-technical) never do.
  const screen=(path:string,label:string,t:string)=>{const reason=t.trim()?unsafeReason(t,u):null;if(reason)add(path,label,reason);};
- screen('problem.summary','Engineering problem · summary',r.problem.summary);
- for(const [key,name] of [['challenges','Main technical challenges'],['systems','Relevant systems'],['contradictions','Contradictions'],['unknowns','Unknowns']] as const)
-  r.problem[key].forEach((x,i)=>screen(`problem.${key}[${i}]`,`${name} · item ${i+1}`,x.text));
+ [r.problem,...(r.moreProblems??[])].forEach((pr,n)=>{
+  const at=n?`moreProblems[${n-1}]`:'problem',name=n?`Engineering problem ${n+1}`:'Engineering problem';
+  screen(`${at}.summary`,`${name} · summary`,pr.summary);
+  for(const [key,label] of [['challenges','challenges'],['systems','relevant systems'],['contradictions','contradictions'],['unknowns','unknowns']] as const)
+   pr[key].forEach((x,i)=>screen(`${at}.${key}[${i}]`,`${name} · ${label} · item ${i+1}`,x.text));
+ });
  r.facts.forEach((x,i)=>screen(`facts[${i}]`,`Known facts · item ${i+1}`,x.text));
  r.goals.forEach((x,i)=>screen(`goals[${i}]`,`Technical goals · item ${i+1}`,x.text));
  r.questions.forEach((x,i)=>screen(`questions[${i}]`,`Questions for the customer · item ${i+1}`,x.text));
@@ -149,7 +168,8 @@ export function championPlan(record:Pick<HandoffRecord,'review'|'understanding'|
  const items=(xs:ReviewItem[])=>xs.filter(x=>safe(x.text)).map(x=>({id:x.id,text:x.text,origin:x.origin,...(x.edited?{edited:true}:{}),...(x.status?{status:x.status}:{}),...(x.sources?{sources:championSources(x.sources,record.sources)}:{})}));
  const milestones=r.milestones.filter(m=>[m.title,m.description,m.system,...m.actions,...m.completionCriteria].every(safe));
  const ids=new Set(milestones.map(m=>m.id));
- return {problem:{summary:safe(r.problem.summary)?r.problem.summary:'',challenges:items(r.problem.challenges),systems:items(r.problem.systems),contradictions:items(r.problem.contradictions),unknowns:items(r.problem.unknowns)},
+ const body=(x:ReviewProblemBody):ReviewProblemBody=>({summary:safe(x.summary)?x.summary:'',challenges:items(x.challenges),systems:items(x.systems),contradictions:items(x.contradictions),unknowns:items(x.unknowns)});
+ return {problem:body(r.problem),...(r.moreProblems?.length?{moreProblems:r.moreProblems.map(x=>({id:x.id,...body(x)}))}:{}),
   facts:items(r.facts),goals:items(r.goals),questions:items(r.questions),
   milestones:milestones.map(m=>({...m,dependsOn:m.dependsOn.filter(d=>ids.has(d))})),
   stakeholders:r.stakeholders.filter(s=>s.technical&&[s.name,s.role,s.responsibilities].every(safe)).map(s=>({id:s.id,name:s.name,role:s.role,responsibilities:s.responsibilities,basis:s.basis,sources:championSources(s.sources,record.sources)})),
@@ -161,7 +181,21 @@ export function applyChampionEdits(review:ReviewDraft,input:unknown):ReviewDraft
  if(!x||typeof x!=='object')invalid();
  return validateReview({...review,goals:x.goals,milestones:x.milestones,questions:x.questions});
 }
-/** Approval needs an explicit assignee on every milestone, in addition to the submission checks. */
+/** Approval uses the submission checks. A milestone may stay without a suggested owner: developers choose the
+ * work they pursue, so nobody has to be assigned before the plan is approved. */
 export function approvalIssues(r:ReviewDraft,u:Pick<Understanding,'findings'|'stakeholders'|'privateStems'>):ReviewIssue[]{
- return [...reviewIssues(r,u),...r.milestones.flatMap((m,i)=>m.assignee?[]:[{path:`milestones[${i}].assignee`,label:`Milestone ${i+1} · assignee`,reason:'unassigned'}])];
+ return reviewIssues(r,u);
+}
+/** What the Champion changed in a save, by count only, for Chris's history. Null when nothing changed. */
+export function championChanges(before:ReviewDraft,after:ReviewDraft):string|null{
+ const parts:string[]=[];
+ const diff=(name:[string,string],a:{id:string}[],b:{id:string}[],same:(x:{id:string},y:{id:string})=>boolean)=>{
+  const ids=new Set(a.map(x=>x.id)),next=new Set(b.map(x=>x.id));
+  const added=b.filter(x=>!ids.has(x.id)).length,removed=a.filter(x=>!next.has(x.id)).length,edited=b.filter(x=>{const y=a.find(z=>z.id===x.id);return y&&!same(x,y);}).length;
+  const n=(k:number)=>k===1?name[0]:name[1];
+  if(added)parts.push(`added ${added} ${n(added)}`);if(edited)parts.push(`edited ${edited} ${n(edited)}`);if(removed)parts.push(`removed ${removed} ${n(removed)}`);
+ };
+ const eq=(x:unknown,y:unknown)=>JSON.stringify(x)===JSON.stringify(y);
+ diff(['goal','goals'],before.goals,after.goals,eq);diff(['milestone','milestones'],before.milestones,after.milestones,eq);diff(['question','questions'],before.questions,after.questions,eq);
+ return parts.length?parts.join(', ').replace(/^./,c=>c.toUpperCase())+'.':null;
 }

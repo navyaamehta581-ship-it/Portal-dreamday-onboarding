@@ -5,7 +5,9 @@ import { resolve } from 'node:path';
 import type { AdmissionBundle } from './admission.ts';
 import { parseRepositoryConfig } from './repository.ts';
 import { createActivationServices } from './services.ts';
-import { createOllama, ollamaConfigFromEnv } from '../llm/ollama.ts';
+import { createOllama, ollamaConfigFromEnv, type JsonModel } from '../llm/ollama.ts';
+import { createGemini, geminiOriginAllowed } from '../llm/gemini.ts';
+import { cleanKey } from '../production.ts';
 /** Explicit loopback development mode, not production authentication. */
 export function developmentActivation(goalFilename:string) {
   if(process.env.ACTIVATION_DEV!=='1')return null;
@@ -24,24 +26,33 @@ export function developmentActivation(goalFilename:string) {
   if(!Array.isArray(bundles)||bundles.length!==1)throw new Error('Development mode requires exactly one scoped bundle');
   const filename=resolve(process.env.ACTIVATION_DATABASE_PATH||'data/activation-dev.sqlite');
   if(filename===resolve(goalFilename))throw new Error('Activation and Goal databases must differ');
-  // PORTAL_LLM_PROVIDER=ollama uses the local model for analysis and AiKA; AIKA_LLM_PROVIDER=ollama for AiKA alone
-  // (same OLLAMA_* settings). Otherwise an OpenAI-compatible interpreter if configured, else rules.
+  // PORTAL_LLM_PROVIDER=ollama or gemini uses that model for analysis and AiKA; AIKA_LLM_PROVIDER=ollama or gemini for
+  // AiKA alone (same OLLAMA_* or GEMINI_API_KEY / GEMINI_MODEL settings as the hosted server). Otherwise rules.
+  const gemini=(provider:string|undefined):JsonModel|null=>{
+   if(provider!=='gemini')return null;
+   const apiKey=cleanKey(process.env.GEMINI_API_KEY),apiOrigin=process.env.GEMINI_API_ORIGIN||undefined;
+   if(!apiKey)throw new Error('GEMINI_API_KEY is required when the LLM provider is gemini');
+   if(apiOrigin&&!geminiOriginAllowed(apiOrigin))throw new Error('GEMINI_API_ORIGIN may only be a loopback test origin');
+   return createGemini({apiKey,model:process.env.GEMINI_MODEL?.trim()||'gemini-2.5-flash',timeoutMs:90_000,retries:1,maxOutputTokens:8192,apiOrigin});
+  };
   const ollama=ollamaConfigFromEnv();
-  const aikaModel=ollama??ollamaConfigFromEnv({...process.env,PORTAL_LLM_PROVIDER:process.env.AIKA_LLM_PROVIDER});
+  const analysisModel:JsonModel|null=gemini(process.env.PORTAL_LLM_PROVIDER)??(ollama?createOllama(ollama):null);
+  const aikaOllama=ollamaConfigFromEnv({...process.env,PORTAL_LLM_PROVIDER:process.env.AIKA_LLM_PROVIDER});
+  const aikaModel:JsonModel|null=analysisModel??gemini(process.env.AIKA_LLM_PROVIDER)??(aikaOllama?createOllama(aikaOllama):null);
   // Phase 7: repositories the operator configured per customer, live (read-only GitHub) or fixture (labelled sample).
   const repositoryConfig=process.env.ACTIVATION_REPOSITORIES_PATH?parseRepositoryConfig(JSON.parse(readFileSync(process.env.ACTIVATION_REPOSITORIES_PATH,'utf8'))):[];
   const apiOrigin=process.env.ACTIVATION_GITHUB_API_ORIGIN;
   // Only GitHub itself, or a loopback stand-in for tests; never an arbitrary host.
   if(apiOrigin&&apiOrigin!=='https://api.github.com'&&!/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(apiOrigin))throw new Error('ACTIVATION_GITHUB_API_ORIGIN must be https://api.github.com or a loopback test origin');
   const services=createActivationServices({filename,bundles,handoffMode:process.env.ACTIVATION_INTAKE==='1',
-   analysisModel:ollama?createOllama(ollama):null,aikaModel:aikaModel?createOllama(aikaModel):null,
+   analysisModel,aikaModel,
    repositories:repositoryConfig,github:{token:process.env.ACTIVATION_GITHUB_REPOSITORY_TOKEN||undefined,...(apiOrigin?{apiOrigin}:{})},
    evidenceMaxAgeHours:Number(process.env.ACTIVATION_EVIDENCE_MAX_AGE_HOURS??24),inspectionCooldownMs:Number(process.env.ACTIVATION_INSPECTION_COOLDOWN_SECONDS??30)*1000,
    githubReadScopes:process.env.ACTIVATION_GITHUB_READ_SCOPES?JSON.parse(readFileSync(process.env.ACTIVATION_GITHUB_READ_SCOPES,'utf8')) as GitHubReadScope[]:[],githubReadToken:process.env.GITHUB_READ_TOKEN,
    setupApprovalGrants:process.env.ACTIVATION_SETUP_APPROVAL_GRANTS?JSON.parse(readFileSync(process.env.ACTIVATION_SETUP_APPROVAL_GRANTS,'utf8')) as SetupApprovalGrant[]:[]});
-  const {store,intake,reports,github,handoff,work,aika,repositories,insights}=services;
+  const {store,intake,reports,github,handoff,work,aika,repositories,insights,opportunities}=services;
   const bearer=(request:import('node:http').IncomingMessage,t:string|undefined)=>!!t&&request.headers.authorization===`Bearer ${t}`;
-  // Dream Day applies whenever the handoff workflow can publish: only a Champion approval publishes new plans.
+  // Whenever the handoff workflow can publish, new plans are published only by Chris finalizing the Onboarding Draft.
   const developerName=(request:import('node:http').IncomingMessage)=>developers.find(d=>request.headers.authorization===`Bearer ${d.token}`)?.name??null;
-  return {options:{handoff,work,aika,repositories,insights,developerName,championApproval:process.env.ACTIVATION_INTAKE==='1',isChampion:(request:import('node:http').IncomingMessage)=>bearer(request,championToken),isOperator:(request:import('node:http').IncomingMessage)=>!!operatorToken&&request.headers.authorization===`Bearer ${operatorToken}`,store,prepareGitHub:github.prepare,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:services.initialPlan,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>(request.headers.authorization===`Bearer ${token}`||bearer(request,operatorToken)||bearer(request,championToken)||!!developerName(request))&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},close:services.close};
+  return {options:{handoff,work,aika,repositories,insights,opportunities,developerName,championApproval:process.env.ACTIVATION_INTAKE==='1',isChampion:(request:import('node:http').IncomingMessage)=>bearer(request,championToken),isOperator:(request:import('node:http').IncomingMessage)=>!!operatorToken&&request.headers.authorization===`Bearer ${operatorToken}`,store,prepareGitHub:github.prepare,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:services.initialPlan,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>(request.headers.authorization===`Bearer ${token}`||bearer(request,operatorToken)||bearer(request,championToken)||!!developerName(request))&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},close:services.close};
 }

@@ -41,13 +41,19 @@ async function open(persona=chris){
 const host=()=>m!.host,text=()=>host().textContent??'';
 const button=(label:string)=>Array.from(host().querySelectorAll('button')).find(b=>b.textContent?.trim()===label||b.getAttribute('aria-label')===label);
 const tick=async(ms:number)=>{await act(async()=>{await vi.advanceTimersByTimeAsync(ms);});};
+const section=(title:string)=>host().querySelector(`section[aria-label="${title}"]`) as HTMLElement;
+/** Opens a collapsible section; closed ones show only their header. */
+async function openSection(title:string){const head=section(title).querySelector<HTMLButtonElement>(':scope > .pt-section-head')!;if(head.getAttribute('aria-expanded')!=='true')await act(async()=>{head.click();});}
+async function editMilestone(n:number){if(!byLabel(host(),`Milestone ${n} title`))await click(host(),`Edit milestone ${n}`);}
 
 it('routes the operator persona through the operator proxy without any token in the page',async()=>{
  api.read.mockResolvedValue(fixtureState('orbit'));await open();
  expect(activationClient).toHaveBeenLastCalledWith('fictional-north','','','/operator-api/north','chris');
  expect(host().querySelector('input[type=password]')).toBeNull();expect(text()).not.toMatch(/access token/i);
- await click(host(),'Developer Progress');
- expect(window.location.pathname).toBe('/operator/progress');expect(text()).toContain('Activation at a glance');
+ await click(host(),'Progress & updates');
+ expect(window.location.pathname).toBe('/operator/progress');expect(section('Adoption').textContent).toContain('Read-only');
+ // Chris follows progress; he doesn't connect, inspect or configure anything.
+ expect(text()).not.toMatch(/Activation at a glance|Integration tools|Inspect repository|Connect (a )?repositor/);
 });
 
 // Chris's PDF as the server describes it after reading.
@@ -103,7 +109,7 @@ it('choosing or dropping a PDF uploads it once and starts the analysis with no o
  expect(text()).toContain('An analysis is running. You can upload a new PDF when it finishes.');
  expect(byLabel<HTMLInputElement>(host(),'Customer PDF')!.disabled).toBe(true);
  // How it was read: each section, its category and why; an uncertain one says so.
- const how=Array.from(host().querySelectorAll('details summary')).find(s=>s.textContent?.startsWith('How the document was read'))!.parentElement!.textContent!;
+ const how=Array.from(host().querySelectorAll('details summary')).find(s=>s.textContent?.startsWith('How this document was read'))!.parentElement!.textContent!;
  expect(how).toContain('Conversational Transcript');expect(how).toContain('category from its heading');expect(how).toContain('category uncertain');
  expect(how).toContain('2 repeated header, footer or page-number lines were left out');
  // Dropping works the same way.
@@ -118,8 +124,12 @@ it('the polled analysis finishes into the existing results and the draft',async(
  api.analysisStatus.mockResolvedValue({job:job({status:'succeeded',stage:'preparing_review',elapsedMs:41000,draft:1,interpreter:'hosted_model',modelOk:true})});
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:'2026-10-29T10:00:00Z',sources:SOURCES,document:REPORT},drafts:[record()],analysis:job({status:'succeeded',draft:1,interpreter:'hosted_model',modelOk:true,elapsedMs:41000})}));
  await tick(1600);await flush();
+ // Chris is taken straight to the draft; no repository, wiki or sign-in step comes first.
+ expect(window.location.pathname).toBe('/operator/draft');expect(section('Draft overview')).not.toBeNull();
+ await click(host(),'Customer Context');
  expect(text()).toContain('Analysis ready · produced by the AI model');expect(button('Analyze again')).toBeUndefined();
  expect(text()).toContain('Upload a new PDF to replace this information');
+ expect(Array.from(host().querySelectorAll<HTMLDetailsElement>('details')).find(d=>d.querySelector('summary')?.textContent?.startsWith('How this document was read'))!.open).toBe(false);
  await click(host(),'Review the onboarding draft');expect(window.location.pathname).toBe('/operator/draft');
 });
 
@@ -192,11 +202,11 @@ it('review: edits several milestones, reorders, removes and adds, and saves the 
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[rec]}));
  window.history.replaceState(null,'','/operator/draft');await open();
  expect(text()).toContain('Analysis ready');
- const sections=['Customer engineering problem','Known facts','Stakeholders','Technical goals','Onboarding milestones','Questions for the customer','Kept internal'];
+ const sections=['Draft overview','Engineering problems','Known facts','Stakeholders','Technical goals','Onboarding milestones','Questions for the customer','Kept internal'];
  for(const s of sections)expect(host().querySelector(`[aria-label="${s}"]`),s).not.toBeNull();
  expect(host().querySelector('[aria-label="Kept internal"]')!.textContent).toContain('PRIVATE pricing');
- await type(byLabel(host(),'Milestone 2 title')!,'Validate that people can find checkout-api');
- await type(byLabel<HTMLTextAreaElement>(host(),'Milestone 1 actions')!,'Locate the repository\nInspect catalog-info.yaml\n');
+ await editMilestone(2);await type(byLabel(host(),'Milestone 2 title')!,'Validate that people can find checkout-api');
+ await editMilestone(1);await type(byLabel<HTMLTextAreaElement>(host(),'Milestone 1 actions')!,'Locate the repository\nInspect catalog-info.yaml\n');
  await click(host(),'Move milestone 2 up');
  expect(byLabel<HTMLInputElement>(host(),'Milestone 1 title')!.value).toBe('Validate that people can find checkout-api');
  await click(host(),'Add milestone');
@@ -205,7 +215,7 @@ it('review: edits several milestones, reorders, removes and adds, and saves the 
  await type(byLabel<HTMLTextAreaElement>(host(),'Milestone 3 completion criteria')!,'The runbook link resolves from the Catalog entry');
  const dep=Array.from(host().querySelectorAll<HTMLInputElement>('[aria-label="Milestone 3"] .pt-depends input'))[1];
  await act(async()=>{dep.click();});
- await type(byLabel<HTMLTextAreaElement>(host(),'Question 1')!,'Which team owns checkout-api today?');
+ await openSection('Questions for the customer');await type(byLabel<HTMLTextAreaElement>(host(),'Question 1')!,'Which team owns checkout-api today?');
  await click(host(),'Add question');await type(byLabel<HTMLTextAreaElement>(host(),`Question ${rec.review!.questions.length+1}`)!,'Where do runbooks live?');
  expect(text()).toContain('Unsaved changes');
  api.saveReview.mockImplementation(async(draft:number,rev:number,review:ReviewDraft)=>({...rec,review,reviewRevision:rev+1,reviewUpdatedAt:'2026-10-29T11:00:00Z'}));
@@ -220,7 +230,7 @@ it('review: edits several milestones, reorders, removes and adds, and saves the 
  expect(text()).not.toContain('Unsaved changes');
  // Removing a milestone also removes dependencies on it.
  await click(host(),'Remove milestone 2');
- expect(Array.from(host().querySelectorAll('[aria-label^="Milestone "][aria-label$=" title"]')).length).toBe(2);
+ expect(host().querySelectorAll('button[aria-label^="Remove milestone"]').length).toBe(2);
 });
 
 it('a saved draft is restored after a refresh exactly as saved',async()=>{
@@ -228,38 +238,41 @@ it('a saved draft is restored after a refresh exactly as saved',async()=>{
  const edited:HandoffRecord={...rec,reviewRevision:3,reviewUpdatedAt:'2026-10-29T11:00:00Z',review:{...rec.review!,problem:{...rec.review!.problem,summary:'Edited summary by Chris'},milestones:[...rec.review!.milestones].reverse()}};
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[edited]}));
  window.history.replaceState(null,'','/operator/draft');await open();
- expect(byLabel<HTMLTextAreaElement>(host(),'Problem summary')!.value).toBe('Edited summary by Chris');
- expect(byLabel<HTMLInputElement>(host(),'Milestone 1 title')!.value).toBe('Validate checkout-api discoverability');
+ await openSection('Engineering problems');expect(byLabel<HTMLTextAreaElement>(host(),'Problem summary')!.value).toBe('Edited summary by Chris');
+ await editMilestone(1);expect(byLabel<HTMLInputElement>(host(),'Milestone 1 title')!.value).toBe('Validate checkout-api discoverability');
  expect(text()).toMatch(/Saved \d/);
 });
 
-it('submission: needs saved changes and confirmation, shows the fields to fix, locks after submitting and can be withdrawn',async()=>{
+it('finalizing: needs saved changes and confirmation, shows the fields to fix, then publishes and shows who published it',async()=>{
  const rec=record();
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[rec]}));
  window.history.replaceState(null,'','/operator/draft');await open();
- const submit=()=>button('Mark ready for Champion review')!;
+ expect(text()).not.toMatch(/Champion review|Approve|approval/);
+ const submit=()=>button('Finalize and publish')!;
  expect(submit().disabled).toBe(true);
- await act(async()=>{host().querySelector<HTMLInputElement>('[aria-label="Submit for Champion review"] .pt-check input')!.click();});
+ await act(async()=>{host().querySelector<HTMLInputElement>('[aria-label="Finalize onboarding plan"] .pt-check input')!.click();});
  expect(submit().disabled).toBe(false);
- await type(byLabel<HTMLTextAreaElement>(host(),'Problem summary')!,'Changed');
+ await openSection('Engineering problems');await type(byLabel<HTMLTextAreaElement>(host(),'Problem summary')!,'Changed');
  expect(submit().disabled).toBe(true);expect(text()).toContain('Save your changes first.');
  await click(host(),'Discard');
  api.submitReview.mockRejectedValueOnce(new ActivationRequestError('CONFIDENTIAL_CONTENT',400,{issues:[{path:'milestones[0].description',label:'Milestone 1 · description',reason:'private_comment'},{path:'goals[1]',label:'Technical goals · item 2',reason:'commercial_text'}]}));
- await click(host(),'Mark ready for Champion review');await flush();
- const alert=host().querySelector('[aria-label="Submit for Champion review"] [role=alert]')!.textContent!;
- expect(alert).toContain('The Champion must not receive internal or commercial information');
+ await click(host(),'Finalize and publish');await flush();
+ const alert=host().querySelector('[aria-label="Finalize onboarding plan"] [role=alert]')!.textContent!;
+ expect(alert).toContain('The Champion and developers must not receive internal or commercial information');
  expect(alert).toContain('Milestone 1 · description: contains an executive or private comment');expect(alert).toContain('Technical goals · item 2: mentions commercial or deal details');
- api.submitReview.mockResolvedValueOnce({...rec,status:'submitted',submittedAt:'2026-10-29T12:00:00Z'});
- await click(host(),'Mark ready for Champion review');await flush();
+ // A collapsed row never hides what must be fixed: the flagged milestone opens by itself.
+ expect(byLabel(host(),'Milestone 1 description')).not.toBeNull();
+ // Finalizing publishes; the page loads the published onboarding straight away.
+ api.submitReview.mockResolvedValueOnce({...rec,status:'published',submittedAt:'2026-10-29T12:00:00Z',developer:{approval:{by:'Chris',at:'2026-10-29T12:00:00Z'}} as HandoffRecord['developer'],history:[{action:'published',at:'2026-10-29T12:00:00Z',by:'Chris'}]});
+ api.read.mockResolvedValue(fixtureState('orbit'));
+ await click(host(),'Finalize and publish');await flush();await flush();
  expect(api.submitReview).toHaveBeenLastCalledWith(1,0);
- expect(text()).toContain('Submitted for Champion review');expect(text()).toContain('Nothing is visible to developers until it is approved');
- expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(true);
- api.withdrawReview.mockResolvedValueOnce({...rec,status:'draft',submittedAt:null});
- await click(host(),'Withdraw to make changes');await flush();
- expect(api.withdrawReview).toHaveBeenCalledWith(1);expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(false);
+ expect(text()).toContain('Published to the Champion and developers');expect(text()).toContain('Published by Chris on');
+ expect(text()).toContain('you don’t need to do anything else');
+ expect(host().querySelector('[aria-label="Plan history"]')!.textContent).toContain('Published to the Champion and developers');
 });
 
-it('Dream Day: Chris has no way to publish around the Champion',async()=>{
+it('Chris has no way to publish around the reviewed draft, and no technical setup',async()=>{
  const rec=record();
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[rec]}));
  window.history.replaceState(null,'','/operator/draft');await open();
@@ -267,37 +280,61 @@ it('Dream Day: Chris has no way to publish around the Champion',async()=>{
  expect(host().querySelector('[aria-label="Integration tools"],details.pt-details summary')?.textContent??'').not.toContain('Integration tools');
 });
 
-it('Dream Day: Chris sees the Champion’s requested changes, revises and resubmits',async()=>{
- const rec=record({status:'changes_requested',reviewRevision:5,history:[{action:'submitted',at:'2026-10-29T09:00:00Z',by:'Chris'},{action:'changes_requested',at:'2026-10-29T10:00:00Z',by:'Maya Chen',comment:'Please confirm which CI system deploys checkout-api.'}]});
+it('a draft sent for Champion review under the earlier flow can be withdrawn and then finalized by Chris',async()=>{
+ const base=record();
+ const rec=record({status:'submitted',reviewRevision:5,submittedAt:'2026-10-29T09:00:00Z',review:{...base.review!,milestones:base.review!.milestones.map((x,i)=>i===0?{...x,edited:true}:x)},
+  history:[{action:'submitted',at:'2026-10-29T09:00:00Z',by:'Chris'},{action:'edited',at:'2026-10-29T10:00:00Z',by:'Maya Chen',comment:'Edited 1 milestone, added 1 question.'}]});
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[rec]}));
  window.history.replaceState(null,'','/operator/draft');await open();
- expect(text()).toContain('Changes requested');
- expect(host().querySelector('[aria-label="Champion feedback"]')!.textContent).toContain('Maya Chen requested changes in Dream Day');
- expect(host().querySelector('[aria-label="Champion feedback"]')!.textContent).toContain('Please confirm which CI system deploys checkout-api.');
- expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(false);
- expect(host().querySelector('[aria-label="Dream Day review history"]')!.textContent).toMatch(/Changes requested.*Maya Chen/s);
- await act(async()=>{host().querySelector<HTMLInputElement>('[aria-label="Submit for Champion review"] .pt-check input')!.click();});
- api.submitReview.mockResolvedValueOnce({...rec,status:'resubmitted',submittedAt:'2026-10-29T11:00:00Z'});
- await click(host(),'Resubmit for Champion review');await flush();
- expect(api.submitReview).toHaveBeenCalledWith(1,5);
- expect(text()).toContain('Resubmitted for Champion review');expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(true);
+ expect(text()).toContain('Sent for review under an earlier version');expect(text()).toContain('nobody needs to approve it');
+ expect(host().querySelector('[aria-label="Champion updates"]')!.textContent).toContain('Edited 1 milestone, added 1 question.');
+ expect(host().querySelector('[aria-label="Plan history"]')!.textContent).toContain('Changed by the Champion');
+ expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(true);
+ api.withdrawReview.mockResolvedValueOnce({...rec,status:'draft',submittedAt:null,reviewRevision:6});
+ await click(host(),'Withdraw to make changes');await flush();
+ expect(api.withdrawReview).toHaveBeenCalledWith(1);expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(false);
+ expect(button('Finalize and publish')).toBeDefined();
 });
 
-it('Dream Day: after approval Chris sees who approved, when, and the approved responsibilities',async()=>{
- const base=record(),approvedReview={...base.review!,milestones:base.review!.milestones.map((x,i)=>({...x,assignee:i===0?'Alex Rivera':'Jordan Lee'}))};
- const rec=record({status:'published',review:approvedReview,approvals:{chris:{status:'approved',by:'Chris',at:'2026-10-29T09:00:00Z'},champion:{status:'approved',by:'Maya Chen',at:'2026-10-29T10:00:00Z'}},
-  history:[{action:'submitted',at:'2026-10-29T09:00:00Z',by:'Chris'},{action:'approved',at:'2026-10-29T10:00:00Z',by:'Maya Chen'},{action:'published',at:'2026-10-29T10:00:00Z',by:'Maya Chen'}]});
+it('after publishing Chris sees who published it, when, and the suggested owners; an older plan is labelled as such',async()=>{
+ const base=record(),review={...base.review!,milestones:base.review!.milestones.map((x,i)=>({...x,assignee:i===0?'Alex Rivera':'Jordan Lee'}))};
+ const rec=record({status:'published',review,developer:{approval:{by:'Chris',at:'2026-10-29T10:00:00Z'}} as HandoffRecord['developer'],approvals:{chris:{status:'approved',by:'Chris',at:'2026-10-29T10:00:00Z'},champion:{status:'pending',by:null,at:null}},
+  history:[{action:'published',at:'2026-10-29T10:00:00Z',by:'Chris'}]});
  api.read.mockResolvedValue(fixtureState('orbit'));
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[rec]}));
  window.history.replaceState(null,'','/operator/draft');await open();
- expect(text()).toContain('Approved · Published to developers');
- expect(text()).toContain('Champion approval complete: approved by Maya Chen in Dream Day');
- const resp=host().querySelector('[aria-label="Approved responsibilities"]')!.textContent!;
- expect(resp).toContain('Alex Rivera');expect(resp).toContain('Jordan Lee');
- // A plan published before Dream Day is never shown as approved.
+ expect(text()).toContain('Published to the Champion and developers');
+ expect(text()).toContain('Published by Chris on');expect(text()).not.toMatch(/approv/i);
+ const owners=host().querySelector('[aria-label="Suggested owners"]')!.textContent!;
+ expect(owners).toContain('Alex Rivera');expect(owners).toContain('Jordan Lee');
  await m!.unmount();
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[record({status:'published'})]}));await open();
- expect(text()).toContain('Published before Dream Day');expect(text()).not.toContain('Champion approval complete');
+ expect(text()).toContain('Published before Dream Day');expect(text()).not.toContain('Published by Chris');
+});
+
+it('a document with several problems and missing responsibilities: an overview first, backing on demand, and it can be published with unknowns',async()=>{
+ const base=record(),r=base.review!;
+ const review:ReviewDraft={...r,
+  moreProblems:[{id:'problem-2',summary:'Deploys to checkout-api need a manual approval nobody owns.',challenges:[{id:'c9',text:'Release approvals wait for days',origin:'customer',status:'reported',sources:['Discovery call']}],systems:[],contradictions:[],unknowns:[{id:'u9',text:'Which CI system deploys checkout-api?',origin:'ai'}]}],
+  stakeholders:[...r.stakeholders,{id:'p-x',name:'Sam Ortiz',role:'Developer',responsibilities:'',basis:'role_default',sources:[],technical:true}]};
+ api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[{...base,review}]}));
+ window.history.replaceState(null,'','/operator/draft');await open();
+ // The overview lists both problems, the goals and the milestones; the detail sections stay closed.
+ const glance=section('Draft overview').textContent!;
+ expect(glance).toContain('Deploys to checkout-api need a manual approval nobody owns.');expect(glance).toContain(r.milestones[0].title);
+ for(const t of ['Engineering problems','Known facts','Stakeholders','Questions for the customer'])expect(section(t).querySelector(':scope > .pt-section-head')!.getAttribute('aria-expanded'),t).toBe('false');
+ for(const t of ['Technical goals','Onboarding milestones'])expect(section(t).querySelector(':scope > .pt-section-head')!.getAttribute('aria-expanded'),t).toBe('true');
+ // Backing is one click away; each problem is separate.
+ await openSection('Engineering problems');
+ expect(host().querySelectorAll('[aria-label^="Engineering problem "]').length).toBe(2);
+ await openSection('Known facts');expect(section('Known facts').textContent).toMatch(/Reported|Verified|Unconfirmed/);
+ // A missing responsibility is said, not invented.
+ await openSection('Stakeholders');expect(section('Stakeholders').textContent).toContain('Responsibility not specified in the sources');
+ // Unknowns don't block publishing; there is no technical-setup step for Chris.
+ expect(section('Finalize onboarding plan').textContent).toMatch(/open questions? or unknowns? can stay open/);
+ await act(async()=>{section('Finalize onboarding plan').querySelector<HTMLInputElement>('.pt-check input')!.click();});
+ expect(button('Finalize and publish')!.disabled).toBe(false);
+ expect(text()).not.toMatch(/Inspect repository|Connect (a |your )?repositor|Integration tools|Upload (a |the )?wiki/);
 });
 
 it('stops when the browser is signed in as someone else instead of acting for them',async()=>{

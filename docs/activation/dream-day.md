@@ -1,32 +1,35 @@
-# Dream Day: Champion review and approval (Phase 4)
+# Dream Day (Phase 4, superseded by the non-blocking flow)
 
-Dream Day is where the customer's Champion (Maya) reviews the technical onboarding plan Chris submitted, refines it, assigns the work and approves it. Approval is the only way a new plan reaches developers.
+> **Current behaviour.** Champion approval has been removed. When Chris clicks **Finalize and publish**, the goals and milestones are published to the Champion and developers straight away. Dream Day is now an optional, read-only view of the published plan. It has no approval checkbox, approve, send-back or save. From there the Champion goes to Team overview to set priorities and recommend opportunities. See [roles-and-opportunities.md](roles-and-opportunities.md).
+>
+> The rest of this page describes the earlier approval flow. The server keeps its routes and states (`submitted`, `resubmitted`, `changes_requested`) only so older records stay readable: Chris can withdraw such a draft and finalize it himself.
 
 ```
-Chris submits → Maya reviews in Dream Day → Maya edits and assigns → Maya approves → each developer receives their own approved work
-                                      ↘ Maya requests changes (with a reason) → Chris revises → Chris resubmits ↗
+Current:  Chris finalizes → published to the Champion and developers → developers choose; the Champion prioritises (Dream Day optional)
+Earlier:  Chris submits → Maya reviews, edits, approves (or sends back) → developers see the plan
 ```
 
 ## Where it lives
 
 **Team Coordination → Dream Day** (`/champion`), in Maya's Portal. **Team overview** (`/champion/team`) shows the published plan and who does what. Maya's Home card links to both.
 
-The Dream Day page shows:
+The Dream Day page shows, in this order (overview first, supporting context collapsed at the end):
+- **Proposed plan at a glance.** Goals and milestones, each marked Proposed, Proposed · edited or Added by you, with her last saved changes.
 - **Status and history.** The submission status, with the review history (who submitted, resubmitted, withdrew, requested changes, approved, and when) and Maya's comments.
-- **What remains to decide.** Milestones without an assignee, open clarification questions and contradictions.
-- **Read-only context.**
+- **What remains open.** Milestones without a suggested owner (that's fine) and open clarification questions; both can stay open when she approves.
+- **Supporting context (read-only, collapsed).**
   - The customer's engineering problem: summary, challenges, systems, contradictions, unknowns.
   - Known facts, with evidence status (verified, reported, unconfirmed) and the *kind* of source.
   - Technical stakeholders.
 - **What Maya can edit.**
   - Technical goals.
   - Milestones: title, description, actions, completion criteria, dependencies, add, remove and reorder.
-  - Explicit assignees, chosen from the technical stakeholders.
+  - Suggested owners (optional), chosen from the technical stakeholders.
   - Clarification questions.
 - **Decisions.**
-  - **Save draft** stores edits and approves nothing.
-  - **Request changes** needs a written reason.
-  - **Approve onboarding plan** needs Maya to confirm the goals, milestones, assignments and dependencies, and her edits to be saved first.
+  - **Save draft** stores edits and approves nothing; the server records an `edited` history event that Chris sees as an update he doesn't approve.
+  - **Send it back to Chris instead (optional)** needs a written reason.
+  - **Approve onboarding plan** needs Maya to confirm "I reviewed the technical goals and milestones." and her edits to be saved first. It does not need an owner on every milestone.
 
 ## States
 
@@ -55,15 +58,15 @@ Edits, comments, assignments, history and decisions are stored with the operator
     - every text re-screened with the developer-safety screen (anything unsafe is left out and counted as "withheld");
     - source names replaced by categories ("Conversational Transcript"; CRM records, Chris's notes and account preparation become "Spotify account team");
     - no internal findings, commercial details, sources or Chris's working copy while he revises.
-  - **Developer view** of an approved plan: only the approved milestones assigned to that developer, with who approved them. A developer with no approved work sees "No approved work is assigned to you yet".
+  - **Developer view** of an approved plan: every approved milestone with its outline, who approved it and who chose it; a developer's own notes and progress only on milestones they chose or were suggested for.
   - **Champion's state view:** the whole approved plan.
   - **Chris:** sees everything, as before.
 
-After approval, developers work on their milestones in **My work**; see [developer-work.md](developer-work.md).
+After approval, the Portal observes the team's repositories itself (read-only), and developers choose milestones and opportunities; see [roles-and-opportunities.md](roles-and-opportunities.md).
 
 ## Approval publishes; the bypass is closed
 
-- **Approval publishes.** Approval runs the completeness and privacy checks; every milestone also needs an assignee from the technical team. It then publishes through the existing publication path with the approved milestones and `assignmentStatus: approved`. The developer handoff records `approval: {by, at}`.
+- **Approval publishes.** Approval runs the completeness and privacy checks (owners are not required). It then publishes through the existing publication path with the approved milestones and `assignmentStatus: approved`. The developer handoff records `approval: {by, at}`.
 - **The direct path is closed on the server.** `handoff-publications` always answers `403 CHAMPION_APPROVAL_REQUIRED`. With the Dream Day workflow on (`championApproval`, set whenever the API can publish handoffs), the older `intake` and `POST state` initialization routes are refused too. The "Publish without Champion review" button and the pre-publication integration tools are gone from Chris's workspace.
 - **Legacy data.** A record published before Dream Day, with no Champion approval, is shown as "Published before Dream Day" to Chris and Maya, never as approved. Its developers keep the earlier shared view.
 

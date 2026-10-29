@@ -71,10 +71,10 @@ export type DeveloperHandoff = {
   milestones: MilestoneDraft[];
   /** Technical stakeholders named in the sources (Champion, developers, platform/service owners) and their roles. */
   team?: { name: string; role: string; status: 'reported' | 'inferred' }[];
-  /** The Champion's Dream Day approval of this plan. Absent for plans published before Dream Day. */
+  /** Who finalized and published this plan (Chris; a Champion in older Dream Day records). Absent for plans published before Dream Day. */
   approval?: { by: string; at: string };
   /** The approved plan's engineering problem, technical goals and open clarification questions (developer-safe). */
-  objective?: { problem: string | null; goals: string[]; questions: string[] };
+  objective?: { problem: string | null; goals: string[]; questions: string[]; /** Further engineering problems, when the plan has more than one. */ problems?: string[] };
 };
 
 // ---- Phase 5: developers working on approved milestones. Attributed by server-side developer identity.
@@ -95,7 +95,9 @@ export type MilestoneReview = { decision: 'reviewed'; at: string; by: string; no
  * `developerRevision` only when the assignee changes the work itself (actions, status, a new blocker or update). */
 export type MilestoneWorkRecord = { milestoneId: string; revision: number; explicit: 'ready_for_review' | 'completed' | null;
   actions: { status: ActionStatus; at: string | null; by: string | null }[]; updates: WorkUpdate[]; updatedAt: string | null; updatedBy: string | null;
-  developerRevision?: number; review?: MilestoneReview | null };
+  developerRevision?: number; review?: MilestoneReview | null;
+  /** Developers who chose to work on this milestone (nobody is assigned work they didn't choose). */
+  workingOn?: string[] };
 export type MilestoneDependency = { id: string; title: string; assignee: string | null; status: WorkStatus };
 /** Review state, derived on the server: awaiting the Champion once the assignee marks it ready (or completed);
  * `reviewed_outdated` when the developer changed the work after the review. */
@@ -105,7 +107,13 @@ export type AttentionReason = 'blocked' | 'open_blocker' | 'open_question' | 'aw
 /** One approved milestone as a viewer may see it. `detail` is present for the viewer's own milestones (and for the
  * Champion and Chris); other developers' milestones show only title, assignee and status. Counts are computed on
  * the server so every view shows the same numbers. */
+/** `assignee` is the owner the Champion suggested, if any. `mine`: the viewer suggested as owner or working on it. */
 export type MilestoneProgress = { id: string; title: string; assignee: string | null; status: WorkStatus; openBlockers: number; mine: boolean;
+  workingOn?: string[]; suggestedForMe?: boolean;
+  /** The work record's revision, so any developer can choose (or stop) a milestone they can't otherwise change. */
+  revision?: number;
+  /** What the milestone is about, for anyone on the team; a developer's own notes and action progress stay in `detail`. */
+  outline?: { description: string; system: string | null; actions: string[]; completionCriteria: string[] };
   dependsOn: MilestoneDependency[];
   openQuestions?: number; openFollowUps?: number; actionsCompleted?: number; actionsTotal?: number;
   reviewState?: ReviewState; review?: MilestoneReview | null; attention?: AttentionReason[];
@@ -141,12 +149,14 @@ export type Assignment = { milestoneId: string; role: string; proposedAssignee: 
 
 /** Record status (Dream Day review workflow):
  * 'draft' = Chris is reviewing or revising; 'submitted' / 'resubmitted' = waiting for the Champion's review;
- * 'changes_requested' = the Champion sent it back with a comment; 'approved' = the Champion approved it but this
- * server doesn't publish; 'published' = developers can see it. Only a Champion approval publishes new plans;
- * a 'published' record without a recorded Champion approval predates Dream Day. */
+ * 'changes_requested' = the Champion sent it back with a comment (older records); 'approved' = finalized but this
+ * server doesn't publish; 'published' = the Champion and developers can see it. Chris finalizing the draft publishes
+ * it; 'submitted', 'resubmitted' and 'changes_requested' only appear on records from the earlier Champion-approval flow.
+ * A 'published' record without a recorded publisher predates Dream Day. */
 export type HandoffStatus = 'draft' | 'submitted' | 'changes_requested' | 'resubmitted' | 'approved' | 'published';
 /** One step of the Dream Day review, kept on the record. `by` is the display name of who acted. */
-export type ReviewEvent = { action: 'submitted' | 'resubmitted' | 'withdrawn' | 'changes_requested' | 'approved' | 'published'; at: string; by: string; comment?: string };
+/** `edited`: the Champion saved changes to the plan; `comment` then summarises them by count (never content). */
+export type ReviewEvent = { action: 'submitted' | 'resubmitted' | 'withdrawn' | 'changes_requested' | 'approved' | 'published' | 'edited'; at: string; by: string; comment?: string };
 export type HandoffRecord = {
   approvals?: Approvals; assignments?: Assignment[];
   draft: number; status: HandoffStatus; createdAt: string; publishedVersion: number | null; publishedAt: string | null;
@@ -192,8 +202,13 @@ export type ReviewItem = { id: string; text: string; origin: ReviewOrigin; edite
 export type ReviewStakeholder = { id: string; name: string; role: string; responsibilities: string; basis: 'stated' | 'role_default' | 'inferred' | 'chris'; sources: string[]; technical: boolean };
 export type ReviewMilestone = { id: string; title: string; description: string; system: string; actions: string[]; completionCriteria: string[];
   assignee: string | null; role: string; dependsOn: string[]; origin: ReviewOrigin; edited?: boolean };
+export type ReviewProblemBody = { summary: string; challenges: ReviewItem[]; systems: ReviewItem[]; contradictions: ReviewItem[]; unknowns: ReviewItem[] };
+/** A further engineering problem in the same draft; `problem` is the first. Same fields, plus an id. */
+export type ReviewProblem = ReviewProblemBody & { id: string };
 export type ReviewDraft = {
-  problem: { summary: string; challenges: ReviewItem[]; systems: ReviewItem[]; contradictions: ReviewItem[]; unknowns: ReviewItem[] };
+  problem: ReviewProblemBody;
+  /** More engineering problems found in the same customer context (absent or empty when there is only one). */
+  moreProblems?: ReviewProblem[];
   facts: ReviewItem[];
   stakeholders: ReviewStakeholder[];
   goals: ReviewItem[];
@@ -206,7 +221,7 @@ export type ReviewDraft = {
  * or revising, so work in progress is never shown. */
 export type ChampionReviewStatus = 'not_submitted' | 'revising' | 'submitted' | 'resubmitted' | 'changes_requested' | 'approved' | 'published' | 'published_before_dream_day';
 export type ChampionPlan = {
-  problem: ReviewDraft['problem']; facts: ReviewItem[]; goals: ReviewItem[]; milestones: ReviewMilestone[]; questions: ReviewItem[];
+  problem: ReviewDraft['problem']; moreProblems?: ReviewProblem[]; facts: ReviewItem[]; goals: ReviewItem[]; milestones: ReviewMilestone[]; questions: ReviewItem[];
   stakeholders: Omit<ReviewStakeholder, 'technical'>[];
   /** Items left out because they failed the privacy screen (expected 0: submission is screened too). */
   withheld: number;
@@ -253,10 +268,49 @@ export type Insights = { generatedAt: string; viewer: { role: 'developer' | 'cha
     /** Where the plan is in Chris's and Maya's workflow; only for Chris and the Champion. */
     stage: string | null };
   summary: ProgressSummary | null;
-  milestones: { id: string; title: string; assignee: string | null; status: string; reviewState: string | null; actionsCompleted: number; actionsTotal: number; openBlockers: number; openQuestions: number; lastActivityAt: string | null }[];
+  /** `assignee` is only the suggested owner; `workingOn` is who chose the milestone. */
+  milestones: { id: string; title: string; assignee: string | null; workingOn?: string[]; status: string; reviewState: string | null; actionsCompleted: number; actionsTotal: number; openBlockers: number; openQuestions: number; lastActivityAt: string | null }[];
   /** Everyone's for the Champion and Chris; a developer's own only. */
   activity: PersonActivity[];
   /** Developer evidence references are reported, never verified. */
   reportedReferences: number;
   evidence: { id: string; label: string; repository: string; mode: EvidenceMode; inspected: boolean; lastInspectedAt: string | null; stale: boolean; lastAttemptFailed: boolean;
     observed: number; notFound: number; notReadable: number; notInspected: number }[] };
+
+// ---- Role redesign: engineering opportunities, Champion priorities and developer choice, adoption.
+/** What a suggestion is: connect an existing tool, move off something, build something new, or improve what exists. */
+export type OpportunityKind = 'integration' | 'migration' | 'new_build' | 'improvement';
+/** verified: a live read-only observation backs it. sample: fixture data for the fictional demo backs it. hypothesis:
+ * it comes from the plan or customer context and nothing has confirmed it. */
+export type OpportunityBasis = 'verified' | 'sample' | 'hypothesis';
+export type Priority = 'high' | 'normal' | 'later';
+export type Opportunity = {
+  id: string; kind: OpportunityKind; title: string; why: string; basis: OpportunityBasis;
+  /** What backs it: observation summaries for verified/sample, or "From the onboarding plan" for a hypothesis. */
+  evidence: string[];
+  /** Practical, Portal-specific steps to get started (Guide shows them). */
+  steps: string[];
+  service: string | null; goal: string | null;
+  priority: Priority | null; highlighted: boolean;
+  /** Champion and Chris: who chose to pursue it. Developers: only how many, and whether they did. */
+  pursuedBy?: string[]; pursuers: number; mine?: boolean;
+};
+export type GoalView = { id: string; text: string; priority: Priority | null; milestones: { id: string; title: string; status: WorkStatus }[]; completed: number; total: number };
+export type Opportunities = { viewer: { role: 'developer' | 'champion' | 'operator'; name: string | null }; goals: GoalView[]; opportunities: Opportunity[];
+  /** When the repository observations were last refreshed by the Portal (Spotify's integration, not a person). */
+  observedAt: string | null };
+/** Champion and Chris: adoption toward the company goals, from activity recorded in the Portal. */
+export type Adoption = {
+  generatedAt: string;
+  goals: { total: number; withProgress: number };
+  milestones: { total: number; completed: number; inProgress: number; open: number };
+  opportunities: { total: number; pursued: number; highlighted: number };
+  /** Developers who recorded any work, chose a milestone or pursued an opportunity, most recent first. */
+  developers: { name: string; lastActiveAt: string | null; workingOn: number; pursuing: number; activeThisWeek: boolean }[];
+  /** Activity per week (oldest first), counting recorded work, choices and notes. */
+  weekly: { weekStart: string; events: number; activeDevelopers: number }[];
+  /** Where engagement could improve, as plain observations from the same records. */
+  suggestions: string[];
+  /** The Portal records activity for this onboarding only; there is no wider usage data in this demo. */
+  scope: 'onboarding_activity';
+};

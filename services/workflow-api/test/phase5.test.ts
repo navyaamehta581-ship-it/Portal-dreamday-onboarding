@@ -7,18 +7,17 @@ import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {TeamProgress} from '../../../contracts/activation/v1/handoff.ts';
-import {PRIVATE,ollamaStub,harness,approvedPlan,work,update} from './support/work-harness.ts';
+import {PRIVATE,ollamaStub,harness,approvedPlan,work,update,finalizePlan} from './support/work-harness.ts';
 
 test('nothing to work on before approval; afterwards each developer works on their own milestone, attributed and revision-checked',async()=>{
  const h=await harness();
  try{
   await approvedPlan(h.call,false);
-  assert.equal((await h.call('aperture','milestone-work','alex')).json.error.code,'NO_APPROVED_PLAN','submitted, not approved: nothing to work on');
-  const view=(await h.call('aperture','champion-review','champ')).json;
-  await h.call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen');
+  assert.equal((await h.call('aperture','milestone-work','alex')).json.error.code,'NO_APPROVED_PLAN','a draft Chris hasn’t finalized: nothing to work on');
+  await finalizePlan(h.call);
   const alex=await work(h.call,'alex');
   assert.deepEqual(alex.milestones.map(m=>[m.title,m.assignee,m.mine,!!m.detail]),[['Assess payments-api repository readiness','Alex Rivera',true,true],['Validate payments-api discoverability','Jordan Lee',false,false]]);
-  assert.equal(alex.approval!.by,'Maya Chen');assert.deepEqual(alex.objective!.goals,['Establish a service-readiness baseline for payments-api']);
+  assert.equal(alex.approval!.by,'Chris');assert.deepEqual(alex.objective!.goals,['Establish a service-readiness baseline for payments-api']);
   for(const x of PRIVATE)assert.ok(!JSON.stringify(alex).includes(x),'work view leaked '+x);
   // Alex starts an action; Jordan cannot touch Alex's milestone; stale revisions are refused.
   const started=await update(h.call,'alex','m-alex',0,{action:{index:0,status:'started'}});
@@ -105,7 +104,7 @@ test('AiKA: answers from approved, developer-safe context only, labels what it k
   assert.match(job.answer.nextStep,/locate the payments-api repository/);
   // Exactly what the model received: Alex's own milestone and progress, the team's statuses, no private context.
   const prompt=stub.requests[0].messages[1].content as string;
-  assert.match(prompt,/YOUR MILESTONE \(the question is about this one\): Assess payments-api repository readiness — assigned to Alex Rivera/);
+  assert.match(prompt,/YOUR MILESTONE \(the question is about this one\): Assess payments-api repository readiness — suggested owner Alex Rivera/);
   assert.match(prompt,/TEAM MILESTONE: Validate payments-api discoverability — Jordan Lee — status in progress/);
   assert.match(prompt,/REPOSITORY OBSERVATIONS: none/);assert.match(prompt,/TECHNICAL GOAL: Establish a service-readiness baseline/);
   for(const x of [...PRIVATE,'Jordan private scratch note','Opportunity','My pricing notes'])assert.ok(!JSON.stringify(stub.requests).includes(x),'AiKA prompt leaked '+x);

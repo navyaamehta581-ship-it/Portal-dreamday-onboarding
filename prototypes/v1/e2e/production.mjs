@@ -77,6 +77,9 @@ try{
  assert.equal(sample.status(),200);assert.equal(sample.headers()['content-type'],'application/pdf');
  assert.equal(await a.getByRole('link',{name:/Download a fictional sample PDF/}).getAttribute('href'),'/samples/aperture-commerce-discovery-notes-fictional.pdf');
  await a.getByLabel('Customer PDF').setInputFiles({name:'aperture-commerce-discovery-notes-fictional.pdf',mimeType:'application/pdf',buffer:await sample.body()});
+ // The analysis runs by itself and Chris lands on the draft, overview first.
+ await a.waitForURL(url+'/operator/draft',{timeout:30000});await a.getByLabel('Draft overview').waitFor();
+ await a.getByRole('tab',{name:'Customer Context'}).click();
  await a.getByText(/rule-based analysis \(no model configured\)/).waitFor({timeout:30000});
  await a.getByText('Fully read').waitFor();assert.match(await a.locator('.pt-doc-file').innerText(),/customer: Aperture Commerce/);
  // Insights is served under the gate too, labelled as fictional data.

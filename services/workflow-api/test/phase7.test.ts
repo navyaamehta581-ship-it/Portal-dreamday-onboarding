@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {RepositoryEvidence,RepositoryInspection,RepositoryObservation} from '../../../contracts/activation/v1/handoff.ts';
 import type {RepositoryConfig} from '../src/activation/repository.ts';
-import {approvedPlan,harness,ollamaStub,update,work,type Call} from './support/work-harness.ts';
+import {approvedPlan,harness,ollamaStub,update,work,type Call,finalizePlan} from './support/work-harness.ts';
 import {githubMock} from './support/github-mock.ts';
 
 const LIVE:RepositoryConfig={customerId:'aperture',id:'payments-api',label:'payments-api',repository:'example-org/payments-api',mode:'live',services:['payments-api']};
@@ -15,16 +15,21 @@ const FIXTURE:RepositoryConfig={customerId:'aperture',id:'payments-api',label:'p
 const inspect=(call:Call,token:string,body:object={repositoryId:'payments-api'},actor?:string)=>call('aperture','repository-inspections',token,body,actor);
 const evidence=async(call:Call,token:string)=>(await call('aperture','repository-evidence',token)).json as RepositoryEvidence;
 const sig=(i:RepositoryInspection,s:string)=>i.observations.find(o=>o.signal===s)! as RepositoryObservation;
+/** Approval publishes the plan; the Portal then observes its repositories itself (Spotify's integration). */
+async function observed(call:Call){for(let i=0;i<200;i++){const r=(await evidence(call,'champ')).repositories[0];if(r?.evidence)return r.evidence;await new Promise(x=>setTimeout(x,10));}throw Error('not observed');}
 
 test('live read-only inspection: what was observed, where, at which commit and when; GET requests to the configured repository only',async()=>{
  const gh=githubMock();
  const h=await harness({repositories:[LIVE],github:gh.fetchImpl,githubToken:'ghp_test_read_only'});
  try{
   await approvedPlan(h.call);
+  // Nobody has to inspect: approving the plan is enough for the Portal to observe the repository read-only.
+  const i=await observed(h.call);
+  assert.equal(i.status,'succeeded');assert.equal(i.mode,'live');assert.equal(i.commit,gh.commit);assert.equal(i.requestedBy,'Spotify integration');
+  assert.equal((await evidence(h.call,'alex')).repositories[0].canInspect,false,'no inspect control for anyone');
+  // The API still accepts a refresh, but only for the configured repository; extra fields are ignored.
   const r=await inspect(h.call,'alex',{repositoryId:'payments-api',repository:'attacker/other',url:'https://evil.example'});
-  assert.equal(r.status,201,r.raw);
-  const i=r.json.inspection as RepositoryInspection;
-  assert.equal(i.status,'succeeded');assert.equal(i.mode,'live');assert.equal(i.commit,gh.commit);assert.equal(i.requestedBy,'Alex Rivera');
+  assert.equal(r.status,200,r.raw);assert.equal(r.json.reused,true);assert.equal(r.json.inspection.repository,'example-org/payments-api');
   assert.equal(sig(i,'identity').status,'observed');assert.match(sig(i,'default_branch').summary,/main is at commit aaaaaaaaaaaa/);
   assert.match(sig(i,'readme').summary,/first heading “example payments-api”/);
   const owners=sig(i,'codeowners');
@@ -39,7 +44,7 @@ test('live read-only inspection: what was observed, where, at which commit and w
   assert.ok(gh.calls.length>0&&gh.calls.every(c=>c.method==='GET'&&c.path.startsWith('/repos/example-org/payments-api')&&c.auth==='Bearer ghp_test_read_only'),JSON.stringify(gh.calls));
   assert.ok(!r.raw.includes('ghp_test_read_only'));
   assert.ok(!JSON.stringify(i).includes('Test repository content'),'file contents are not stored');
-  // A second request soon after reuses the recorded inspection instead of calling GitHub again.
+  // Requests soon after reuse the recorded observation instead of calling GitHub again.
   const calls=gh.calls.length,again=await inspect(h.call,'alex');
   assert.equal(again.status,200);assert.equal(again.json.reused,true);assert.equal(gh.calls.length,calls);
  }finally{await h.close();}
@@ -124,7 +129,7 @@ test('authorization: approved plan, configured repository, relevant milestone, i
  try{
   await approvedPlan(h.call,false);
   assert.equal((await inspect(h.call,'alex')).json.error.code,'NO_APPROVED_PLAN');
-  await approvedPlan(h.call);
+  await finalizePlan(h.call);
   assert.equal((await inspect(h.call,'op')).json.error.code,'FORBIDDEN','Chris observes; he doesn’t inspect');
   assert.equal((await inspect(h.call,'dev')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED');
   assert.equal((await inspect(h.call,'alex',{repositoryId:'docs-site'})).json.error.code,'NOT_FOUND','not relevant to any approved milestone');
@@ -133,9 +138,9 @@ test('authorization: approved plan, configured repository, relevant milestone, i
   assert.equal((await h.call('aperture','repository-evidence','lumen-alex')).status,403);
   assert.equal((await h.call('aperture','repository-inspections','lumen-champ',{repositoryId:'payments-api'})).status,403);
   assert.deepEqual((await evidence(h.call,'alex')).repositories.map(r=>r.id),['payments-api']);
-  assert.equal(gh.calls.length,0,'nothing reached GitHub');
-  assert.equal((await inspect(h.call,'champ',{repositoryId:'payments-api'},'Maya Chen')).status,201,'Maya may inspect');
-  assert.equal((await evidence(h.call,'op')).repositories[0].canInspect,false);
+  await observed(h.call);
+  assert.ok(gh.calls.length>0&&gh.calls.every(c=>c.path.startsWith('/repos/example-org/payments-api')),'the Portal observed only the repository the approved plan relies on');
+  assert.equal((await evidence(h.call,'op')).repositories[0].canInspect,false);assert.equal((await evidence(h.call,'champ')).repositories[0].canInspect,false,'not the Champion’s job either');
  }finally{await h.close();}
 });
 
@@ -146,7 +151,7 @@ test('milestone integration and Maya’s view: focus follows each milestone’s 
   let h=await harness({file:join(dir,'db.sqlite'),repositories:[LIVE],github:gh.fetchImpl});
   await approvedPlan(h.call);
   await update(h.call,'alex','m-alex',0,{action:{index:0,status:'started'}});
-  await inspect(h.call,'alex');
+  await observed(h.call);
   const alex=(await evidence(h.call,'alex')).repositories[0],jordan=(await evidence(h.call,'jordan')).repositories[0];
   assert.deepEqual(alex.milestones.map(m=>m.id),['m-alex']);assert.deepEqual(jordan.milestones.map(m=>m.id),['m-jordan']);
   assert.ok(['readme','codeowners','ci_config'].every(s=>alex.milestones[0].focus.includes(s as never)),'readiness: README, ownership, CI');
@@ -155,7 +160,7 @@ test('milestone integration and Maya’s view: focus follows each milestone’s 
   const t=await work(h.call,'champ');
   assert.equal(t.milestones.find(m=>m.id==='m-alex')!.status,'in_progress');assert.equal(t.milestones.find(m=>m.id==='m-alex')!.actionsCompleted,0,'an inspection completes nothing');
   const maya=(await evidence(h.call,'champ')).repositories[0];
-  assert.deepEqual(maya.milestones.map(m=>m.id),['m-alex','m-jordan']);assert.equal(maya.evidence!.requestedBy,'Alex Rivera');
+  assert.deepEqual(maya.milestones.map(m=>m.id),['m-alex','m-jordan']);assert.equal(maya.evidence!.requestedBy,'Spotify integration');
   await h.close();
   h=await harness({file:join(dir,'db.sqlite'),repositories:[LIVE],github:gh.fetchImpl});
   const after=(await evidence(h.call,'champ')).repositories[0].evidence!;
@@ -169,15 +174,14 @@ test('AiKA: verified repository claims must cite recorded observations; uncited 
  let reply:(prompt:string)=>unknown=()=>({sections:[{kind:'suggestion',text:'Ask your Champion.',citations:[]}],next_step:null});
  const stub=await ollamaStub(b=>reply(b.messages[1].content));
  try{
-  // Before any inspection a "verified" claim has nothing to cite.
+  // A "verified" claim citing an observation that doesn't exist is removed.
   let h=await harness({repositories:[LIVE],github:gh.fetchImpl,modelUrl:stub.url});
-  await approvedPlan(h.call);
+  await approvedPlan(h.call);await observed(h.call);
   const ask=async()=>{await h.call('aperture','aika-questions','alex',{question:'Who owns payments-api?',milestoneId:'m-alex'});for(let i=0;i<100;i++){const j=(await h.call('aperture','aika-questions','alex')).json.job;if(j.status!=='running')return j;await new Promise(r=>setTimeout(r,10));}};
   reply=()=>({sections:[{kind:'verified',text:'CODEOWNERS names @example-org/payments-team.',citations:['obs-0000000000']},{kind:'unknown',text:'Nobody has looked at the repository yet.',citations:[]}],next_step:null});
   let j=await ask();
   assert.deepEqual(j.answer.sections.map((s:any)=>s.kind),['unknown']);assert.equal(j.answer.removed,1);
-  assert.match(stub.requests.at(-1).messages[1].content,/REPOSITORY OBSERVATIONS: none/);
-  await inspect(h.call,'alex');
+  assert.match(stub.requests.at(-1).messages[1].content,/REPOSITORY OBSERVATIONS \(recorded by the Portal backend/);
   reply=prompt=>{const id=/\[(obs-[a-f0-9]{10})\] OBSERVED \(live, read-only\) example-org\/payments-api@a{12} codeowners/.exec(prompt)![1];
    return {sections:[{kind:'verified',text:'CODEOWNERS at .github/CODEOWNERS names @example-org/payments-team.',citations:[id]},
     {kind:'verified',text:'The repository has a runbook.',citations:['obs-ffffffffff']},
@@ -191,7 +195,7 @@ test('AiKA: verified repository claims must cite recorded observations; uncited 
   await h.close();
   // Fixture evidence: a "verified" claim citing it becomes "sample".
   h=await harness({repositories:[FIXTURE],modelUrl:stub.url});
-  await approvedPlan(h.call);await inspect(h.call,'alex');
+  await approvedPlan(h.call);await observed(h.call);
   reply=prompt=>{const id=/\[(obs-[a-f0-9]{10})\] SAMPLE \(fixture data for a fictional repository, not a live observation\) aperture-commerce\/payments-api@5f1c0de2a9b4 catalog_info/.exec(prompt)![1];
    return {sections:[{kind:'verified',text:'catalog-info.yaml names team-checkout as owner.',citations:[id]}],next_step:null};};
   j=await ask();

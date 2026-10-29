@@ -28,11 +28,11 @@ export function useAika(api:ReturnType<typeof activationClient>|null){
  },[api]);
  useEffect(()=>{void poll();void loadCapabilities();return()=>{if(timer.current)clearTimeout(timer.current);};},[poll,loadCapabilities]);
  const running=turns.at(-1)?.job?.status==='running';
- async function ask(question:string,milestoneId:string|null,caps:AikaCapabilityId[]=[]){
+ async function ask(question:string,milestoneId:string|null,caps:AikaCapabilityId[]=[],opportunityId:string|null=null){
   if(!api||sending||running)return false;
   setSending(true);setError(null);
   try{
-   const r=await api.askAika(question,milestoneId,caps);
+   const r=await api.askAika(question,milestoneId,caps,opportunityId);
    setTurns(ts=>[...ts.filter(t=>t.job?.id!==r.job.id),{id:r.job.id,question,capabilities:caps,milestoneId,job:r.job,error:null}]);
    if(timer.current)clearTimeout(timer.current);timer.current=setTimeout(()=>void poll(),POLL_MS);return true;
   }catch(e){
@@ -58,7 +58,7 @@ export function aikaProblem(code:string):string{
   case 'MODEL_TIMEOUT':return 'AiKA took too long to answer and stopped. Try a shorter or more specific question.';
   case 'INVALID_MODEL_OUTPUT':return 'AiKA’s answer didn’t pass its checks, so it isn’t shown. Try asking again or rephrasing.';
   case 'CONTEXT_LIMIT':return 'There’s too much context for AiKA to answer in one go. Ask about one milestone.';
-  case 'NO_APPROVED_PLAN':return 'AiKA helps with approved onboarding work. Your team’s plan hasn’t been approved in Dream Day yet.';
+  case 'NO_APPROVED_PLAN':return 'AiKA helps with your team’s onboarding work. Your team’s onboarding plan isn’t published yet.';
   case 'INVALID_REQUEST':return 'Ask a question between 3 and 500 characters.';
   case 'AIKA_CAPABILITY_FORBIDDEN':return 'That command isn’t available to you. Remove it and ask again.';
   case 'FORBIDDEN':return 'AiKA isn’t available for this account.';
