@@ -261,7 +261,8 @@
  .pt-fields{grid-template-columns:1fr}
  .pt-row{flex-wrap:wrap;padding:18px;gap:14px}
  .pt-card{padding:20px 18px}
- .pt-tabs button{min-width:0;padding:0 14px;font-size:15px}
+ .pt-tabs{overflow-x:auto;scrollbar-width:none}
+ .pt-tabs button{flex:none;min-width:0;padding:0 14px;font-size:15px;white-space:nowrap}
  .pt-art{position:relative;left:0;top:0;width:auto;height:240px;margin:12px 16px 0}
  .pt-entry-copy,.pt-entry-copy.login{position:relative;left:0;top:0;width:auto;padding:32px 16px 48px}
  .pt-entry-copy h1{font-size:38px}
@@ -461,3 +462,23 @@ select.pt-input{appearance:auto;height:46px}
 .pt-aika-suggest button:hover:not(:disabled){color:#fff;text-decoration:underline}
 @media (max-width:640px){.pt-aika-grid{grid-template-columns:1fr}.pt-aika-hello{padding-top:6vh}.pt-aika-hello h2{font-size:24px}}
 .pt-aika-home-composer{width:min(674px,100%);display:flex;flex-direction:column;align-items:center}
+
+/* ---------- Chris: customer PDF upload ---------- */
+.pt-drop{margin-top:16px;border:1.5px dashed #4a4a4a;border-radius:8px;background:var(--p-raised);transition:border-color .15s,background .15s}
+.pt-drop.over{border-color:var(--p-green);background:#16241a}
+.pt-drop.disabled{opacity:.7}
+.pt-drop-body{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:40px 24px;color:var(--p-muted)}
+.pt-drop-body>svg{color:var(--p-green)}
+.pt-drop-body strong{color:#fff;font-size:18px}
+.pt-drop-body>span{max-width:520px;font-size:14px;line-height:21px}
+.pt-drop-body small{font-size:12px;color:var(--p-subtle)}
+.pt-drop-body .pt-btn{margin-top:4px}
+.pt-drop.compact .pt-drop-body{padding:18px 20px;gap:6px}
+.pt-drop.compact .pt-drop-body strong{font-size:15px}
+.pt-doc{margin-top:18px;display:grid;gap:12px}
+.pt-doc-file{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:8px;background:var(--p-raised);border:1px solid var(--p-card-line)}
+.pt-doc-file>svg{flex:none;margin-top:2px;color:var(--p-muted)}
+.pt-doc-file>div{flex:1;min-width:0;display:grid;gap:2px}
+.pt-doc-file>div>strong{overflow-wrap:anywhere}
+.pt-doc-file>div>span{font-size:13px;color:var(--p-muted)}
+.pt-doc .pt-banner{margin:0}

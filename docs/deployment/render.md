@@ -10,6 +10,7 @@ One Render **free** web service runs the whole prototype from `./Dockerfile`, as
 |---|---|---|
 | Render web service | `plan: free` | $0. No payment method is needed for a free web service. |
 | Storage | SQLite in `/tmp/spotify-portal-demo`, inside the container | $0. No disk is declared. |
+| PDF reading | pdf.js (Mozilla, open source), installed in the image; runs inside the service | $0. No document-processing service. A worker thread with a 192 MB memory cap and a 20 s limit; one PDF at a time. |
 | AI | Gemini API free tier (`gemini-2.5-flash`), optional | $0 when the key's Google Cloud project has **no billing enabled**. |
 
 Nothing in `render.yaml` or the server turns on a paid service. Keep billing off on the key's Google project: with billing off, Google refuses requests above the free quota rather than charging for them.
@@ -101,7 +102,7 @@ If the passphrase or the secret is missing or too short, the server still starts
   - `"ai":"gemini:gemini-2.5-flash"`, or `not_configured` without a key;
   - `"aiRequestsPerMinute":8`.
 - `https://<your-service>.onrender.com/` should open the welcome screen with the fictional-data and temporary-data notices. Choose **Get started**, enter the passphrase, then choose a persona.
-- To check real AI: as Chris, add information and select **Analyze customer**.
+- To check real AI: as Chris, upload the fictional sample PDF (link under the upload area). The analysis starts by itself.
   - The banner should say "produced by the AI model".
   - If it says rule-based, the banner names the reason code. For example, `MODEL_RATE_LIMITED` means the free quota is in use, and `AI_DAILY_LIMIT` means the service's own daily cap was reached.
 
@@ -143,7 +144,7 @@ npm run test:production --prefix prototypes/v1   # browser test against the prod
     - the entry flow (welcome → passphrase → persona) with the notices on each step, and the top-bar demo menu (room code, new room, leave) on desktop and phone widths;
     - a process restart keeping work;
     - a redeploy with empty storage ending the room honestly.
-  - The Dockerfile's steps reproduced without Docker.
+  - The Dockerfile's steps reproduced without Docker, from a build context filtered by `.dockerignore` (the frontend stage, `npm ci` of the runtime's one package, then a PDF upload against the server started from only the runtime files). An earlier, unfiltered reproduction missed two build failures that a real `docker build` found; both are fixed in the Dockerfile and `.dockerignore`.
 - **Not verified:**
   - a real `docker build`;
   - a Render deploy, or Render's free-plan behaviour (sleep and wake time);

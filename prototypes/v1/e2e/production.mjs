@@ -66,18 +66,19 @@ try{
  assert.equal(await a.getByRole('button',{name:'Back'}).count(),0,'no way back to a second welcome screen');
  await a.goto(url+'/');await a.waitForURL(url+'/login');
  assert.equal(await a.getByRole('status',{name:'Demo room'}).count(),0,'no bottom banner');
- // Chris adds customer information and runs the analysis (rule-based here: no Gemini key is configured).
+ // Chris uploads the fictional sample PDF; the analysis starts by itself (rule-based here: no Gemini key is configured).
  await persona(a,'Chris','/operator');
  const menu=await openDemoMenu(a);
  const room=(await menu.getByLabel('Room code',{exact:true}).innerText()).trim();assert.match(room,/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
  const menuText=await menu.innerText();
  assert.match(menuText,/lost if the service restarts, redeploys or sleeps/);assert.match(menuText,/Gemini’s free tier/);assert.match(menuText,/or sooner/);
  await a.keyboard.press('Escape');assert.equal(await a.getByRole('dialog',{name:'Demo room'}).count(),0);
- await a.getByLabel('Information 1 text').fill('FICTIONAL: Maya Chen: nobody can tell who owns payments-api. Let’s pilot with payments-api on GitHub.');
- await a.getByLabel('Information 1 name').fill('Discovery call');
- await a.getByRole('button',{name:'Save information'}).click();await a.getByText(/^Saved \d/).waitFor();
- await a.getByRole('button',{name:'Analyze customer'}).click();
- await a.getByText(/rule-based analysis \(no model configured\)/).waitFor({timeout:20000});
+ const sample=await a.request.get(url+'/samples/aperture-commerce-discovery-notes-fictional.pdf');
+ assert.equal(sample.status(),200);assert.equal(sample.headers()['content-type'],'application/pdf');
+ assert.equal(await a.getByRole('link',{name:/Download a fictional sample PDF/}).getAttribute('href'),'/samples/aperture-commerce-discovery-notes-fictional.pdf');
+ await a.getByLabel('Customer PDF').setInputFiles({name:'aperture-commerce-discovery-notes-fictional.pdf',mimeType:'application/pdf',buffer:await sample.body()});
+ await a.getByText(/rule-based analysis \(no model configured\)/).waitFor({timeout:30000});
+ await a.getByText('Fully read').waitFor();assert.match(await a.locator('.pt-doc-file').innerText(),/customer: Aperture Commerce/);
  // Insights is served under the gate too, labelled as fictional data.
  await a.goto(url+'/operator/insights');await a.getByRole('heading',{name:'Insights'}).waitFor();
  await a.getByText(/Fictional demo data: every number comes from activity recorded/).waitFor();
@@ -86,21 +87,20 @@ try{
  const b=watch(await (await browser.newContext()).newPage());
  await b.goto(url+'/');await enter(b);await persona(b,'Chris','/operator');
  assert.notEqual(await roomCode(b),room);
- await b.getByLabel('Information 1 text').waitFor();assert.equal(await b.getByLabel('Information 1 text').inputValue(),'','a separate room starts empty');
+ await b.getByText('Drop the customer’s PDF here').waitFor();assert.equal(await b.getByText('aperture-commerce-discovery-notes-fictional.pdf').count(),0,'a separate room starts empty');
  const c=watch(await (await browser.newContext()).newPage());
  await c.goto(url+'/');await enter(c,{room:room.toLowerCase()});await persona(c,'Chris','/operator');
  await c.getByText(/rule-based analysis/).first().waitFor();
- assert.match(await c.getByLabel('Information 1 text').inputValue(),/payments-api/,'the shared code joins the same room');
+ await c.getByText('aperture-commerce-discovery-notes-fictional.pdf').waitFor();// the shared code joins the same room
  // A process restart on the same container keeps /tmp: the room, the sign-in and the saved work survive.
  await stop();logs=await start(p);
- await a.reload();await a.getByLabel('Information 1 text').waitFor();
- assert.match(await a.getByLabel('Information 1 text').inputValue(),/payments-api/);assert.equal(new URL(a.url()).pathname,'/operator');
+ await a.reload();await a.getByText('aperture-commerce-discovery-notes-fictional.pdf').waitFor();assert.equal(new URL(a.url()).pathname,'/operator');
  // A fresh room from the menu: back to persona selection, empty; the shared room keeps its work.
  await (await openDemoMenu(a)).getByRole('button',{name:'Start a new room'}).click();
  await a.waitForURL(url+'/login');await persona(a,'Chris','/operator');
  const newer=await roomCode(a);assert.notEqual(newer,room);
- await a.getByLabel('Information 1 text').waitFor();assert.equal(await a.getByLabel('Information 1 text').inputValue(),'','a new room starts empty');
- await c.reload();await c.getByLabel('Information 1 text').waitFor();assert.match(await c.getByLabel('Information 1 text').inputValue(),/payments-api/,'the old room keeps its work');
+ await a.getByText('Drop the customer’s PDF here').waitFor();assert.equal(await a.getByText('aperture-commerce-discovery-notes-fictional.pdf').count(),0,'a new room starts empty');
+ await c.reload();await c.getByText('aperture-commerce-discovery-notes-fictional.pdf').waitFor();// the old room keeps its work
  // Leaving the demo returns to the welcome screen.
  await (await openDemoMenu(a)).getByRole('button',{name:'Leave demo'}).click();await a.waitForURL(url+'/demo-gate');
  await a.getByRole('heading',{name:'Portal is ready for you'}).waitFor();
@@ -122,5 +122,5 @@ try{
  const box=await panel.boundingBox();assert.ok(box.x>=0&&box.x+box.width<=390+1,'the demo menu stays on screen');
  assert.deepEqual(errors,[]);
  for(const secret of [PASS,SECRET])assert.ok(!logs().includes(secret),'no secrets in logs');
- console.log('PASS: production server — gate (wrong and right passphrase), own room with shareable code, Chris saves and analyzes (rule-based, labelled), second visitor isolated, code joins the room, Insights labelled, entry is welcome → passphrase → persona with the warnings on each step, top-bar demo menu (room code, end time, warnings, new room, leave) instead of a bottom banner, process restart keeps room/sign-in/work, leave returns to the gate, redeploy with empty storage ends the room with an explanation and a fresh room, health, phone width, no secrets in logs.');
+ console.log('PASS: production server — gate (wrong and right passphrase), own room with shareable code, Chris uploads the fictional sample PDF and the analysis runs by itself (rule-based, labelled), second visitor isolated, code joins the room, Insights labelled, entry is welcome → passphrase → persona with the warnings on each step, top-bar demo menu (room code, end time, warnings, new room, leave) instead of a bottom banner, process restart keeps room/sign-in/work, leave returns to the gate, redeploy with empty storage ends the room with an explanation and a fresh room, health, phone width, no secrets in logs.');
 }catch(e){console.error(e);process.exitCode=1;}finally{await browser?.close();if(child&&child.exitCode===null)await stop();rmSync(data,{recursive:true,force:true});if(dir!==data)rmSync(dir,{recursive:true,force:true});}

@@ -66,7 +66,7 @@ function limiter(max:number,windowMs:number,now:()=>number){
  };
 }
 
-const TYPES:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2','.json':'application/json; charset=utf-8','.txt':'text/plain; charset=utf-8'};
+const TYPES:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2','.json':'application/json; charset=utf-8','.pdf':'application/pdf','.txt':'text/plain; charset=utf-8'};
 const SECURITY={'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY','Cross-Origin-Opener-Policy':'same-origin',
  'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"};
 
@@ -224,7 +224,8 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
   if(apiPath){
    // Per-room limits: requests per minute, and model-backed requests per day.
    if(!(req.method==='POST'?writes:reads)(room))return fail(res,429,'RATE_LIMITED');
-   if(req.method==='POST'&&path.endsWith('/handoff-analyses')&&!analyses(room))return fail(res,429,'ANALYSIS_LIMIT');
+   // A PDF upload starts an analysis too, so it counts against the same daily allowance.
+   if(req.method==='POST'&&(path.endsWith('/handoff-analyses')||path.endsWith('/handoff-documents'))&&!analyses(room))return fail(res,429,'ANALYSIS_LIMIT');
    if(req.method==='POST'&&path.endsWith('/aika-questions')&&!questions(room))return fail(res,429,'AIKA_QUESTION_LIMIT');
    return await session(req,res,()=>fail(res,404,'NOT_FOUND'));
   }

@@ -24,11 +24,13 @@ import {join} from 'node:path';
 
 const COOKIE = 'portal_demo_session';
 const SESSION_MS = 8 * 3600_000;
-const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions|aika-capabilities|repository-evidence|repository-inspections|insights)$/;
+const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-documents|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions|aika-capabilities|repository-evidence|repository-inspections|insights)$/;
 const LOOPBACK = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;
 const ROLES = ['operator', 'champion', 'developer'];
 // Model-assisted drafting can take minutes on a laptop; every other route keeps the short limit.
-const timeoutFor = route => route.endsWith('/handoff-drafts') ? 300_000 : 30_000;
+const timeoutFor = route => route.endsWith('/handoff-drafts') ? 300_000 : route.endsWith('/handoff-documents') ? 90_000 : 30_000;
+// Chris's PDF upload is the one binary request: forwarded as-is, up to the API's own 8 MB limit.
+const DOCUMENT_LIMIT = 8 * 1024 * 1024 + 1;
 
 /** The challenge personas, used when the demo launcher's directory is configured. Fictional people. */
 export const DEFAULT_PERSONAS = [
@@ -152,19 +154,23 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
   const cookie = (value, maxAge) => `${COOKIE}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
   // State-changing requests must come from this page's own origin.
   const sameOrigin = req => req.headers.origin === `${secure ? 'https' : 'http'}://${req.headers.host}`;
-  async function body(req) {
+  async function bytes(req, limit) {
     const chunks = [];
     let size = 0;
-    for await (const chunk of req) {size += chunk.length; if (size > 1_000_000) throw Object.assign(Error('too large'), {code: 'PAYLOAD_TOO_LARGE'}); chunks.push(chunk);}
-    return Buffer.concat(chunks).toString('utf8');
+    for await (const chunk of req) {size += chunk.length; if (size > limit) throw Object.assign(Error('too large'), {code: 'PAYLOAD_TOO_LARGE'}); chunks.push(chunk);}
+    return Buffer.concat(chunks);
   }
+  const body = async req => (await bytes(req, 1_000_000)).toString('utf8');
   async function forward(req, res, c, route, token, persona) {
-    const payload = req.method === 'POST' ? await body(req) : undefined;
+    const document = req.method === 'POST' && route.endsWith('/handoff-documents');
+    if (document && req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/pdf') return fail(res, 415, 'PDF_REQUIRED');
+    const payload = req.method !== 'POST' ? undefined : document ? await bytes(req, DOCUMENT_LIMIT) : await body(req);
+    const name = document && typeof req.headers['x-file-name'] === 'string' ? {'X-File-Name': req.headers['x-file-name'].slice(0, 400)} : {};
     let upstream;
     try {
       upstream = await fetchImpl(`${c.apiOrigin}/api${route}`, {
         method: req.method,
-        headers: {Authorization: `Bearer ${token}`, 'X-Portal-Actor': persona.name, ...(room ? {'X-Portal-Room': room(req)} : {}), ...(payload === undefined ? {} : {'Content-Type': 'application/json'})},
+        headers: {Authorization: `Bearer ${token}`, 'X-Portal-Actor': persona.name, ...(room ? {'X-Portal-Room': room(req)} : {}), ...(payload === undefined ? {} : {'Content-Type': document ? 'application/pdf' : 'application/json'}), ...name},
         body: payload,
         signal: AbortSignal.timeout(timeoutFor(route)),
       });

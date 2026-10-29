@@ -156,8 +156,22 @@ export type HandoffRecord = {
   submittedAt?: string | null; history?: ReviewEvent[];
 };
 
-/** Chris's saved, not-yet-analyzed customer information for one customer. Operator-only. */
-export type Workspace = { revision: number; updatedAt: string | null; sources: SourceInput[] };
+/** One section of an uploaded PDF and the category it was given: from its heading, from its content, or a
+ * default when neither said (shown as uncertain). */
+export type DocumentSection = { label: string; type: SourceType; basis: 'heading' | 'content' | 'default'; pages: string; chars: number };
+/** What was read from Chris's PDF. Operator-only; the PDF itself is not stored. `complete` is false whenever any page
+ * was empty (image-only), unreadable, beyond the page limit, or text was cut at the size limit. `missing` lists topics
+ * the document doesn't seem to mention (a heuristic check, not a fact). */
+export type DocumentReport = {
+  fileName: string; uploadedAt: string; pages: number; pagesRead: number; emptyPages: number[]; unreadablePages: number[];
+  notRead: { from: number; to: number } | null; truncated: boolean; removedLines: number; characters: number;
+  customer: { name: string | null; basis: 'stated' | 'title' | 'not_found' };
+  sections: DocumentSection[]; missing: ('customer' | 'people' | 'systems' | 'goals')[]; complete: boolean;
+};
+
+/** Chris's saved, not-yet-analyzed customer information for one customer. Operator-only. `document` describes the
+ * PDF the information was extracted from, when it came from one. */
+export type Workspace = { revision: number; updatedAt: string | null; sources: SourceInput[]; document?: DocumentReport };
 
 /** Real stages of one analysis run, reported by the server as they start. */
 export type AnalysisStage = 'preparing' | 'interpreting' | 'planning' | 'preparing_review';

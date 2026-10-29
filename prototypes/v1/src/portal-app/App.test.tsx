@@ -182,6 +182,8 @@ it.each([
 ])('%s opens their own Portal and only calls their own API surface',async(name,home,prefix)=>{
  backend();await render('/login');await choose(name);
  expect(window.location.pathname).toBe(home);
+ // Chris's workspace is a lazily loaded chunk: wait for it rather than assume how many ticks the import takes.
+ for(let i=0;i<100&&!m.host.querySelector(`[aria-label="Account: ${name}"]`);i++){await flush();await new Promise(r=>setTimeout(r,10));}
  expect(m.host.querySelector(`[aria-label="Account: ${name}"]`)).not.toBeNull();
  const persona=PERSONAS.find(p=>p.name===name)!;
  expect(apiCalls().length).toBeGreaterThan(0);

@@ -28,8 +28,8 @@ PORTAL_DEMO_LABEL="Aperture Commerce (fictional)" npm run dev --prefix prototype
 Then:
 
 1. Open http://127.0.0.1:5173/, select **Get started** and choose **Chris**.
-2. In **Customer Context**, add the scenario A information from `services/workflow-api/test/fixtures/scenarios.json` as separate entries, choose each entry's category, and select **Save information**.
-3. Select **Analyze customer**. The page shows the running stage and elapsed time; with a local model this takes one to three minutes, and you can keep working.
+2. In **Customer Context**, drop a PDF on the upload area or select **Choose PDF**. For a fictional document, use **Download a fictional sample PDF** (`prototypes/v1/public/samples/aperture-commerce-discovery-notes-fictional.pdf`, scenario A laid out as account-team notes).
+3. The analysis starts by itself. The page shows what was read from the PDF (pages, sections and their categories, anything missing) and the running stage; with a local model this takes one to three minutes, and you can keep working.
 4. Open **Onboarding Draft**, edit the problem, stakeholders, goals, milestones and questions, and select **Save draft**.
 5. Add the technical team under **Stakeholders** if the analysis didn't name them (e.g. Maya Chen as Champion, Alex Rivera and Jordan Lee as developers). Then confirm and select **Mark ready for Champion review**. Nothing becomes visible to developers.
 6. Sign out and choose **Maya**. Open **Team Coordination → Dream Day**:

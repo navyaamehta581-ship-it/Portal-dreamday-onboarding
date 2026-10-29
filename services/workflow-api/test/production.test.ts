@@ -8,6 +8,7 @@ import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {configFromEnv,startProduction} from '../src/production.ts';
+import {aperturePdf} from './support/sample-pdf.mjs';
 
 const SECRET='s'.repeat(48),PASS='correct horse battery';
 const CUSTOMER='fictional-aperture-commerce';
@@ -225,6 +226,32 @@ test('entry: welcome, then passphrase, then persona selection; a fresh room from
   await a.signIn('chris');assert.equal((await a.call(op('handoff'))).json.workspace.revision,0,'the new room starts empty');
   const back=client(app.origin);await back.enter(first);await back.signIn('chris');
   assert.equal((await back.call(op('handoff'))).json.workspace.revision,1,'the old room keeps its work');
+  await app.close();
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('Chris’s PDF through the whole hosted path: session layer pass-through, room isolation, operator only, daily allowance',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'prod-'));
+ try{
+  const app=await boot(dir);
+  const a=client(app.origin);await a.enter();await a.signIn('chris');
+  const post=(c:ReturnType<typeof client>,bytes:Uint8Array,type='application/pdf',origin=app.origin)=>fetch(app.origin+op('handoff-documents'),{method:'POST',body:new Blob([bytes as Uint8Array<ArrayBuffer>]),
+   headers:{'Content-Type':type,'X-File-Name':encodeURIComponent('Aperture discovery.pdf'),Origin:origin,Cookie:[...c.jar].map(([k,v])=>`${k}=${v}`).join('; ')}}).then(async r=>({status:r.status,json:await r.json()}));
+  const r=await post(a,aperturePdf());
+  assert.equal(r.status,202,JSON.stringify(r.json));assert.equal(r.json.report.fileName,'Aperture discovery.pdf');assert.equal(r.json.workspace.sources.length,6);
+  for(let i=0;i<100&&(await a.call(op('handoff-analyses'))).json.job.status==='running';i++)await new Promise(x=>setTimeout(x,10));
+  assert.equal((await a.call(op('handoff'))).json.drafts.length,1,'analyzed in the room');
+  // Another room sees none of it; another persona can't upload; a cross-site page can't either.
+  const b=client(app.origin);await b.enter();await b.signIn('chris');
+  assert.equal((await b.call(op('handoff'))).json.workspace.revision,0);
+  const maya=client(app.origin);await maya.enter();await maya.signIn('maya');
+  assert.equal((await post(maya,aperturePdf())).status,403);
+  assert.equal((await post(a,aperturePdf(),'application/pdf','https://evil.example')).status,403);
+  assert.equal((await post(a,aperturePdf(),'text/plain')).json.error.code,'PDF_REQUIRED');
+  // Uploads count against the room's 15 analyses a day (refused files included: the limit protects the server).
+  const c=client(app.origin);await c.enter();await c.signIn('chris');
+  const codes=[];for(let i=0;i<16;i++)codes.push((await post(c,Buffer.from('not a pdf'))).json.error.code);
+  assert.deepEqual(codes,[...Array(15).fill('NOT_A_PDF'),'ANALYSIS_LIMIT']);
   await app.close();
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
