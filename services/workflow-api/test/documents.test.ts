@@ -72,9 +72,17 @@ test('structure: the sample discovery PDF becomes typed customer information, pr
  assert.ok(sources.every(s=>s.type!=='repository'),'a document never counts as a backend repository observation');
 });
 
-test('the sample PDF offered in the demo is the generated fictional document, byte for byte',()=>{
+test('the sample PDF offered in the demo (the six-page Aperture Commerce notes) is read in full; the CRM page stays private',async()=>{
  const committed=readFileSync(new URL('../../../prototypes/v1/public/samples/aperture-commerce-discovery-notes-fictional.pdf',import.meta.url));
- assert.ok(committed.equals(aperturePdf()),'regenerate it from test/support/sample-pdf.mjs');
+ assert.doesNotThrow(()=>validatePdf(committed));
+ const {sources,report}=structureDocument(await extractPdf(committed),'aperture-commerce-discovery-notes-fictional.pdf');
+ assert.equal(report.pages,6);assert.equal(report.pagesRead,6);assert.equal(report.complete,true);assert.deepEqual(report.missing,[]);
+ assert.deepEqual(report.customer,{name:'Aperture Commerce',basis:'stated'});
+ assert.ok(sources.some(s=>s.type==='conversation'&&/\[00:03\] Maya Chen: Our biggest pain/.test(s.text)),'the transcript is read as conversation');
+ assert.ok(sources.some(s=>s.type==='technical_requirements'&&/payments-api/.test(s.text)));
+ const crm=sources.find(s=>/Internal CRM notes/.test(s.label))!;
+ assert.equal(crm.type,'crm','the internal CRM page is private');
+ assert.ok(!sources.some(s=>/Page \d of 6/.test(s.text)),'running footer and page numbers removed');
 });
 
 test('structure: different layouts, uncertain categories, missing topics and the 12-entry limit',()=>{
