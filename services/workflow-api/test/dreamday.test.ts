@@ -24,16 +24,20 @@ async function harness(file=':memory:',publishEnabled=true){
  const intake=createIntake({admit:()=>false});
  const store=openActivationStore(file,intake.policy),handoffs=openHandoffStore(file),goals=openGoalStore(':memory:');
  const service=createHandoffService({handoffs,store:()=>store,analyze:rule,stage:intake.stage,release:intake.release,publishEnabled});
+ const {createWorkService,openWorkStore}=await import('../src/activation/handoff/work.ts');
+ const workStore=openWorkStore(file),work=createWorkService({published:p=>handoffs.published(p),work:workStore});
  const north={tenantId:'t',customerId:'northstar',sessionId:'s'},lumen={...north,customerId:'lumen'};
  // One credential per role and customer, as the demo launcher creates them.
- const tokens:Record<string,{p:typeof north;role:'dev'|'op'|'champ'}>={dev:{p:north,role:'dev'},op:{p:north,role:'op'},champ:{p:north,role:'champ'},'lumen-champ':{p:lumen,role:'champ'},'lumen-dev':{p:lumen,role:'dev'}};
+ // Developers also get personal credentials (Phase 5): the API names them from the credential, never from a header.
+ const tokens:Record<string,{p:typeof north;role:'dev'|'op'|'champ';name?:string}>={dev:{p:north,role:'dev'},op:{p:north,role:'op'},champ:{p:north,role:'champ'},'lumen-champ':{p:lumen,role:'champ'},'lumen-dev':{p:lumen,role:'dev'},
+  alex:{p:north,role:'dev',name:'Alex Rivera'},jordan:{p:north,role:'dev',name:'Jordan Lee'},sam:{p:north,role:'dev',name:'Sam Nobody'}};
  const who=(r:{headers:{authorization?:string}})=>tokens[(r.headers.authorization??'').replace('Bearer ','')];
- const server=createApp(goals,undefined,{store,handoff:service,championApproval:true,authorize:(r,c)=>who(r)?.p.customerId===c?who(r)!.p:null,isOperator:r=>who(r)?.role==='op',isChampion:r=>who(r)?.role==='champ',
+ const server=createApp(goals,undefined,{store,handoff:service,work,championApproval:true,authorize:(r,c)=>who(r)?.p.customerId===c?who(r)!.p:null,isOperator:r=>who(r)?.role==='op',isChampion:r=>who(r)?.role==='champ',developerName:r=>who(r)?.name??null,
   initialPlan:()=>null,intake:async()=>{throw Error('intake must not run');}});
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
  const base=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/activation/v1/customers/`;
  const call:Call=async(customer,path,token,body,actor)=>{const r=await fetch(base+customer+'/'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(actor?{'X-Portal-Actor':actor}:{})},body:body===undefined?undefined:JSON.stringify(body)});const raw=await r.text();return {status:r.status,json:raw?JSON.parse(raw):null,raw};};
- return {call,handoffs,close:async()=>{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();}};
+ return {call,handoffs,close:async()=>{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();workStore.close();goals.close();}};
 }
 const milestone=(id:string,title:string,assignee:string|null,dependsOn:string[]=[]):ReviewMilestone=>({id,title,description:`${title} for the pilot`,system:'payments-api',
  actions:[`Start: ${title}`,'Record what was found'],completionCriteria:['Each item is marked verified, missing or inaccessible'],assignee,role:'developer',dependsOn,origin:'ai'});
@@ -99,13 +103,15 @@ test('Dream Day end to end: review, edit and assign, request changes, resubmit, 
   assert.equal((await call('northstar','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+1,decision:'approve',confirmed:true})).json.error.code,'ALREADY_APPROVED');
   // 6–7. Alex and Jordan each see only their approved work; 8. Chris sees the approval; Maya sees the whole plan.
   const state=async(token:string,actor:string)=>{const r=await call('northstar','state',token,undefined,actor);for(const x of PRIVATE)assert.ok(!r.raw.includes(x),`${actor} state leaked ${x}`);return r.json;};
-  const alex=await state('dev','Alex Rivera'),jordan=await state('dev','Jordan Lee'),maya=await state('champ','Maya Chen');
+  const alex=await state('alex','Alex Rivera'),jordan=await state('jordan','Jordan Lee'),maya=await state('champ','Maya Chen');
   assert.deepEqual(alex.handoff.milestones.map((m:{objective:string})=>m.objective),['Assess payments-api repository readiness']);
   assert.deepEqual(jordan.handoff.milestones.map((m:{objective:string;dependencies:string[]})=>[m.objective,m.dependencies]),[['Validate payments-api and docs discoverability',['Assess payments-api repository readiness']]]);
   assert.equal(jordan.plan.selectedMilestone.outcome,'Validate payments-api and docs discoverability');
   assert.deepEqual(maya.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Alex Rivera','Jordan Lee']);
   assert.equal(alex.handoff.approval.by,'Maya Chen');
-  const sam=await state('dev','Sam Nobody');assert.deepEqual(sam.handoff.milestones,[]);assert.equal(sam.plan.selectedMilestone.outcome,'No approved work is assigned to you yet');
+  const sam=await state('sam','Sam Nobody');
+  // A forged name header on the shared credential grants no identity: no personal filtering, no work updates.
+  assert.equal((await call('northstar','milestone-updates','dev',{milestoneId:'m-1',expectedRevision:0,action:{index:0,status:'started'}},'Alex Rivera')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED');assert.deepEqual(sam.handoff.milestones,[]);assert.equal(sam.plan.selectedMilestone.outcome,'No approved work is assigned to you yet');
   const final:HandoffRecord=(await call('northstar','handoff','op')).json.drafts[0];
   assert.equal(final.status,'published');assert.equal(final.approvals!.champion.by,'Maya Chen');
   assert.deepEqual(final.history!.map(e=>e.action),['submitted','changes_requested','resubmitted','approved','published']);

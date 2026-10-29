@@ -12,6 +12,8 @@ import { openActivationStore } from './store.ts';
 import { createReplanWorker } from './worker.ts';
 import { openHandoffStore } from './handoff/store.ts';
 import { createHandoffService } from './handoff/service.ts';
+import { createWorkService, openWorkStore } from './handoff/work.ts';
+import { createAika } from './handoff/aika.ts';
 import { hostedInterpreter } from './handoff/hosted.ts';
 import { analyzeWithModel } from './handoff/intelligence.ts';
 import { proposeMilestones } from './handoff/milestones.ts';
@@ -23,6 +25,9 @@ export function developmentActivation(goalFilename:string) {
   if(!token||token.length<32)throw new Error('ACTIVATION_DEV_TOKEN needs at least 32 characters');
   const operatorToken=process.env.ACTIVATION_OPERATOR_TOKEN;
   if(operatorToken&&(operatorToken.length<32||operatorToken===token))throw new Error('ACTIVATION_OPERATOR_TOKEN must be distinct and at least 32 characters');
+  // Phase 5: one credential per developer, so each developer's work is attributed to them on the server.
+  const developers=process.env.ACTIVATION_DEVELOPERS_PATH?JSON.parse(readFileSync(process.env.ACTIVATION_DEVELOPERS_PATH,'utf8')) as {name:string;token:string}[]:[];
+  if(!Array.isArray(developers)||developers.some(d=>typeof d?.name!=='string'||!d.name.trim()||typeof d.token!=='string'||d.token.length<32||d.token===token||d.token===operatorToken)||new Set(developers.map(d=>d.token)).size!==developers.length)throw new Error('ACTIVATION_DEVELOPERS_PATH must list distinct developer names and tokens of at least 32 characters');
   const championToken=process.env.ACTIVATION_CHAMPION_TOKEN;
   if(championToken&&(championToken.length<32||championToken===token||championToken===operatorToken))throw new Error('ACTIVATION_CHAMPION_TOKEN must be distinct and at least 32 characters');
   const path=process.env.ACTIVATION_ADMISSION_PATH;
@@ -44,9 +49,15 @@ export function developmentActivation(goalFilename:string) {
   type Sources=import('../../../../contracts/activation/v1/handoff.ts').SourceInput[];type OnStage=import('./handoff/intelligence.ts').StageListener;
   const analyze=ollama?(s:Sources,onStage?:OnStage)=>analyzeWithModel(createOllama(ollama),s,onStage):async(s:Sources,onStage?:OnStage)=>{onStage?.('interpreting',null);const understanding=await hosted.interpret(s);onStage?.('planning',null);return {understanding,proposal:proposeMilestones(understanding)};};
   const handoff=createHandoffService({handoffs,store:()=>store,analyze,stage:intake.stage,release:intake.release,publishEnabled:process.env.ACTIVATION_INTAKE==='1'});
+  const workStore=openWorkStore(filename);
+  const work=createWorkService({published:p=>handoffs.published(p),work:workStore});
+  // AiKA uses the same local model as analysis (PORTAL_LLM_PROVIDER=ollama); without it AiKA reports it is unavailable.
+  const aika=createAika({model:ollama?createOllama(ollama):null,work,publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,
+   repositoryEvidence:p=>{try{const s=store.get(p);return [...s.evidence,...s.plan.evidence].filter((e,i,all)=>e.kind==='github_observation'&&all.findIndex(x=>x.id===e.id)===i).map(e=>e.claim);}catch{return [];}}});
   const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);
   const stop=worker.start();
   const bearer=(request:import('node:http').IncomingMessage,t:string|undefined)=>!!t&&request.headers.authorization===`Bearer ${t}`;
   // Dream Day applies whenever the handoff workflow can publish: only a Champion approval publishes new plans.
-  return {options:{handoff,championApproval:process.env.ACTIVATION_INTAKE==='1',isChampion:(request:import('node:http').IncomingMessage)=>bearer(request,championToken),isOperator:(request:import('node:http').IncomingMessage)=>!!operatorToken&&request.headers.authorization===`Bearer ${operatorToken}`,store,prepareGitHub:github.prepare,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:(p:import('./store.ts').Principal,context:import('../../../../contracts/activation/v1/types.ts').CustomerContext)=>bundles.find(b=>isDeepStrictEqual(b.principal,p)&&isDeepStrictEqual(b.context,context))?.plans.find(plan=>plan.contextRevision===context.revision&&plan.revision===0&&plan.supersedesRevision===null)??null,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>(request.headers.authorization===`Bearer ${token}`||bearer(request,operatorToken)||bearer(request,championToken))&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},async close(){await stop();handoffs.close();store.close();}};
+  const developerName=(request:import('node:http').IncomingMessage)=>developers.find(d=>request.headers.authorization===`Bearer ${d.token}`)?.name??null;
+  return {options:{handoff,work,aika,developerName,championApproval:process.env.ACTIVATION_INTAKE==='1',isChampion:(request:import('node:http').IncomingMessage)=>bearer(request,championToken),isOperator:(request:import('node:http').IncomingMessage)=>!!operatorToken&&request.headers.authorization===`Bearer ${operatorToken}`,store,prepareGitHub:github.prepare,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:(p:import('./store.ts').Principal,context:import('../../../../contracts/activation/v1/types.ts').CustomerContext)=>bundles.find(b=>isDeepStrictEqual(b.principal,p)&&isDeepStrictEqual(b.context,context))?.plans.find(plan=>plan.contextRevision===context.revision&&plan.revision===0&&plan.supersedesRevision===null)??null,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>(request.headers.authorization===`Bearer ${token}`||bearer(request,operatorToken)||bearer(request,championToken)||!!developerName(request))&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},async close(){await stop();handoffs.close();workStore.close();store.close();}};
 }

@@ -60,6 +60,14 @@ const championTokenPath=join(directory,'champion-token');
 if(!existsSync(championTokenPath))writeFileSync(championTokenPath,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});
 privatePath(championTokenPath);
 process.env.ACTIVATION_CHAMPION_TOKEN=readFileSync(championTokenPath,'utf8');
+// Phase 5: a personal credential per developer (id=Display Name, comma-separated), read by the Portal session layer
+// as developer-token-<id>. The API attributes milestone work to the developer whose credential made the request.
+const developerList=(process.env.ACTIVATION_DEMO_DEVELOPERS??'alex=Alex Rivera,jordan=Jordan Lee').split(',').map(x=>x.trim()).filter(Boolean).map(x=>{const [id,...name]=x.split('=');return {id:id.trim(),name:name.join('=').trim()};});
+if(developerList.some(d=>!/^[a-z0-9-]{1,40}$/.test(d.id)||!d.name||d.name.length>80))throw Error('ACTIVATION_DEMO_DEVELOPERS must look like alex=Alex Rivera,jordan=Jordan Lee');
+const developers=developerList.map(d=>{const path=join(directory,`developer-token-${d.id}`);if(!existsSync(path))writeFileSync(path,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});privatePath(path);return {name:d.name,token:readFileSync(path,'utf8')};});
+const developersPath=join(directory,'developers.json');
+writeFileSync(developersPath,JSON.stringify(developers),{mode:0o600});privatePath(developersPath);
+process.env.ACTIVATION_DEVELOPERS_PATH=developersPath;
 if(command==='operator-token'){process.stdout.write(process.env.ACTIVATION_OPERATOR_TOKEN+'\n');process.exit(0);}
 const token=readFileSync(tokenPath,'utf8');
 if(command==='token'){process.stdout.write(token+'\n');process.exit(0);}
