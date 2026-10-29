@@ -2,6 +2,9 @@
 **/node_modules
 **/dist
 **/data
+# Frontend source fixtures are required to compile the Portal.
+!prototypes/v1/src/data
+!prototypes/v1/src/data/**
 **/*.sqlite
 **/*.sqlite-*
 **/.env
