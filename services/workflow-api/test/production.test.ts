@@ -73,7 +73,7 @@ test('gate, rooms and personas: isolated rooms, a shareable code, sessions that 
   assert.equal((await a.call(op('handoff'))).status,401);
   assert.equal((await a.call('/demo-gate',{method:'POST',form:{passphrase:'wrong passphrase'}})).status,401);
   assert.equal((await a.call('/demo-gate',{method:'POST',form:{passphrase:PASS},headers:{Origin:'https://evil.example'}})).status,403);
-  const entered=await a.enter();assert.equal(entered.status,303);assert.equal(entered.headers.get('location'),'/');
+  const entered=await a.enter();assert.equal(entered.status,303);assert.equal(entered.headers.get('location'),'/login','straight to persona selection');
   const roomA=(await a.call('/demo-gate/room')).json.room;assert.match(roomA,/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
   // Chris saves customer information in room A.
   assert.equal((await a.signIn('chris')).status,200);
@@ -192,6 +192,41 @@ test('free tier: the Blueprint uses the free plan with no disk and temporary sto
  assert.equal(c.storage,'ephemeral');assert.equal(c.dataDir,join(tmpdir(),'spotify-portal-demo'));assert.equal(c.aiPerMinute,8);assert.equal(c.aiDailyLimit,200);
  assert.equal(configFromEnv({PORTAL_STORAGE:'persistent',PORTAL_DATA_DIR:'/srv/data'}).storage,'persistent');
  assert.throws(()=>configFromEnv({PORTAL_STORAGE:'disk'}));
+});
+
+test('entry: welcome, then passphrase, then persona selection; a fresh room from inside the Portal',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'prod-'));
+ try{
+  const app=await boot(dir);
+  const a=client(app.origin);
+  const welcome=await a.call('/demo-gate');
+  assert.match(welcome.text,/Portal is ready for you/);assert.match(welcome.text,/href="\/demo-gate\?step=passphrase">Get started/);
+  assert.doesNotMatch(welcome.text,/name="passphrase"/,'the passphrase is the second step');
+  assert.match(welcome.text,/Every customer, person and repository here is invented/);assert.match(welcome.text,/Temporary demo data/);
+  assert.doesNotMatch(welcome.text,/<script/i,'no scripts: the gate works under the strict CSP');
+  const step=await a.call('/demo-gate?step=passphrase');
+  assert.match(step.text,/name="passphrase"/);assert.match(step.text,/Join a shared room/);assert.match(step.text,/Temporary demo data/);
+  // A wrong passphrase keeps the room code that was typed.
+  const wrong=await a.call('/demo-gate',{method:'POST',form:{passphrase:'nope',room:'K7M2Q-9XRTB'}});
+  assert.equal(wrong.status,401);assert.match(wrong.text,/value="K7M2Q-9XRTB"/);assert.match(wrong.text,/<details open>/);
+  await a.enter();
+  assert.equal((await a.call('/')).headers.get('location'),'/login','no second welcome screen inside a room');
+  const first=(await a.call('/demo-gate/room')).json.room;
+  await a.signIn('chris');
+  await a.call(op('handoff-workspace'),{method:'POST',body:JSON.stringify({expectedRevision:0,sources:[{type:'conversation',label:'Call',text:'Maya Chen: we want payments-api in the Catalog.'}]})});
+  // A fresh room: needs a room already, same origin; signs the persona out; the old room keeps its work.
+  const outsider=client(app.origin);
+  assert.equal((await outsider.call('/demo-gate/new-room',{method:'POST'})).status,401,'only from inside the demo');
+  assert.equal((await a.call('/demo-gate/new-room',{method:'POST',headers:{Origin:'https://evil.example'}})).status,403);
+  const fresh=await a.call('/demo-gate/new-room',{method:'POST'});
+  assert.equal(fresh.status,201);assert.notEqual(fresh.json.room,first);
+  assert.equal((await a.call('/demo-gate/room')).json.room,fresh.json.room);
+  assert.equal((await a.call('/portal-auth/session')).status,401,'choose a persona again in the new room');
+  await a.signIn('chris');assert.equal((await a.call(op('handoff'))).json.workspace.revision,0,'the new room starts empty');
+  const back=client(app.origin);await back.enter(first);await back.signIn('chris');
+  assert.equal((await back.call(op('handoff'))).json.workspace.revision,1,'the old room keeps its work');
+  await app.close();
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
 test('free tier: visitors are told data is temporary; a restart that clears storage ends rooms honestly',async()=>{
