@@ -124,7 +124,9 @@ export type TeamProgress = { viewer: { role: 'developer' | 'champion' | 'operato
   verifiedEvidence?: string[] };
 
 // ---- Phase 5: AiKA. Answers come from the approved, developer-safe context only.
-export type AikaSection = { kind: 'known' | 'reported' | 'suggestion' | 'unknown'; text: string };
+/** `verified` is a repository observation the backend recorded live and the answer cites; `sample` cites fixture
+ * (sample) repository data. Both carry the cited observation ids; uncited repository claims are removed. */
+export type AikaSection = { kind: 'known' | 'verified' | 'sample' | 'reported' | 'suggestion' | 'unknown'; text: string; citations?: string[] };
 export type AikaJob = { id: string; status: 'running' | 'succeeded' | 'failed'; question: string; milestoneId: string | null; startedAt: string; elapsedMs: number;
   answer: { sections: AikaSection[]; nextStep: string | null; removed: number } | null; error: string | null; model: string | null };
 
@@ -198,3 +200,29 @@ export type ChampionReview = {
 
 /** Everything Chris's workspace loads in one request. */
 export type HandoffOverview = { drafts: HandoffRecord[]; workspace: Workspace; analysis: AnalysisJob | null };
+
+// ---- Phase 7: repository intelligence. Read-only observations of an operator-configured repository.
+/** What was inspected. `ci_runs` is never inspected: run results and required checks are out of scope. */
+export type RepositorySignal = 'identity' | 'default_branch' | 'readme' | 'docs' | 'codeowners' | 'ci_config' | 'deployment' | 'catalog_info' | 'runbooks' | 'ci_runs';
+/** observed: the backend retrieved it. missing: the complete file listing has no such file. inaccessible: listed but
+ * could not be read. not_inspected: not checked, or absence can't be established (failed or truncated listing). */
+export type ObservationStatus = 'observed' | 'missing' | 'inaccessible' | 'not_inspected';
+/** live: retrieved from GitHub by the backend. fixture: clearly labelled sample data for a fictional repository. */
+export type EvidenceMode = 'live' | 'fixture';
+export type RepositoryObservation = { id: string; signal: RepositorySignal; status: ObservationStatus; mode: EvidenceMode;
+  summary: string; details: string[]; limitation: string | null;
+  /** Where it came from: the API request or fixture file, the file path and a link (live only). */
+  source: { kind: 'github_api' | 'fixture'; request: string; path: string | null; url: string | null };
+  repository: string; commit: string | null; retrievedAt: string };
+export type RepositoryInspection = { id: string; repositoryId: string; repository: string; mode: EvidenceMode;
+  status: 'succeeded' | 'partial' | 'failed'; errorCode: string | null; retryAfter: string | null;
+  defaultBranch: string | null; commit: string | null; startedAt: string; completedAt: string; requestedBy: string;
+  observations: RepositoryObservation[] };
+/** A configured repository as one viewer may see it, with the milestones it is relevant to. */
+export type RepositoryEvidenceView = { id: string; label: string; repository: string; mode: EvidenceMode; canInspect: boolean;
+  milestones: { id: string; title: string; assignee: string | null; focus: RepositorySignal[]; actionLinks: { index: number; signals: RepositorySignal[] }[] }[];
+  /** The most recent attempt, and the most recent one that produced observations (the same when it succeeded). */
+  latest: RepositoryInspection | null; evidence: RepositoryInspection | null;
+  /** Evidence older than the configured maximum age is shown as stale, never as current. */
+  stale: boolean; maxAgeHours: number };
+export type RepositoryEvidence = { repositories: RepositoryEvidenceView[] };

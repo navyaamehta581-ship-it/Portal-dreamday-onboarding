@@ -1,0 +1,22 @@
+{
+ "_note": "SAMPLE DATA for the fictional Northstar Commerce scenario. This repository does not exist on GitHub. Evidence produced from this file is labelled fixture/sample everywhere and is never a live observation.",
+ "repository": "northstar-commerce/payments-api",
+ "defaultBranch": "main",
+ "commit": "5f1c0de2a9b4e7c3d8f6a1b2c3d4e5f60718293a",
+ "committedAt": "2026-10-20T14:32:00Z",
+ "pushedAt": "2026-10-20T14:35:00Z",
+ "visibility": "private",
+ "files": {
+  "README.md": "# payments-api\n\nHandles card authorisation and refunds for Northstar Commerce checkout.\n\n## Running locally\n\nSee docs/development.md.\n",
+  "docs/architecture.md": "# Architecture\n\nSample content.\n",
+  "docs/development.md": "# Development\n\nSample content.\n",
+  ".github/workflows/ci.yml": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo sample\n",
+  ".github/workflows/deploy.yml": "name: deploy\non:\n  workflow_dispatch: {}\njobs:\n  deploy:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo sample\n",
+  "Jenkinsfile": "// sample\npipeline { agent any; stages { stage('build') { steps { echo 'sample' } } } }\n",
+  "Dockerfile": "FROM node:24-alpine\n# sample\n",
+  "helm/payments-api/Chart.yaml": "apiVersion: v2\nname: payments-api\nversion: 0.1.0\n",
+  "catalog-info.yaml": "apiVersion: backstage.io/v1alpha1\nkind: Component\nmetadata:\n  name: payments-api\n  description: Payments service (sample)\nspec:\n  type: service\n  lifecycle: experimental\n  owner: team-checkout\n",
+  "src/index.ts": "// sample\n",
+  "package.json": "{\"name\":\"payments-api\",\"private\":true}\n"
+ }
+}

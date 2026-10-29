@@ -68,6 +68,14 @@ const developers=developerList.map(d=>{const path=join(directory,`developer-toke
 const developersPath=join(directory,'developers.json');
 writeFileSync(developersPath,JSON.stringify(developers),{mode:0o600});privatePath(developersPath);
 process.env.ACTIVATION_DEVELOPERS_PATH=developersPath;
+// Phase 7: repository evidence. ACTIVATION_REPOSITORIES_PATH may name an operator-owned configuration (live read-only
+// GitHub or fixture). Without one, the fictional Northstar scenario uses the labelled sample for payments-api: fixture
+// mode, never presented as a live GitHub observation (the repository doesn't exist).
+if(!process.env.ACTIVATION_REPOSITORIES_PATH){
+ const path=join(directory,'repositories.json');
+ writeFileSync(path,JSON.stringify([{customerId,id:'payments-api',label:'payments-api',repository:'northstar-commerce/payments-api',mode:'fixture',fixture:'northstar-payments-api',services:['payments-api']}],null,1),{mode:0o600});
+ privatePath(path);process.env.ACTIVATION_REPOSITORIES_PATH=path;
+}
 if(command==='operator-token'){process.stdout.write(process.env.ACTIVATION_OPERATOR_TOKEN+'\n');process.exit(0);}
 const token=readFileSync(tokenPath,'utf8');
 if(command==='token'){process.stdout.write(token+'\n');process.exit(0);}
@@ -101,5 +109,5 @@ if(!/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(frontendOrigin))throw Error('Demo fro
 const app=createApp(goals,frontendOrigin,activation.options);
 async function close(){await activation.close();goals.close();}
 app.on('error',async()=>{await close();console.error('Demo could not listen; check PORT.');process.exitCode=1;});
-app.listen(port,'127.0.0.1',()=>console.log(`FICTIONAL DEMO API: http://127.0.0.1:${port}\nCustomer ID: ${bundle.principal.customerId}\nPrivate data: ${directory}\nPortal: start it with the same ACTIVATION_DEMO_DIR (and ACTIVATION_DEMO_CUSTOMER_ID), open http://127.0.0.1:5173/ and choose a persona. Tokens stay server-side.\nFor a new handoff, start with npm run demo:handoff in a fresh ACTIVATION_DEMO_DIR.\nExpires: ${bundle.expiresAt}. ${process.env.PORTAL_LLM_PROVIDER==='ollama'?`Local model for analysis: ${process.env.OLLAMA_MODEL??'qwen3:4b'} (runs in the background; an analysis can take minutes)`:'Rule-based analysis (no model)'}. No GitHub access or execution grants.`));
+app.listen(port,'127.0.0.1',()=>console.log(`FICTIONAL DEMO API: http://127.0.0.1:${port}\nCustomer ID: ${bundle.principal.customerId}\nPrivate data: ${directory}\nPortal: start it with the same ACTIVATION_DEMO_DIR (and ACTIVATION_DEMO_CUSTOMER_ID), open http://127.0.0.1:5173/ and choose a persona. Tokens stay server-side.\nFor a new handoff, start with npm run demo:handoff in a fresh ACTIVATION_DEMO_DIR.\nExpires: ${bundle.expiresAt}. ${process.env.PORTAL_LLM_PROVIDER==='ollama'?`Local model for analysis: ${process.env.OLLAMA_MODEL??'qwen3:4b'} (runs in the background; an analysis can take minutes)`:'Rule-based analysis (no model)'}. No GitHub write access or execution grants. Repository evidence: ${process.env.ACTIVATION_REPOSITORIES_PATH}${process.env.ACTIVATION_GITHUB_REPOSITORY_TOKEN?' (read-only GitHub token configured)':''}.`));
 for(const signal of ['SIGINT','SIGTERM'])process.once(signal,()=>{app.closeAllConnections();app.close(()=>{void close();});});

@@ -107,7 +107,7 @@ test('AiKA: answers from approved, developer-safe context only, labels what it k
   const prompt=stub.requests[0].messages[1].content as string;
   assert.match(prompt,/YOUR MILESTONE \(the question is about this one\): Assess payments-api repository readiness — assigned to Alex Rivera/);
   assert.match(prompt,/TEAM MILESTONE: Validate payments-api discoverability — Jordan Lee — status in progress/);
-  assert.match(prompt,/REPOSITORY EVIDENCE: none/);assert.match(prompt,/TECHNICAL GOAL: Establish a service-readiness baseline/);
+  assert.match(prompt,/REPOSITORY OBSERVATIONS: none/);assert.match(prompt,/TECHNICAL GOAL: Establish a service-readiness baseline/);
   for(const x of [...PRIVATE,'Jordan private scratch note','Opportunity','My pricing notes'])assert.ok(!JSON.stringify(stub.requests).includes(x),'AiKA prompt leaked '+x);
   assert.equal(stub.requests[0].model,'qwen3:1.7b');
   // Chris (operator) has no AiKA here; a different viewer has a separate conversation.

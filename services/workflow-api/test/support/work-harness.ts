@@ -27,28 +27,29 @@ export async function ollamaStub(reply:(body:any)=>unknown,delay=0){
 }
 
 export type Call=(customer:string,path:string,token:string,body?:unknown,actor?:string)=>Promise<{status:number;json:any;raw:string}>;
-export async function harness({file=':memory:',modelUrl=null as string|null,timeoutMs=5000,evidence=[] as string[]}={}){
+export async function harness({file=':memory:',modelUrl=null as string|null,timeoutMs=5000,evidence=[] as string[],repositories=[] as import('../../src/activation/repository.ts').RepositoryConfig[],github=undefined as typeof fetch|undefined,githubToken=undefined as string|undefined,now=undefined as (()=>number)|undefined}={}){
  const {createApp}=await import('../../src/app.ts');const {openGoalStore}=await import('../../src/store.ts');
  const {openActivationStore}=await import('../../src/activation/store.ts');const {createIntake}=await import('../../src/activation/intake.ts');
  const {openHandoffStore}=await import('../../src/activation/handoff/store.ts');const {createHandoffService}=await import('../../src/activation/handoff/service.ts');
- const {createWorkService,openWorkStore}=await import('../../src/activation/handoff/work.ts');const {createAika}=await import('../../src/activation/handoff/aika.ts');
+ const {createWorkService,openWorkStore}=await import('../../src/activation/handoff/work.ts');const {createRepositoryService,openRepositoryStore}=await import('../../src/activation/repository.ts');const {createAika}=await import('../../src/activation/handoff/aika.ts');
  const intake=createIntake({admit:()=>false});
- const store=openActivationStore(file,intake.policy),handoffs=openHandoffStore(file),workStore=openWorkStore(file),goals=openGoalStore(':memory:');
+ const store=openActivationStore(file,intake.policy),handoffs=openHandoffStore(file),workStore=openWorkStore(file),repoStore=openRepositoryStore(file),goals=openGoalStore(':memory:');
  const handoff=createHandoffService({handoffs,store:()=>store,analyze:rule,stage:intake.stage,release:intake.release});
  const work=createWorkService({published:p=>handoffs.published(p),work:workStore,verifiedEvidence:p=>p.customerId==='northstar'?evidence:[]});
+ const repos=createRepositoryService({config:repositories,store:repoStore,published:p=>handoffs.published(p),github:{fetchImpl:github,token:githubToken},...(now?{now}:{})});
  const aika=createAika({model:modelUrl?createOllama({endpoint:modelUrl,model:'qwen3:1.7b',timeoutMs,retries:0,numCtx:8192}):null,work,
-  publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,repositoryEvidence:()=>[]});
+  publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,repositoryEvidence:(p,v)=>repos.forAika(p,v)});
  const north={tenantId:'t',customerId:'northstar',sessionId:'s'},lumen={...north,customerId:'lumen'};
  // One credential per developer (identity), plus the shared developer credential, the Champion and Chris.
  const tokens:Record<string,{p:typeof north;role:'dev'|'op'|'champ';name?:string}>={dev:{p:north,role:'dev'},op:{p:north,role:'op'},champ:{p:north,role:'champ'},
   alex:{p:north,role:'dev',name:'Alex Rivera'},jordan:{p:north,role:'dev',name:'Jordan Lee'},'lumen-alex':{p:lumen,role:'dev',name:'Alex Rivera'},'lumen-champ':{p:lumen,role:'champ'}};
  const who=(r:{headers:{authorization?:string}})=>tokens[(r.headers.authorization??'').replace('Bearer ','')];
- const server=createApp(goals,undefined,{store,handoff,work,aika,championApproval:true,authorize:(r,c)=>who(r)?.p.customerId===c?who(r)!.p:null,
+ const server=createApp(goals,undefined,{store,handoff,work,aika,repositories:repos,championApproval:true,authorize:(r,c)=>who(r)?.p.customerId===c?who(r)!.p:null,
   isOperator:r=>who(r)?.role==='op',isChampion:r=>who(r)?.role==='champ',developerName:r=>who(r)?.name??null});
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
  const base=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/activation/v1/customers/`;
  const call:Call=async(customer,path,token,body,actor)=>{const r=await fetch(base+customer+'/'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(actor?{'X-Portal-Actor':actor}:{})},body:body===undefined?undefined:JSON.stringify(body)});const raw=await r.text();return {status:r.status,json:raw?JSON.parse(raw):null,raw};};
- return {call,close:async()=>{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();workStore.close();goals.close();}};
+ return {call,close:async()=>{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();workStore.close();repoStore.close();goals.close();}};
 }
 
 /** Chris submits; Maya assigns Alex the repository assessment and Jordan the dependent discoverability check, and approves. */
