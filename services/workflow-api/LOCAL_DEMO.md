@@ -1,3 +1,41 @@
+# Persona demo: one entry for Chris, Maya, Alex and Jordan
+
+Use Node >=24.12.0 <25. From the repository root, once:
+
+```sh
+npm ci --ignore-scripts --prefix services/workflow-api
+npm ci --prefix prototypes/v1
+```
+
+Terminal 1, the fictional customer API (handoff mode starts empty, so Chris publishes first):
+
+```sh
+export ACTIVATION_DEMO_DIR="$HOME/.spotify-portal-demo-northstar"   # must not exist yet, or be a previous run of this demo
+export ACTIVATION_DEMO_CUSTOMER_ID=fictional-northstar-commerce
+PORTAL_LLM_PROVIDER=ollama OLLAMA_MODEL=qwen3:1.7b npm run demo:handoff --prefix services/workflow-api
+```
+
+Leave out `PORTAL_LLM_PROVIDER` and `OLLAMA_MODEL` to use rule-based analysis without a model.
+
+Terminal 2, the Portal (same `ACTIVATION_DEMO_DIR` and customer ID):
+
+```sh
+export ACTIVATION_DEMO_DIR="$HOME/.spotify-portal-demo-northstar"
+export ACTIVATION_DEMO_CUSTOMER_ID=fictional-northstar-commerce
+PORTAL_DEMO_LABEL="Northstar Commerce (fictional)" npm run dev --prefix prototypes/v1
+```
+
+Then:
+
+1. Open http://127.0.0.1:5173/, select **Get started** and choose a persona.
+2. As **Chris**, paste the Northstar sources from `services/workflow-api/test/fixtures/scenarios.json` (scenario A) into Customer Context and select **Analyze sources**. With a local model this takes one to three minutes, and the page shows only the button's busy state.
+3. Review the Activation Goal, then **Publish to developers**.
+4. Sign out and choose **Maya**, **Alex** or **Jordan** to see their Portals.
+
+No tokens are copied or pasted: the Portal's local session layer reads them from `ACTIVATION_DEMO_DIR` on the server side.
+
+See [docs/activation/personas.md](../../docs/activation/personas.md) for routing, the access model and what is still a placeholder.
+
 # Unblock the local activation screen
 
 Use Node >=24.12.0 <25. From the repository root:

@@ -13,6 +13,8 @@ type ApprovalCommand=Parameters<ActivationApi['acceptSetupProposal']>[0];
 const directionKey=(s:ActivationState)=>`portal-direction:${s.customerId}:${s.developerSessionId}:${s.planRevision}`;
 
 export function describeError(e:unknown){
+ // A different persona signed in elsewhere is not a revision conflict: the page must stop, not retry.
+ if(e instanceof Error&&e.message==='PERSONA_CHANGED')return 'PERSONA_CHANGED';
  if(typeof e==='object'&&e!==null&&'status' in e&&(e as {status:number}).status===409)return 'This session changed elsewhere. Your draft is still here; refresh the saved session before retrying. If the command was rejected as stale, copy your text, clear the draft, and review a new submission against the refreshed plan. Exact retries never silently adopt a newer revision.';
  if(e instanceof Error&&['TimeoutError','AbortError'].includes(e.name))return 'The request timed out. Your draft is preserved. Refresh canonical state, then retry the exact submission.';
  return e instanceof Error?e.message:'ACTIVATION_UNAVAILABLE';

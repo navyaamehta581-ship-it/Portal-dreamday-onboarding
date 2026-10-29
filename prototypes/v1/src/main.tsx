@@ -1,12 +1,10 @@
 import React,{Suspense,lazy} from 'react';
 import {createRoot} from 'react-dom/client';
+import {surfaceOf} from './portal-app/session';
 
-// Two separate surfaces on one backend: /operator for Chris, Portal routes for developers.
-// Each surface is loaded on its own so its styles never leak into another.
-const PortalApp=lazy(()=>import('./portal-app/PortalApp').then(m=>({default:m.PortalApp})));
-const OperatorWorkspace=lazy(()=>import('./operator/OperatorWorkspace').then(m=>({default:m.OperatorWorkspace})));
+// One entry for every persona: the Portal app routes to Chris's workspace or the customer Portal after sign-in.
+// Paths outside the Portal keep the earlier standalone prototype, loaded on its own so styles never mix.
+const App=lazy(()=>import('./portal-app/App').then(m=>({default:m.App})));
 const LegacyPortal=lazy(()=>import('./styles.css').then(()=>import('./portal/Portal')));
-const path=window.location.pathname;
-const portal=path==='/'||path==='/login'||path==='/onboarding'||path==='/portal'||path.startsWith('/portal/')||path==='/activation'||path.startsWith('/activation/');
-const Surface=path==='/operator'||path.startsWith('/operator/')?OperatorWorkspace:portal?PortalApp:LegacyPortal;
+const Surface=surfaceOf(window.location.pathname)?App:LegacyPortal;
 createRoot(document.getElementById('root')!).render(<React.StrictMode><Suspense fallback={null}><Surface/></Suspense></React.StrictMode>);

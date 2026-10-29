@@ -4,81 +4,137 @@ import {createServer} from 'node:http';
 import {mkdtempSync, writeFileSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createPortalSession, loadAccounts} from './portal-session.mjs';
+import {DEFAULT_PERSONAS, createPortalSession, loadDirectory} from './portal-session.mjs';
 
 const dir = mkdtempSync(join(tmpdir(), 'portal-session-'));
-const tokenA = 'a'.repeat(64), tokenB = 'b'.repeat(64);
-writeFileSync(join(dir, 'a'), tokenA); writeFileSync(join(dir, 'b'), tokenB);
-const accounts = [
-  {id: 'north', label: 'Northstar', user: 'Dev A', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a')},
-  {id: 'other', label: 'Other', user: 'Dev B', customerId: 'fictional-other', apiOrigin: 'http://127.0.0.1:7002', tokenFile: join(dir, 'b')},
-  {id: 'missing', label: 'Missing', user: 'Dev C', customerId: 'fictional-missing', apiOrigin: 'http://127.0.0.1:7003', tokenFile: join(dir, 'none')},
+const devA = 'a'.repeat(64), opA = 'c'.repeat(64), devB = 'b'.repeat(64), opB = 'd'.repeat(64);
+for (const [name, value] of [['a', devA], ['a-op', opA], ['b', devB], ['b-op', opB]]) writeFileSync(join(dir, name), value);
+const customers = [
+  {id: 'north', label: 'Northstar', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a'), operatorTokenFile: join(dir, 'a-op')},
+  {id: 'other', label: 'Other', customerId: 'fictional-other', apiOrigin: 'http://127.0.0.1:7002', tokenFile: join(dir, 'b'), operatorTokenFile: join(dir, 'b-op')},
+  {id: 'missing', label: 'Missing', customerId: 'fictional-missing', apiOrigin: 'http://127.0.0.1:7003', tokenFile: join(dir, 'none'), operatorTokenFile: join(dir, 'none')},
+];
+const personas = [
+  {id: 'chris', name: 'Chris', role: 'operator', title: 'Spotify account operator', customers: ['north', 'other']},
+  {id: 'maya', name: 'Maya Chen', role: 'champion', title: 'Platform Champion', customers: ['north']},
+  {id: 'alex', name: 'Alex Rivera', role: 'developer', title: 'Developer', customers: ['north']},
+  {id: 'sam', name: 'Sam Okafor', role: 'developer', title: 'Developer', customers: ['other']},
+  {id: 'ghost', name: 'Ghost', role: 'developer', title: 'Developer', customers: ['missing']},
 ];
 
 async function harness() {
   const calls = [];
   const fetchImpl = async (url, init) => {calls.push({url, init}); return new Response(JSON.stringify({ok: true}), {status: 200, headers: {ETag: '"activation-1"'}});};
-  const handle = createPortalSession({accounts, fetchImpl});
+  const handle = createPortalSession({directory: loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers, personas})}), fetchImpl});
   const server = createServer((req, res) => {void handle(req, res, () => {res.writeHead(418); res.end();});});
   await new Promise(r => server.listen(0, '127.0.0.1', r));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const call = (path, init = {}) => fetch(origin + path, init);
-  return {calls, origin, call, close: () => new Promise(r => server.close(r))};
+  const signIn = async (personaId, jar = {}) => {
+    const r = await call('/portal-auth/login', {method: 'POST', headers: {...jar, Origin: origin}, body: JSON.stringify({personaId})});
+    assert.equal(r.status, 200);
+    return {Cookie: r.headers.get('set-cookie').split(';')[0]};
+  };
+  return {calls, origin, call, signIn, close: () => new Promise(r => server.close(r))};
 }
+let n = 0;
+function config(value) {const file = join(dir, `config-${n++}.json`); writeFileSync(file, JSON.stringify(value)); return file;}
+const STATE = '/activation/v1/customers/fictional-north/state';
 
-test('lists accounts without tokens or API origins', async () => {
+test('lists personas with role and customer, never tokens, files or API origins', async () => {
   const h = await harness();
   try {
-    const text = await (await h.call('/portal-auth/accounts')).text();
-    assert.ok(!text.includes(tokenA) && !text.includes('tokenFile') && !text.includes('apiOrigin'));
-    assert.equal(JSON.parse(text).accounts[0].customerId, 'fictional-north');
+    const text = await (await h.call('/portal-auth/personas')).text();
+    for (const secret of [devA, opA, 'tokenFile', 'apiOrigin', dir]) assert.ok(!text.includes(secret));
+    const maya = JSON.parse(text).personas.find(p => p.id === 'maya');
+    assert.deepEqual(maya, {id: 'maya', name: 'Maya Chen', role: 'champion', title: 'Platform Champion', customers: [{id: 'north', label: 'Northstar', customerId: 'fictional-north'}]});
   } finally {await h.close();}
 });
 
-test('requires a same-origin simulated login before forwarding with the server-held token', async () => {
+test('sign-in is same-origin, sets an HttpOnly cookie and survives a reload as the same persona', async () => {
   const h = await harness();
   try {
-    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-north/state')).status, 401);
-    assert.equal((await h.call('/portal-auth/login', {method: 'POST', body: '{"accountId":"north"}'})).status, 403);
-    assert.equal((await h.call('/portal-auth/login', {method: 'POST', headers: {Origin: h.origin}, body: '{"accountId":"missing"}'})).status, 503);
-    const login = await h.call('/portal-auth/login', {method: 'POST', headers: {Origin: h.origin}, body: '{"accountId":"north"}'});
-    assert.equal(login.status, 200);
-    const cookie = login.headers.get('set-cookie');
-    assert.match(cookie, /HttpOnly; SameSite=Strict/);
-    assert.ok(!(await login.clone().text()).includes(tokenA));
-    const jar = {Cookie: cookie.split(';')[0]};
-    assert.equal((await (await h.call('/portal-auth/session', {headers: jar})).json()).account.id, 'north');
-    const read = await h.call('/portal-api/activation/v1/customers/fictional-north/state', {headers: {...jar, Authorization: 'Bearer forged'}});
-    assert.equal(read.status, 200); assert.equal(read.headers.get('etag'), '"activation-1"');
-    assert.equal(h.calls[0].url, 'http://127.0.0.1:7001/api/activation/v1/customers/fictional-north/state');
-    assert.equal(h.calls[0].init.headers.Authorization, `Bearer ${tokenA}`);
-    // Changing the customer ID is refused before anything is forwarded.
-    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-other/state', {headers: jar})).status, 403);
-    assert.equal(h.calls.length, 1);
-    // Cross-site POSTs are refused even with the cookie.
-    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-north/blocker-reports', {method: 'POST', headers: jar, body: '{}'})).status, 403);
-    const post = await h.call('/portal-api/activation/v1/customers/fictional-north/blocker-reports', {method: 'POST', headers: {...jar, Origin: h.origin}, body: '{"x":1}'});
-    assert.equal(post.status, 200); assert.equal(h.calls[1].init.body, '{"x":1}');
+    assert.equal((await h.call('/portal-api' + STATE)).status, 401);
+    assert.equal((await h.call('/portal-auth/login', {method: 'POST', body: '{"personaId":"alex"}'})).status, 403);
+    assert.equal((await h.call('/portal-auth/login', {method: 'POST', headers: {Origin: h.origin}, body: '{"personaId":"ghost"}'})).status, 503);
+    assert.equal((await h.call('/portal-auth/login', {method: 'POST', headers: {Origin: h.origin}, body: '{"personaId":"nobody"}'})).status, 404);
+    const login = await h.call('/portal-auth/login', {method: 'POST', headers: {Origin: h.origin}, body: '{"personaId":"alex"}'});
+    assert.match(login.headers.get('set-cookie'), /HttpOnly; SameSite=Strict/);
+    assert.ok(!(await login.clone().text()).includes(devA));
+    const jar = {Cookie: login.headers.get('set-cookie').split(';')[0]};
+    for (let i = 0; i < 2; i++) assert.equal((await (await h.call('/portal-auth/session', {headers: jar})).json()).persona.id, 'alex');
     assert.equal((await h.call('/portal-auth/logout', {method: 'POST', headers: {...jar, Origin: h.origin}})).status, 200);
-    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-north/state', {headers: jar})).status, 401);
+    assert.equal((await h.call('/portal-auth/session', {headers: jar})).status, 401);
+    assert.equal((await h.call('/portal-api' + STATE, {headers: jar})).status, 401);
   } finally {await h.close();}
 });
 
-test('operator passthrough forwards only the caller-supplied token to the selected account API', async () => {
+test('customer personas use their customer developer credential; a forged header or customer ID changes nothing', async () => {
   const h = await harness();
   try {
-    assert.equal((await h.call('/operator-api/other/activation/v1/customers/fictional-other/state')).status, 401);
-    assert.equal((await h.call('/operator-api/other/activation/v1/customers/fictional-other/state', {headers: {Authorization: 'Bearer op'}})).status, 200);
-    assert.equal(h.calls[0].url, 'http://127.0.0.1:7002/api/activation/v1/customers/fictional-other/state');
-    assert.equal(h.calls[0].init.headers.Authorization, 'Bearer op');
-    assert.equal((await h.call('/operator-api/other/elsewhere', {headers: {Authorization: 'Bearer op'}})).status, 404);
+    for (const id of ['alex', 'maya']) {
+      const jar = await h.signIn(id);
+      const read = await h.call('/portal-api' + STATE, {headers: {...jar, Authorization: 'Bearer forged', 'X-Portal-Persona': id}});
+      assert.equal(read.status, 200); assert.equal(read.headers.get('etag'), '"activation-1"');
+      assert.equal(h.calls.at(-1).url, 'http://127.0.0.1:7001/api' + STATE);
+      assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${devA}`, 'the Champion has developer access only');
+      const before = h.calls.length;
+      assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-other/state', {headers: jar})).status, 403);
+      assert.equal((await h.call('/operator-api/north' + STATE, {headers: jar})).status, 403, 'no operator credential for customer personas');
+      assert.equal(h.calls.length, before, 'refused before anything is forwarded');
+    }
+    const jar = await h.signIn('alex');
+    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-north/blocker-reports', {method: 'POST', headers: jar, body: '{}'})).status, 403, 'cross-site POST refused');
+    const post = await h.call('/portal-api/activation/v1/customers/fictional-north/blocker-reports', {method: 'POST', headers: {...jar, Origin: h.origin}, body: '{"x":1}'});
+    assert.equal(post.status, 200); assert.equal(h.calls.at(-1).init.body, '{"x":1}');
   } finally {await h.close();}
 });
 
-test('rejects non-loopback API origins and derives the single demo account', () => {
-  assert.throws(() => loadAccounts({PORTAL_DEMO_ACCOUNTS: (writeFileSync(join(dir, 'bad.json'), JSON.stringify([{...accounts[0], apiOrigin: 'http://example.com'}])), join(dir, 'bad.json'))}));
-  assert.deepEqual(loadAccounts({ACTIVATION_DEMO_DIR: dir}).map(a => [a.customerId, a.tokenFile]), [['fictional-recommendation-demo', join(dir, 'token')]]);
-  assert.deepEqual(loadAccounts({}), []);
+test('the operator persona uses operator credentials only for its listed customers and never the developer Portal API', async () => {
+  const h = await harness();
+  try {
+    const jar = await h.signIn('chris');
+    assert.equal((await h.call('/operator-api/north' + STATE, {headers: jar})).status, 200);
+    assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${opA}`);
+    assert.equal((await h.call('/operator-api/other/activation/v1/customers/fictional-other/handoff', {headers: jar})).status, 200);
+    assert.equal(h.calls.at(-1).url, 'http://127.0.0.1:7002/api/activation/v1/customers/fictional-other/handoff');
+    assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${opB}`);
+    const before = h.calls.length;
+    assert.equal((await h.call('/operator-api/missing/activation/v1/customers/fictional-missing/state', {headers: jar})).status, 403, 'not one of Chris’s customers');
+    assert.equal((await h.call('/operator-api/north/activation/v1/customers/fictional-other/state', {headers: jar})).status, 403, 'customer ID must match the selected customer');
+    assert.equal((await h.call('/portal-api' + STATE, {headers: jar})).status, 403, 'Chris has no developer session');
+    assert.equal((await h.call('/operator-api/north' + STATE, {headers: {Authorization: `Bearer ${opA}`}})).status, 401, 'a pasted token is not a session');
+    assert.equal((await h.call('/operator-api/north/elsewhere', {headers: jar})).status, 404);
+    assert.equal(h.calls.length, before);
+  } finally {await h.close();}
+});
+
+test('a request made for one persona is refused after the browser signs in as another', async () => {
+  const h = await harness();
+  try {
+    const maya = await h.signIn('maya');
+    assert.equal((await h.call('/portal-api' + STATE, {headers: {...maya, 'X-Portal-Persona': 'maya'}})).status, 200);
+    const alex = await h.signIn('alex', maya);
+    const before = h.calls.length;
+    const stale = await h.call('/portal-api' + STATE, {headers: {...alex, 'X-Portal-Persona': 'maya'}});
+    assert.equal(stale.status, 409); assert.equal((await stale.json()).error.code, 'PERSONA_CHANGED');
+    assert.equal(h.calls.length, before);
+    // Signing in again replaced the earlier session.
+    assert.equal((await h.call('/portal-auth/session', {headers: maya})).status, 401);
+  } finally {await h.close();}
+});
+
+test('configuration: personas validated, legacy account arrays still work, demo directory yields the four challenge personas', () => {
+  assert.throws(() => loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers: [{...customers[0], apiOrigin: 'http://example.com'}], personas: []})}));
+  assert.throws(() => loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers, personas: [{...personas[1], role: 'admin'}]})}));
+  assert.throws(() => loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers, personas: [{...personas[1], customers: ['north', 'other']}]})}), /exactly one customer/);
+  assert.throws(() => loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers, personas: [{...personas[1], customers: ['nowhere']}]})}));
+  const legacy = loadDirectory({PORTAL_DEMO_ACCOUNTS: config([{id: 'north', label: 'Northstar', user: 'Dev A', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a')}])});
+  assert.deepEqual(legacy.personas, [{id: 'north', name: 'Dev A', role: 'developer', title: 'Developer', customers: ['north']}]);
+  const demo = loadDirectory({ACTIVATION_DEMO_DIR: dir});
+  assert.deepEqual(demo.personas.map(p => [p.name, p.role]), DEFAULT_PERSONAS.map(p => [p.name, p.role]));
+  assert.deepEqual(demo.customers.map(c => [c.customerId, c.tokenFile, c.operatorTokenFile]), [['fictional-recommendation-demo', join(dir, 'token'), join(dir, 'operator-token')]]);
+  assert.deepEqual(loadDirectory({}), {customers: [], personas: []});
 });
 
 test.after(() => rmSync(dir, {recursive: true, force: true}));
