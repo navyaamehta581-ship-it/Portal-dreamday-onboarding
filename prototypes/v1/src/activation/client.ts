@@ -1,9 +1,12 @@
 import type { ActivationState } from '../../../../contracts/activation/v1/state';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types';
-import type { AikaJob, AnalysisJob, ChampionReview, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
+import type { AikaJob, AnalysisJob, ChampionReview, RepositoryEvidence, RepositoryInspection, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
 
 /** One change per request, as the server accepts it. */
-export type MilestoneChange={action:{index:number;status:'not_started'|'started'|'blocked'|'completed'}}|{note:{kind:'update'|'blocker'|'question';text:string;evidence?:string|null}}|{resolve:string}|{status:'in_progress'|'ready_for_review'|'completed'};
+export type MilestoneChange={action:{index:number;status:'not_started'|'started'|'blocked'|'completed'}}|{note:{kind:'update'|'blocker'|'question'|'response';text:string;evidence?:string|null;replyTo?:string}}|{resolve:string}|{status:'in_progress'|'ready_for_review'|'completed'};
+
+/** The Champion's coordination: one change per request, as the server accepts it. */
+export type CoordinationChange={note:{text:string}}|{followUp:{text:string}}|{respond:{to:string;text:string;resolve?:boolean}}|{review:{decision:'reviewed';note?:string|null}};
 
 export class ActivationRequestError extends Error {
   /** Server details such as which review fields failed a check (labels and reason codes, never content). */
@@ -49,6 +52,10 @@ export function activationClient(customerId:string,token:string,base='',apiPrefi
     // Phase 5: each developer's attributed work on approved milestones; the server derives who they are.
     milestoneWork:()=>call<TeamProgress>('/milestone-work'),
     updateMilestone:(milestoneId:string,expectedRevision:number,change:MilestoneChange)=>call<TeamProgress>('/milestone-updates',{milestoneId,expectedRevision,...change}),
+    coordinateMilestone:(milestoneId:string,expectedRevision:number,change:CoordinationChange)=>call<TeamProgress>('/milestone-coordination',{milestoneId,expectedRevision,...change}),
+    // Phase 7: read-only repository evidence for configured repositories; requests name a configured id only.
+    repositoryEvidence:()=>call<RepositoryEvidence>('/repository-evidence'),
+    inspectRepository:(repositoryId:string)=>call<{inspection:RepositoryInspection;reused:boolean;evidence:RepositoryEvidence}>('/repository-inspections',{repositoryId}),
     // AiKA runs in the background on the server; asking returns at once and the answer is polled.
     askAika:(question:string,milestoneId?:string|null)=>call<{job:AikaJob;duplicate:boolean}>('/aika-questions',{question,...(milestoneId?{milestoneId}:{})}),
     aikaStatus:()=>call<{job:AikaJob|null}>('/aika-questions'),

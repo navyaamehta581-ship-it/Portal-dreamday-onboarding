@@ -4,11 +4,12 @@ import {act} from 'react';
 import type {AikaJob} from '../../../../../contracts/activation/v1/handoff';
 import {byLabel,click,flush,mockApi,mount,type} from '../../activation/testing';
 import {useMilestoneWork} from '../work/useMilestoneWork';
+import {useRepositoryEvidence} from '../work/useRepositoryEvidence';
 import {AikaPage} from './AikaPage';
 
 let api:ReturnType<typeof mockApi>,m:ReturnType<typeof mount>;
 const job=(patch:Partial<AikaJob>):AikaJob=>({id:'j1',status:'running',question:'What should I do next on this milestone?',milestoneId:'m-1',startedAt:'2026-10-29T11:00:00Z',elapsedMs:0,answer:null,error:null,model:'qwen3:1.7b',...patch});
-function Harness(){const work=useMilestoneWork(api as never);return <AikaPage api={api as never} work={work}/>;}
+function Harness(){const work=useMilestoneWork(api as never),repos=useRepositoryEvidence(api as never);return <AikaPage api={api as never} work={work} repos={repos}/>;}
 const text=()=>m.host.textContent??'';
 beforeEach(()=>{vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);api=mockApi();m=mount();
  api.milestoneWork.mockResolvedValue({viewer:{role:'developer',name:'Alex Rivera'},approval:{by:'Maya Chen',at:'2026-10-29T10:00:00Z'},objective:null,
@@ -33,7 +34,7 @@ it('asks through the Portal API, shows progress while it runs, then labelled sec
  await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
  const pills=Array.from(m.host.querySelectorAll('.pt-aika-sections .pt-pill')).map(p=>p.textContent);
  expect(pills).toEqual(['Known','Reported','Suggestion','Unknown']);
- expect(text()).toContain('Mark action 1 started.');expect(text()).toContain('1 part was removed');expect(text()).toContain('nothing here was inspected or verified by AiKA');
+ expect(text()).toContain('Mark action 1 started.');expect(text()).toContain('1 part was removed');expect(text()).toContain('AiKA itself inspected nothing');
  expect(text()).toContain('Answered in 4s');
 });
 
@@ -50,4 +51,17 @@ it('reports failures and timeouts as plain messages, and an unconfigured model a
  await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
  expect(m.host.querySelector('[role=alert]')!.textContent).toContain('AiKA took too long to answer');
  expect(m.host.querySelector('[aria-label="Question for AiKA"]')!.hasAttribute('disabled')).toBe(false);
+});
+
+it('shows verified repository claims with the observation they cite, and sample claims as sample data',async()=>{
+ const obs=(id:string,mode:'live'|'fixture',signal:string)=>({id,signal,status:'observed',mode,summary:'s',details:[],limitation:null,source:{kind:mode==='live'?'github_api':'fixture',request:'GET /repos/x',path:null,url:null},repository:'example-org/payments-api',commit:'a'.repeat(40),retrievedAt:'2026-10-29T12:00:00Z'});
+ api.repositoryEvidence.mockResolvedValue({repositories:[{id:'payments-api',label:'payments-api',repository:'example-org/payments-api',mode:'live',canInspect:true,milestones:[],latest:null,stale:false,maxAgeHours:24,
+  evidence:{id:'i',repositoryId:'payments-api',repository:'example-org/payments-api',mode:'live',status:'succeeded',errorCode:null,retryAfter:null,defaultBranch:'main',commit:'a'.repeat(40),startedAt:'',completedAt:'',requestedBy:'Alex Rivera',observations:[obs('obs-aaaaaaaaaa','live','codeowners')]}}]});
+ api.aikaStatus.mockResolvedValue({job:job({status:'succeeded',elapsedMs:1000,answer:{sections:[{kind:'verified',text:'CODEOWNERS names the payments team.',citations:['obs-aaaaaaaaaa']},{kind:'sample',text:'Sample metadata names team-checkout.',citations:['obs-bbbbbbbbbb']}],nextStep:null,removed:2}})});
+ await m.render(<Harness/>);await flush();await flush();await flush();
+ const items=Array.from(m.host.querySelectorAll('.pt-aika-sections li'));
+ expect(items.map(li=>li.querySelector('.pt-pill')!.textContent)).toEqual(['Verified · repository','Sample data']);
+ expect(items[0].querySelector('[data-testid=aika-citations]')!.textContent).toContain('CODEOWNERS (ownership) (live, example-org/payments-api@aaaaaaaaaaaa');
+ expect(items[1].querySelector('[data-testid=aika-citations]')!.textContent).toContain('recorded observation obs-bbbbbbbbbb');
+ expect(text()).toContain('2 parts were removed');
 });

@@ -7,8 +7,8 @@ After Maya approves the plan in [Dream Day](dream-day.md), Alex and Jordan each 
 | Who | Where | What |
 |---|---|---|
 | Alex, Jordan | Onboarding → **My work** (`/activation/work`); Home → **Open my work** | Maya's approval (who, when). Their own approved milestones in full: system, why, actions with status, completion criteria, dependencies with status, and their notes. Then the team's engineering objective: problem, technical goals and outstanding technical questions, each screened by the developer privacy check. Then the other milestones by **title, assignee and status only**. |
-| Maya | Team Coordination → Team overview → **Team progress** | Every approved milestone: status, actions completed, open blockers with who reported them, the latest note. Read-only. |
-| Chris | Customer Onboarding → Developer Progress → **Approved milestone progress** | The same consolidated, attributed view. Read-only. |
+| Maya | Team Coordination → Team overview | Every approved milestone in full, with the discussion; she responds, adds notes, requests follow-up and reviews. See [team-coordination.md](team-coordination.md). |
+| Chris | Customer Onboarding → Developer Progress → **Approved milestone progress** | The same view as Maya's, read-only. |
 
 The **My work** tab appears only once a plan is approved. Before that, the server answers `NO_APPROVED_PLAN` and nothing is shown. Unapproved drafts, Chris's notes and commercial information never reach this view: it is built from the published, approved developer handoff only.
 
@@ -60,7 +60,7 @@ AiKA is in the Portal navigation (`/aika`), and each milestone card has **Ask Ai
   - unknowns;
   - the viewer's own milestones in full (actions, criteria, dependencies, their notes);
   - other milestones by title and status;
-  - "REPOSITORY EVIDENCE" — only GitHub observations the backend actually recorded, otherwise "none. Nothing has been inspected."
+  - "REPOSITORY OBSERVATIONS" — only observations the backend recorded, each with an id AiKA must cite (Phase 7, [repository-evidence.md](repository-evidence.md)), otherwise "none. No repository has been inspected."
   
   Every line passes the developer privacy screen again before it reaches the model. Chris's sources and notes, commercial information and unapproved drafts are never included.
 - **Labelled answers.** Each part is **Known**, **Reported**, **Suggestion** or **Unknown**, plus an optional next step. The server checks the answer:
@@ -97,7 +97,7 @@ Code:
 
 - **The earlier shared session.** The Guide (questions and blockers), the repository tab and the team plan still belong to the customer's single developer session. Those reports are team-level, not per person. Per-person, attributed work lives in **My work**.
 - **Evidence references are not checked.** They are recorded as reported. The Portal never claims to have inspected them.
-- **Reviews.** "Ready for review" is a status; Maya and Chris can see it, but there is no review or sign-off step for it yet.
+- **Reviews.** Maya reviews milestones marked ready for review in Team Coordination (Phase 6); see [team-coordination.md](team-coordination.md).
 - **AiKA's jobs are kept in memory.** After an API restart the last answer is gone; progress is not.
 - **Testing.** AiKA was tested with a local stand-in for Ollama, in unit tests and the browser e2e: a small HTTP stub that echoes the prompt into a fixed answer. A real Ollama model was not run for these tests.
 - Catalog, Docs, Insights and the other Portal entries keep their existing "isn't available in this demo" pages. No Catalog entries, docs or analytics are invented.

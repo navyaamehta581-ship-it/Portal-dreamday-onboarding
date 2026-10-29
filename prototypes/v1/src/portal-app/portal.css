@@ -378,3 +378,12 @@ select.pt-input{appearance:auto;height:46px}
 .pt-work-log li>div,.pt-aika-sections li>p{min-width:0;overflow-wrap:anywhere}
 .pt-work-log code{font-size:12.5px}
 @media (max-width:640px){.pt-work-actions li{grid-template-columns:1fr}.pt-work-log li,.pt-aika-sections li{flex-direction:column}}
+/* Phase 6: discussion replies and coordination */
+.pt-work-log li.reply{margin-left:28px}
+.pt-coord-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:16px}
+.pt-coord-summary div{padding:12px 14px;border-radius:6px;background:#181818}
+.pt-coord-summary dt{font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#bdbdbd}
+.pt-coord-summary dd{margin:6px 0 0;font-size:20px;font-weight:700}
+.pt-coord-summary dd small{font-size:13px;font-weight:500;color:var(--p-subtle)}
+.pt-check{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px}
+@media (max-width:640px){.pt-work-log li.reply{margin-left:12px}}

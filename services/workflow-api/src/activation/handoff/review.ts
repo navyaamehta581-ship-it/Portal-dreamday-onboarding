@@ -110,13 +110,18 @@ function hasCycle(ms:ReviewMilestone[]){
 
 /** Reviewed milestones in the shape the existing developer publication path expects, keeping the analysis
  * details Chris doesn't edit (prerequisites, destinations, developer unknowns) for milestones that came from it. */
+/** A milestone added in review names its system as text ("payments-api · owner/repo"); keep it for the published plan. */
+function systemOf(text:string,platform:MilestoneDraft['system']['platform']):MilestoneDraft['system']{
+ const parts=text.split('·').map(x=>x.replace(/\((service|repository)\)/g,'').trim()).filter(Boolean);
+ return {service:parts.find(x=>!x.includes('/'))??null,repository:parts.find(x=>x.includes('/'))??null,platform};
+}
 export function toMilestoneDrafts(r:ReviewDraft,record:Pick<HandoffRecord,'proposal'|'understanding'>):MilestoneDraft[]{
  const title=new Map(r.milestones.map(m=>[m.id,m.title]));
  return r.milestones.map(m=>{
   const base=record.proposal.milestones.find(x=>x.id===m.id);
   // The publication format needs ids and list entries of at least three characters.
   const useful=(x:string)=>x.trim().length>=3,actions=m.actions.filter(useful),done=m.completionCriteria.filter(useful);
-  return {id:m.id.length>=3?m.id:`milestone-${m.id}`,objective:m.title,system:base?.system??{service:null,repository:null,platform:record.understanding.entities.scm},
+  return {id:m.id.length>=3?m.id:`milestone-${m.id}`,objective:m.title,system:base?.system??systemOf(m.system,record.understanding.entities.scm),
    why:m.description.trim()||m.title,actions,prerequisites:base?.prerequisites??[],requiredInformation:base?.requiredInformation??[],
    destinations:base?.destinations??[{label:'Evidence',path:'/activation/evidence'}],expectedOutput:base?.expectedOutput||done.join(' '),
    completionCriteria:done,dependencies:m.dependsOn.map(d=>title.get(d)).filter((x):x is string=>!!x),developerUnknowns:base?.developerUnknowns??[],
