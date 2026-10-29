@@ -73,3 +73,25 @@ test('the daily budget is checked before every request and survives a restart',a
   budget.close();
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
+
+test('free tier: a 429 pauses requests for the delay Google asks for; requests are paced per minute instead of failing',async()=>{
+ let clock=Date.parse('2026-10-29T10:00:00Z');
+ const limited=stub((b,n)=>n===0?new Response(JSON.stringify({error:{status:'RESOURCE_EXHAUSTED',details:[{'@type':'type.googleapis.com/google.rpc.RetryInfo',retryDelay:'37s'}]}}),{status:429}):ok({answer:'ok'}));
+ const g=gemini(limited.fetchImpl,{now:()=>clock});
+ assert.equal(await code(g.run(task)),'MODEL_RATE_LIMITED');
+ clock+=30_000;
+ assert.equal(await code(g.run(task)),'MODEL_RATE_LIMITED:provider_backoff');assert.equal(limited.calls.length,1,'nothing sent during the back-off');
+ clock+=8_000;
+ assert.equal((await g.run(task)).value.answer,'ok');assert.equal(limited.calls.length,2);
+ // Pacing: with 2 requests a minute, the third waits for the window instead of being refused.
+ const dir=mkdtempSync(join(tmpdir(),'pace-'));
+ try{
+  let t=Date.parse('2026-10-29T10:00:00Z');const waits:number[]=[];
+  const budget=openAiBudget(join(dir,'db.sqlite'),100,()=>t,2,async ms=>{waits.push(ms);t+=ms;});
+  const s=stub(()=>ok({answer:'ok'}));
+  const paced=gemini(s.fetchImpl,{admit:()=>budget.admit(),now:()=>t});
+  await paced.run(task);await paced.run(task);await paced.run(task);
+  assert.equal(s.calls.length,3);assert.equal(waits.length,1);assert.ok(waits[0]>=60_000&&waits[0]<=60_100);
+  budget.close();
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});

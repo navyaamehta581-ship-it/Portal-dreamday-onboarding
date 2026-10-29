@@ -19,8 +19,8 @@ async function start(args,cwd,env,ready){
  child.stdout.on('data',d=>output+=d);child.stderr.on('data',d=>output+=d);
  const end=Date.now()+20000;while(Date.now()<end){if(child.exitCode!==null)throw Error(output);if(ready(output))return;await new Promise(r=>setTimeout(r,100));}throw Error('Startup timeout: '+output);
 }
-const NORTHSTAR=['PRIVATE CONTRACT NOTE: renewal discount pending; exclude from publication.',
- 'FICTIONAL TEST: Northstar Engineering wants to onboard its existing checkout-api, a Node.js/TypeScript service in the GitHub monorepo northstar/platform.',
+const APERTURE=['PRIVATE CONTRACT NOTE: renewal discount pending; exclude from publication.',
+ 'FICTIONAL TEST: Aperture Engineering wants to onboard its existing checkout-api, a Node.js/TypeScript service in the GitHub monorepo aperture/platform.',
  'Backstage familiarity: the platform team ran a proof of concept; app developers are new to it.',
  'SSO uses Okta; repository access is managed through GitHub teams. Docs live in Confluence.',
  'A solutions engineer can help with deep configuration.'].join('\n');
@@ -64,10 +64,10 @@ try{
  await new Promise(r=>stubGitHub.listen(0,'127.0.0.1',r));const githubOrigin=`http://127.0.0.1:${stubGitHub.address().port}`;
  await new Promise(r=>stubOllama.listen(0,'127.0.0.1',r));const ollamaUrl=`http://127.0.0.1:${stubOllama.address().port}`;
  const uiPort=await port(),url=`http://127.0.0.1:${uiPort}`;
- const customers=[{id:'northstar',label:'Northstar Engineering',customerId:'fictional-northstar-engineering'},{id:'lumen',label:'Lumen Retail',customerId:'fictional-lumen-retail'}];
+ const customers=[{id:'aperture',label:'Aperture Engineering',customerId:'fictional-aperture-engineering'},{id:'lumen',label:'Lumen Retail',customerId:'fictional-lumen-retail'}];
  for(const c of customers){
   c.dir=join(directory,c.id);mkdirSync(c.dir,{mode:0o700});
-  // Phase 7: Northstar's checkout-api in live mode against the GitHub test double; Lumen's service as labelled sample data.
+  // Phase 7: Aperture's checkout-api in live mode against the GitHub test double; Lumen's service as labelled sample data.
   c.repositories=join(c.dir,'repositories.json');
   if(c.id==='lumen')writeFileSync(join(c.dir,'recs-fixture.json'),JSON.stringify({repository:'lumen/recs-service',defaultBranch:'main',commit:'e'.repeat(40),committedAt:'2026-10-01T00:00:00Z',pushedAt:'2026-10-01T00:00:00Z',
    files:{'README.md':'# recs-service (sample)\n','.github/workflows/ci.yml':'name: ci\n'}}));
@@ -75,16 +75,16 @@ try{
    :[{customerId:c.customerId,id:'checkout-api',label:'checkout-api',repository:'example-org/checkout-api',mode:'live',services:['checkout-api']}]));c.apiOrigin=`http://127.0.0.1:${await port()}`;c.tokenFile=join(c.dir,'token');c.operatorTokenFile=join(c.dir,'operator-token');c.championTokenFile=join(c.dir,'champion-token');
   await start(['scripts/demo.ts','handoff'],join(repo,'services/workflow-api'),{PORT:c.apiOrigin.split(':')[2],ACTIVATION_DEMO_DIR:c.dir,ACTIVATION_DEMO_CUSTOMER_ID:c.customerId,ACTIVATION_DEMO_FRONTEND_ORIGIN:url,
    ACTIVATION_REPOSITORIES_PATH:c.repositories,ACTIVATION_INSPECTION_COOLDOWN_SECONDS:'0',
-   ...(c.id==='northstar'?{ACTIVATION_GITHUB_API_ORIGIN:githubOrigin,ACTIVATION_GITHUB_REPOSITORY_TOKEN:'e2e-read-only-test-token'}:{}),
-   // Each developer gets their own credential; Northstar's AiKA uses the stub model, Lumen's has none.
+   ...(c.id==='aperture'?{ACTIVATION_GITHUB_API_ORIGIN:githubOrigin,ACTIVATION_GITHUB_REPOSITORY_TOKEN:'e2e-read-only-test-token'}:{}),
+   // Each developer gets their own credential; Aperture's AiKA uses the stub model, Lumen's has none.
    ACTIVATION_DEMO_DEVELOPERS:c.id==='lumen'?'sam=Sam Okafor':'alex=Alex Rivera,jordan=Jordan Lee',
-   ...(c.id==='northstar'?{AIKA_LLM_PROVIDER:'ollama',OLLAMA_URL:ollamaUrl,OLLAMA_MODEL:'stub-model',OLLAMA_RETRIES:'0',OLLAMA_TIMEOUT_MS:'10000'}:{AIKA_LLM_PROVIDER:'',PORTAL_LLM_PROVIDER:''})},out=>out.includes('FICTIONAL DEMO API:'));
+   ...(c.id==='aperture'?{AIKA_LLM_PROVIDER:'ollama',OLLAMA_URL:ollamaUrl,OLLAMA_MODEL:'stub-model',OLLAMA_RETRIES:'0',OLLAMA_TIMEOUT_MS:'10000'}:{AIKA_LLM_PROVIDER:'',PORTAL_LLM_PROVIDER:''})},out=>out.includes('FICTIONAL DEMO API:'));
  }
  const accounts=join(directory,'accounts.json');
- // One entry, six fictional personas: Chris across both customers; Maya (Champion), Alex and Jordan at Northstar; Sam and Priya (Champion) at Lumen.
+ // One entry, six fictional personas: Chris across both customers; Maya (Champion), Alex and Jordan at Aperture; Sam and Priya (Champion) at Lumen.
  writeFileSync(accounts,JSON.stringify({customers:customers.map(({id,label,customerId,apiOrigin,tokenFile,operatorTokenFile,championTokenFile})=>({id,label,customerId,apiOrigin,tokenFile,operatorTokenFile,championTokenFile})),
-  personas:[{id:'chris',name:'Chris',role:'operator',title:'Spotify account operator',customers:['northstar','lumen']},{id:'maya',name:'Maya Chen',role:'champion',title:'Platform Champion',customers:['northstar']},
-   {id:'alex',name:'Alex Rivera',role:'developer',title:'Developer',customers:['northstar']},{id:'jordan',name:'Jordan Lee',role:'developer',title:'Developer',customers:['northstar']},{id:'sam',name:'Sam Okafor',role:'developer',title:'Developer',customers:['lumen']},{id:'priya',name:'Priya Nair',role:'champion',title:'Platform Champion',customers:['lumen']}]}),{mode:0o600});
+  personas:[{id:'chris',name:'Chris',role:'operator',title:'Spotify account operator',customers:['aperture','lumen']},{id:'maya',name:'Maya Chen',role:'champion',title:'Platform Champion',customers:['aperture']},
+   {id:'alex',name:'Alex Rivera',role:'developer',title:'Developer',customers:['aperture']},{id:'jordan',name:'Jordan Lee',role:'developer',title:'Developer',customers:['aperture']},{id:'sam',name:'Sam Okafor',role:'developer',title:'Developer',customers:['lumen']},{id:'priya',name:'Priya Nair',role:'champion',title:'Platform Champion',customers:['lumen']}]}),{mode:0o600});
  await start(['node_modules/vite/bin/vite.js','--port',String(uiPort),'--strictPort'],frontend,{PORTAL_DEMO_ACCOUNTS:accounts,ACTIVATION_API_ORIGIN:customers[0].apiOrigin},out=>out.includes('Local:'));
  const [north,lumen]=customers;
  const devToken=readFileSync(north.tokenFile,'utf8'),alexToken=readFileSync(join(north.dir,'developer-token-alex'),'utf8'),opToken=readFileSync(north.operatorTokenFile,'utf8'),champToken=readFileSync(north.championTokenFile,'utf8');
@@ -108,7 +108,7 @@ try{
  await signInAs(op,'Chris');assert.equal(new URL(op.url()).pathname,'/operator','Chris starts in Customer Onboarding');
  assert.ok(!(await op.content()).includes(opToken),'operator token never reaches the page');
  assert.equal(await op.getByLabel('Operator access token').count(),0,'no token entry');
- // Chris: information → analysis → review → (Northstar) submission for Champion review → labelled direct publication.
+ // Chris: information → analysis → review → (Aperture) submission for Champion review → labelled direct publication.
  async function prepare(account,notes){
   await op.getByLabel('Customer account').selectOption(account);await op.getByRole('tab',{name:'Customer Context'}).click();
   await op.getByLabel('Information 1 text').fill(notes);await op.getByLabel('Information 1 name').fill('Discovery call');
@@ -142,13 +142,13 @@ try{
   await page.getByRole('button',{name:'Approve onboarding plan'}).click();
   await page.getByLabel('Approved responsibilities').waitFor();
  }
- await prepare('northstar',NORTHSTAR);
+ await prepare('aperture',APERTURE);
  assert.ok((await op.getByLabel('Kept internal').innerText()).includes('Kept internal'));
  // Edit the draft: retitle the first milestone, add a second one that depends on it, name the technical team; save.
  await op.getByLabel('Milestone 1 title').fill('Review checkout-api repository readiness and prepare it for Catalog registration');
  await op.getByRole('button',{name:'Add milestone'}).click();
  await op.getByLabel('Milestone 2 title').fill('Validate that checkout-api is discoverable in the Catalog');
- await op.getByLabel('Milestone 2 system').fill('checkout-api · northstar/platform');
+ await op.getByLabel('Milestone 2 system').fill('checkout-api · aperture/platform');
  await op.getByLabel('Milestone 2 actions').fill('Search the Catalog for checkout-api\nOpen its docs link');
  await op.getByLabel('Milestone 2 completion criteria').fill('checkout-api is found from Catalog search with a working docs link');
  await op.getByLabel('Milestone 2').getByRole('checkbox').check();
@@ -193,7 +193,7 @@ try{
  // Chris and developers cannot approve; nobody can publish around Dream Day.
  assert.equal((await api(north,'champion-decisions',opToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,403);
  assert.equal((await api(north,'champion-decisions',devToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,403);
- const bypass=await op.evaluate(async c=>{const r=await fetch(`/operator-api/northstar/activation/v1/customers/${c}/handoff-publications`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({draft:1,fromReview:true,outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})});return [r.status,(await r.json()).error.code];},north.customerId);
+ const bypass=await op.evaluate(async c=>{const r=await fetch(`/operator-api/aperture/activation/v1/customers/${c}/handoff-publications`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({draft:1,fromReview:true,outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})});return [r.status,(await r.json()).error.code];},north.customerId);
  assert.deepEqual(bypass,[403,'CHAMPION_APPROVAL_REQUIRED'],'the removed publishing bypass is refused on the server');
  assert.equal((await api(north,'champion-review',devToken)).status,403,'developers cannot open Dream Day');
  // Maya approves the resubmitted plan.
@@ -239,7 +239,7 @@ try{
  const opCalls=[];dev.on('request',r=>{if(r.url().includes('/operator-api/'))opCalls.push(r.url());});
  await dev.goto(url+'/operator');await dev.getByText('This workspace is for the Spotify account operator').waitFor();
  await dev.getByRole('button',{name:'Account: Alex Rivera'}).waitFor();assert.deepEqual(opCalls,[]);
- assert.equal(await dev.evaluate(async c=>(await fetch(`/operator-api/northstar/activation/v1/customers/${c}/handoff`)).status,north.customerId),403,'the session layer refuses operator access for a developer');
+ assert.equal(await dev.evaluate(async c=>(await fetch(`/operator-api/aperture/activation/v1/customers/${c}/handoff`)).status,north.customerId),403,'the session layer refuses operator access for a developer');
  await dev.goto(url+'/login');await dev.waitForURL(url+'/portal');
  await dev.getByRole('heading',{name:/First up/}).waitFor();
  let text=await dev.locator('body').innerText();
@@ -249,14 +249,14 @@ try{
  assert.equal(await dev.locator('a[href^="/operator"]').count(),0,'no operator links for developers');
  await dev.getByRole('button',{name:'Open your onboarding'}).click();
  await dev.getByRole('tab',{name:'Overview'}).waitFor();text=await dev.locator('body').innerText();
- assert.ok(text.includes('northstar/platform')&&text.includes('Review checkout-api repository readiness'));assert.ok(!text.includes('renewal'),'no commercial notes');assert.equal(await dev.getByRole('tab',{name:'Team'}).count(),0);
+ assert.ok(text.includes('aperture/platform')&&text.includes('Review checkout-api repository readiness'));assert.ok(!text.includes('renewal'),'no commercial notes');assert.equal(await dev.getByRole('tab',{name:'Team'}).count(),0);
  // Developer credentials cannot publish (role denial at the API).
  assert.equal((await fetch(`${north.apiOrigin}/api/activation/v1/customers/${north.customerId}/intake`,{method:'POST',headers:{Authorization:`Bearer ${devToken}`,'Content-Type':'application/json'},body:'{}'})).status,403);
 
  console.log('Guide: question then blocker');
  await dev.getByRole('tab',{name:'Guide'}).click();
  await dev.getByLabel('Question or update').fill('Which repository holds checkout-api?');await dev.getByRole('button',{name:'Send'}).click();
- await dev.getByText('Saved as your report').waitFor();assert.ok((await dev.locator('body').innerText()).includes('northstar/platform'));
+ await dev.getByText('Saved as your report').waitFor();assert.ok((await dev.locator('body').innerText()).includes('aperture/platform'));
  await dev.getByLabel('Message type').selectOption('blocker');
  await dev.getByLabel('Blocker note').fill('I don’t have permission to deploy to staging, and I don’t know who owns the service metadata.');
  await dev.getByRole('button',{name:'Submit blocker'}).click();
@@ -287,9 +287,9 @@ try{
  const status=c=>c.locator('[data-testid=milestone-status]').innerText();
  await card.getByLabel('Status of action 1').selectOption('started');await card.getByText(/Started by Alex Rivera/).waitFor();
  await card.getByLabel('Note type').selectOption('blocker');
- await card.getByLabel('Short note').fill('No read access to northstar/platform yet.');
- await card.getByLabel('Evidence reference').fill('https://example.test/northstar/access-request/17');
- await card.getByRole('button',{name:'Record blocker'}).click();await card.getByText('No read access to northstar/platform yet.').waitFor();
+ await card.getByLabel('Short note').fill('No read access to aperture/platform yet.');
+ await card.getByLabel('Evidence reference').fill('https://example.test/aperture/access-request/17');
+ await card.getByRole('button',{name:'Record blocker'}).click();await card.getByText('No read access to aperture/platform yet.').waitFor();
  assert.equal(await status(card),'Blocked');
  await card.getByRole('button',{name:'Mark ready for review'}).click();
  await card.getByRole('alert').filter({hasText:'open blockers are resolved'}).waitFor();
@@ -312,7 +312,7 @@ try{
  assert.ok(said.includes(`Your milestone is ${ALEX}`)&&said.includes('Known')&&said.includes('Reported')&&said.includes('Suggestion')&&said.includes('Unknown'),said);
  assert.ok(!said.includes('I inspected')&&said.includes('1 part was removed'),'claimed inspections are removed: nothing was inspected');
  const prompt=aikaPrompts.at(-1);
- assert.ok(prompt.includes(`YOUR MILESTONE (the question is about this one): ${ALEX}`)&&prompt.includes('No read access to northstar/platform yet.')&&prompt.includes('REPOSITORY OBSERVATIONS: none'));
+ assert.ok(prompt.includes(`YOUR MILESTONE (the question is about this one): ${ALEX}`)&&prompt.includes('No read access to aperture/platform yet.')&&prompt.includes('REPOSITORY OBSERVATIONS: none'));
  assert.ok(prompt.includes(`TEAM MILESTONE: ${JORDAN}`),'other milestones by title and status only');
  for(const x of ['PRIVATE CONTRACT NOTE','renewal discount','solutions engineer','Fictional platform lead'])assert.ok(!prompt.includes(x),'AiKA context leaks '+x);
  assert.deepEqual(modelCalls,[],'the browser never talks to the model');
@@ -349,7 +349,7 @@ try{
  text=await other.locator('body').innerText();assert.ok(!text.includes('checkout-api')&&!text.includes('Alex Rivera'));
  const before=aikaPrompts.length;
  await other.goto(url+'/aika');await other.getByLabel('Question for AiKA').fill('What should I do first?');await other.getByRole('button',{name:'Ask AiKA',exact:true}).click();
- await other.getByRole('alert').filter({hasText:'AiKA isn’t connected to a model'}).waitFor();assert.equal(aikaPrompts.length,before,'Lumen never reaches Northstar’s model');
+ await other.getByRole('alert').filter({hasText:'AiKA isn’t connected to a model'}).waitFor();assert.equal(aikaPrompts.length,before,'Lumen never reaches Aperture’s model');
 
  // --- Maya: the approved plan in Team overview, same as Dream Day; Jordan: only his approved work.
  await maya.getByRole('tab',{name:'Team overview'}).click();
@@ -358,7 +358,7 @@ try{
  assert.ok((await maya.locator('[aria-label^="Coordination: Independently validate"]').innerText()).includes('Jordan Lee'));
  assert.ok(!(await maya.locator('body').innerText()).includes('renewal'));
  await maya.reload();await mayaAlex.waitFor();assert.equal(new URL(maya.url()).pathname,'/champion/team','reload keeps the persona and page');
- assert.equal(await maya.evaluate(async c=>(await fetch(`/operator-api/northstar/activation/v1/customers/${c}/handoff`)).status,north.customerId),403,'the Champion has no operator access');
+ assert.equal(await maya.evaluate(async c=>(await fetch(`/operator-api/aperture/activation/v1/customers/${c}/handoff`)).status,north.customerId),403,'the Champion has no operator access');
  const jordan=await (await browser.newContext({viewport:{width:1440,height:1000}})).newPage();watch(jordan);
  await signInAs(jordan,'Jordan Lee');await jordan.getByLabel('Your assigned work').waitFor();
  const jordanWork=await jordan.getByLabel('Your assigned work').innerText();
@@ -371,7 +371,7 @@ try{
  const jcard=jordan.locator(`[aria-label^="Milestone: ${JORDAN}"]`);await jcard.waitFor();
  const jteam=await jordan.getByLabel('Team milestones').innerText();
  assert.ok(jteam.includes(ALEX)&&jteam.includes('Ready for review'),jteam);
- assert.ok(!(await jordan.locator('body').innerText()).includes('No read access to northstar/platform'),'Alex’s notes stay in his workspace');
+ assert.ok(!(await jordan.locator('body').innerText()).includes('No read access to aperture/platform'),'Alex’s notes stay in his workspace');
  assert.ok((await jcard.innerText()).includes('can only be completed after Alex Rivera’s work'));
  const jactions=await jcard.locator('[aria-label^="Status of action"]').count();
  for(let i=1;i<=jactions;i++){await jcard.getByLabel(`Status of action ${i}`).selectOption('completed');await jordan.waitForFunction(([a,n])=>{const s=document.querySelector(`[aria-label^="${a}"] [aria-label="Status of action ${n}"]`);return s&&!s.disabled&&s.value==='completed';},[`Milestone: ${JORDAN}`,i]);}
@@ -424,7 +424,7 @@ try{
  const seen=await observed.innerText();
  assert.ok(seen.includes('Reviewed by Maya Chen')&&seen.includes('The request is linked in my blocker note.')&&seen.includes('Cover the TechDocs site'),seen);
  assert.equal(await observed.getByRole('button',{name:/Mark reviewed|Respond|Add note|Request follow-up/}).count(),0,'Chris cannot coordinate');
- const chrisView=await op.evaluate(async c=>(await fetch(`/operator-api/northstar/activation/v1/customers/${c}/milestone-work`)).json(),north.customerId);
+ const chrisView=await op.evaluate(async c=>(await fetch(`/operator-api/aperture/activation/v1/customers/${c}/milestone-work`)).json(),north.customerId);
  const mayaView=await maya.evaluate(async c=>(await fetch(`/portal-api/activation/v1/customers/${c}/milestone-work`)).json(),north.customerId);
  assert.deepEqual(chrisView.summary,mayaView.summary,'one source of truth for the numbers');
  assert.ok(!JSON.stringify(mayaView).includes('renewal')&&!JSON.stringify(mayaView).includes('PRIVATE CONTRACT'),'no commercial notes in coordination');

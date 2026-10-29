@@ -8,15 +8,15 @@ import {confidentialHits,parseSources} from '../src/activation/handoff/service.t
 import {hostedInterpreter} from '../src/activation/handoff/hosted.ts';
 import type {SourceInput} from '../../../contracts/activation/v1/handoff.ts';
 
-const fixture=JSON.parse(readFileSync(new URL('./fixtures/northstar-sources.json',import.meta.url),'utf8'));
-const northstar=():SourceInput[]=>parseSources(fixture);
+const fixture=JSON.parse(readFileSync(new URL('./fixtures/aperture-sources.json',import.meta.url),'utf8'));
+const aperture=():SourceInput[]=>parseSources(fixture);
 /** Strings from Chris's research that must never reach a developer. */
 export const PRIVATE=['480K','2,400','Jamie','Stage 3','Procurement','Budget','sceptical','pricing','Maya','45-day','walking other teams','Head of Platform','Close date'];
 
 test('combines CRM, conversation, notes and repository sources into one structured understanding',()=>{
- const u=interpretRuleBased(northstar());
+ const u=interpretRuleBased(aperture());
  assert.deepEqual(u.entities.services,['payments-api']);
- assert.deepEqual(u.entities.repositories,['northstar/payments-api']);
+ assert.deepEqual(u.entities.repositories,['aperture/payments-api']);
  assert.equal(u.entities.scm,'GitHub');assert.equal(u.entities.ci,'GitHub Actions');assert.equal(u.entities.docs,'Confluence');
  assert.equal(u.findings.find(f=>f.statement==='CI/CD runs on Jenkins.')?.status,'outdated','Jenkins is a past setup, not a contradiction');
  assert.equal(u.contradictions.filter(c=>c.topic==='CI/CD').length,0);
@@ -36,12 +36,12 @@ test('combines CRM, conversation, notes and repository sources into one structur
 });
 
 test('proposes a specific technical milestone instead of a vague POC summary',()=>{
- const {milestones,missing}=proposeMilestones(interpretRuleBased(northstar()));
+ const {milestones,missing}=proposeMilestones(interpretRuleBased(aperture()));
  const m=milestones[0];
  assert.equal(m.objective,'Review payments-api repository readiness and prepare it for Catalog registration');
- assert.equal(m.system.repository,'northstar/payments-api');assert.equal(m.system.platform,'GitHub');
+ assert.equal(m.system.repository,'aperture/payments-api');assert.equal(m.system.platform,'GitHub');
  assert.ok(validMilestone(m));
- assert.ok(m.actions[0].includes('northstar/payments-api')&&m.actions[0].includes('catalog-info.yaml'));
+ assert.ok(m.actions[0].includes('aperture/payments-api')&&m.actions[0].includes('catalog-info.yaml'));
  assert.ok(m.completionCriteria.some(c=>/names an owner, a type and a lifecycle/.test(c)));
  assert.ok(!/POC|bounded|proof of concept/i.test(JSON.stringify(m)));
  assert.deepEqual(missing,[],'nothing that only Chris can answer blocks this milestone');
@@ -57,7 +57,7 @@ test('asks Chris for missing information instead of inventing a milestone, then 
 });
 
 test('developer handoff and projected state contain no private research',()=>{
- const u=interpretRuleBased(northstar()),m=proposeMilestones(u).milestones;
+ const u=interpretRuleBased(aperture()),m=proposeMilestones(u).milestones;
  const h=developerHandoff(1,new Date().toISOString(),u,m),raw=JSON.stringify(h);
  for(const p of PRIVATE)assert.ok(!raw.includes(p),`developer handoff must not contain: ${p}`);
  assert.ok(h.context.every(n=>n.text.split(/(?<=\.)\s/).length<=3),'two or three sentences per topic');
@@ -82,8 +82,8 @@ test('legacy states are projected on the server: briefing, agreement and evidenc
 test('hosted interpretation is validated; invented quotes fall back to the rule-based result',async()=>{
  const reply=(content:unknown)=>async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(content)}}]}));
  const env={PORTAL_LLM_ENDPOINT:'http://127.0.0.1:9/v1',PORTAL_LLM_MODEL:'test'};
- const sources=northstar();
- const good={findings:[{category:'business_need',topic:'Need',statement:'Platform team repeats the same setup guidance',status:'reported',sourceId:'s2',quote:'walking other teams through the same service setup'}],goals:[{need:'Repeatable setup',technicalGoal:'Service readiness',playbook:'service_readiness',quotes:[{sourceId:'s2',quote:'same service setup'}]}],services:['payments-api'],repositories:['northstar/payments-api']};
+ const sources=aperture();
+ const good={findings:[{category:'business_need',topic:'Need',statement:'Platform team repeats the same setup guidance',status:'reported',sourceId:'s2',quote:'walking other teams through the same service setup'}],goals:[{need:'Repeatable setup',technicalGoal:'Service readiness',playbook:'service_readiness',quotes:[{sourceId:'s2',quote:'same service setup'}]}],services:['payments-api'],repositories:['aperture/payments-api']};
  const u=await hostedInterpreter(env,reply(good) as typeof fetch).interpret(sources);
  assert.equal(u.interpreter,'hosted_model');assert.equal(u.findings.find(f=>f.id==='m1')?.audience,'champion');
  const invented={...good,findings:[{...good.findings[0],quote:'we have 40 repos without owners'}]};
@@ -96,13 +96,13 @@ test('HTTP: Chris drafts and submits, the Champion approves (Dream Day); develop
  const {openActivationStore}=await import('../src/activation/store.ts');const {createIntake}=await import('../src/activation/intake.ts');
  const {createBlockerReports}=await import('../src/activation/reports.ts');
  const {openHandoffStore}=await import('../src/activation/handoff/store.ts');const {createHandoffService}=await import('../src/activation/handoff/service.ts');
- const p={tenantId:'t',customerId:'northstar',sessionId:'s'};
+ const p={tenantId:'t',customerId:'aperture',sessionId:'s'};
  const intake=createIntake({admit:()=>false});let store:ReturnType<typeof openActivationStore>;
  const reports=createBlockerReports(intake.policy,()=>store);store=openActivationStore(':memory:',reports.policy);
  const handoffs=openHandoffStore(':memory:'),goals=openGoalStore(':memory:');
  const handoff=createHandoffService({handoffs,store:()=>store,stage:intake.stage,release:intake.release});
  const server=createApp(goals,undefined,{store,handoff,championApproval:true,reportProgress:reports.progress,reportBlocker:reports.submit,authorize:(r,c)=>['Bearer dev','Bearer op','Bearer champ'].includes(r.headers.authorization??'')&&c===p.customerId?p:null,isOperator:r=>r.headers.authorization==='Bearer op',isChampion:r=>r.headers.authorization==='Bearer champ'});
- await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const root=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/activation/v1/customers/northstar/`;
+ await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const root=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/activation/v1/customers/aperture/`;
  const call=(path:string,token:string,body?:unknown)=>fetch(root+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Portal-Actor':token==='champ'?'Riley Champion':token==='op'?'Chris':'Alex Rivera'},body:body===undefined?undefined:JSON.stringify(body)});
  const clean=async(r:Response,where:string)=>{const raw=await r.text();for(const x of [...PRIVATE,'Discovery call','CRM account record'])assert.ok(!raw.includes(x),`${where} leaked: ${x}`);return JSON.parse(raw);};
  try{
@@ -131,11 +131,11 @@ test('HTTP: Chris drafts and submits, the Champion approves (Dream Day); develop
   const opState=await (await call('state','op')).json();assert.equal(opState.context.agreedGoal.agreedBy,'Riley Champion (Champion), Dream Day approval');
   const dev=await clean(await call('state','dev'),'GET state');
   assert.equal(dev.plan.selectedMilestone.outcome,m.objective);
-  assert.equal(dev.handoff.milestones[0].system.repository,'northstar/payments-api');assert.equal(dev.handoff.milestones[0].proposedAssignee,'Alex Rivera');
+  assert.equal(dev.handoff.milestones[0].system.repository,'aperture/payments-api');assert.equal(dev.handoff.milestones[0].proposedAssignee,'Alex Rivera');
   assert.deepEqual(dev.handoff.approval.by,'Riley Champion');
   const progress=await call('progress-reports','dev',{id:'progress:1',expectedRevision:dev.revision,planRevision:0,message:'Checked the repository root.',needsChris:false});
   const afterProgress=await clean(progress,'progress report');
-  await clean(await call('blocker-reports','dev',{id:'developer:b1',expectedRevision:afterProgress.revision,planRevision:0,message:'No read access to northstar/payments-api.'}),'blocker report');
+  await clean(await call('blocker-reports','dev',{id:'developer:b1',expectedRevision:afterProgress.revision,planRevision:0,message:'No read access to aperture/payments-api.'}),'blocker report');
   const overview=await (await call('handoff','op')).json();assert.equal(overview.drafts[0].status,'published');assert.equal(overview.drafts[0].approvals.champion.by,'Riley Champion');
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();}
 });

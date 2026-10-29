@@ -162,7 +162,7 @@ const grounded=(claim:string,lines:Line[])=>{const c=words(claim);return lines.s
 
 /** People the model skipped: named persons with a stated role or assigned work. Never invents names. */
 const NAME='[A-Z][a-z]+(?: [A-Z][a-z\'-]+){1,2}';
-const NOT_PEOPLE=/^(?:The|Our|This|That|Every|Each|Spotify|Portal|Backstage|GitHub|GitLab|Jenkins|Terraform|Confluence|Northstar|Account|Opportunity|Champion|Engineering|Platform)\b/;
+const NOT_PEOPLE=/^(?:The|Our|This|That|Every|Each|Spotify|Portal|Backstage|GitHub|GitLab|Jenkins|Terraform|Confluence|Aperture|Account|Opportunity|Champion|Engineering|Platform)\b/;
 export function peopleFromLines(lines:Line[]):{name:string;role:string|null;work:string|null;line:Line}[]{
  const found:{name:string;role:string|null;work:string|null;line:Line}[]=[];
  const add=(name:string,role:string|null,work:string|null,line:Line)=>{if(NOT_PEOPLE.test(name))return;const e=found.find(x=>x.name===name);if(e){e.role??=role;e.work??=work;}else found.push({name,role,work,line});};

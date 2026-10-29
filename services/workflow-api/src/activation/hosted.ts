@@ -18,7 +18,7 @@ import type {ActivationOptions} from './routes.ts';
 
 export const DEMO_TENANT='portal-demo';
 /** The fictional scenario served by the hosted demo. */
-export const DEMO_CUSTOMER={id:'northstar',label:'Northstar Commerce (fictional)',customerId:'fictional-northstar-commerce'};
+export const DEMO_CUSTOMER={id:'aperture',label:'Aperture Commerce (fictional)',customerId:'fictional-aperture-commerce'};
 export const DEMO_PERSONAS=[
  {id:'chris',name:'Chris',role:'operator' as const,title:'Spotify account operator'},
  {id:'maya',name:'Maya Chen',role:'champion' as const,title:'Platform Champion'},
@@ -72,7 +72,7 @@ export function purgeRoomData(filename:string,code:string){
 export type HostedConfig={filename:string;rooms:Rooms;analysisModel:JsonModel|null;aikaModel:JsonModel|null;evidenceMaxAgeHours:number};
 export function createHostedActivation(c:HostedConfig){
  // The fictional payments-api uses labelled sample data; it does not exist on GitHub.
- const repositories:RepositoryConfig[]=[{customerId:DEMO_CUSTOMER.customerId,id:'payments-api',label:'payments-api',repository:'northstar-commerce/payments-api',mode:'fixture',fixture:'northstar-payments-api',services:['payments-api']}];
+ const repositories:RepositoryConfig[]=[{customerId:DEMO_CUSTOMER.customerId,id:'payments-api',label:'payments-api',repository:'aperture-commerce/payments-api',mode:'fixture',fixture:'aperture-payments-api',services:['payments-api']}];
  const services=createActivationServices({filename:c.filename,bundles:[],handoffMode:true,analysisModel:c.analysisModel,aikaModel:c.aikaModel,
   repositories,github:{},evidenceMaxAgeHours:c.evidenceMaxAgeHours,inspectionCooldownMs:30_000});
  // Internal credentials for this boot only, held by the session layer in this process.

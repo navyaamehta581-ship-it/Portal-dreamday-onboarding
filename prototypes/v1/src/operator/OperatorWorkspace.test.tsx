@@ -12,10 +12,10 @@ import {reviewFromAnalysis} from '../../../../services/workflow-api/src/activati
 
 vi.mock('../activation/client',async orig=>({...(await orig<typeof import('../activation/client')>()),activationClient:vi.fn()}));
 let api:ReturnType<typeof mockApi>,m:ReturnType<typeof mount>|null,changed:ReturnType<typeof vi.fn<()=>void>>;
-const chris:Persona={id:'chris',name:'Chris',role:'operator',title:'Spotify account operator',customers:[{id:'north',label:'Northstar',customerId:'fictional-north'},{id:'lumen',label:'Lumen',customerId:'fictional-lumen'}]};
+const chris:Persona={id:'chris',name:'Chris',role:'operator',title:'Spotify account operator',customers:[{id:'north',label:'Aperture',customerId:'fictional-north'},{id:'lumen',label:'Lumen',customerId:'fictional-lumen'}]};
 
 // A realistic draft: the analysis of real fixture text, with a second milestone so ordering and dependencies matter.
-const SOURCES:SourceInput[]=[{id:'s1',type:'conversation',label:'Discovery call',text:'We keep walking teams through the same setup. Start with checkout-api in repo northstar/checkout-api on GitHub. Nobody knows who owns it.'},
+const SOURCES:SourceInput[]=[{id:'s1',type:'conversation',label:'Discovery call',text:'We keep walking teams through the same setup. Start with checkout-api in repo aperture/checkout-api on GitHub. Nobody knows who owns it.'},
  {id:'s2',type:'chris_notes',label:'My notes',text:'PRIVATE pricing: 20% discount.'}];
 function record(patch:Partial<HandoffRecord>={}):HandoffRecord{
  const understanding=interpretRuleBased(SOURCES),proposal=proposeMilestones(understanding),review=reviewFromAnalysis({understanding,proposal});

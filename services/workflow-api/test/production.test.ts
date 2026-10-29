@@ -10,7 +10,7 @@ import {join} from 'node:path';
 import {configFromEnv,startProduction} from '../src/production.ts';
 
 const SECRET='s'.repeat(48),PASS='correct horse battery';
-const CUSTOMER='fictional-northstar-commerce';
+const CUSTOMER='fictional-aperture-commerce';
 const env=(dir:string,extra:Record<string,string>={})=>({NODE_ENV:'production',PORTAL_ALLOW_HTTP:'1',PORT:'0',PORTAL_DATA_DIR:dir,PORTAL_DEMO_PASSPHRASE:PASS,PORTAL_SESSION_SECRET:SECRET,
  PORTAL_LLM_PROVIDER:'gemini',GEMINI_MODEL:'gemini-2.5-flash',PORTAL_AI_DAILY_REQUEST_LIMIT:'300',PORTAL_DEMO_ROOM_LIMIT:'50',PORTAL_DEMO_ROOM_TTL_HOURS:'24',ACTIVATION_EVIDENCE_MAX_AGE_HOURS:'24',...extra});
 
@@ -32,7 +32,7 @@ function client(origin:string){
   enter:(room?:string)=>call('/demo-gate',{method:'POST',form:{passphrase:PASS,...(room?{room}:{})}}),
   signIn:(personaId:string)=>call('/portal-auth/login',{method:'POST',body:JSON.stringify({personaId})})};
 }
-const op=(path:string)=>`/operator-api/northstar/activation/v1/customers/${CUSTOMER}/${path}`;
+const op=(path:string)=>`/operator-api/aperture/activation/v1/customers/${CUSTOMER}/${path}`;
 const lines:string[]=[];
 async function boot(dir:string,extra:Record<string,string>={},opts:{now?:()=>number}={}){
  const app=await startProduction(configFromEnv(env(dir,extra)),{...opts,log:(level,event,fields={})=>{lines.push(JSON.stringify({level,event,...fields}));}});
@@ -114,7 +114,8 @@ test('rooms expire and are purged; capacity is capped; rate limits per IP and pe
   await a.call(op('handoff-workspace'),{method:'POST',body:JSON.stringify({expectedRevision:0,sources:[{type:'conversation',label:'Call',text:'Fictional notes.'}]})});
   clock+=2*3600_000;
   assert.equal((await a.call(op('handoff'))).status,401,'an expired room is closed');
-  assert.equal((await a.call('/')).headers.get('location'),'/demo-gate');
+  assert.equal((await a.call('/')).headers.get('location'),'/demo-gate?ended=1','the visitor is told their room ended');
+  assert.match((await a.call('/demo-gate?ended=1')).text,/Your previous demo room is no longer available/);
   assert.equal((await c.enter()).status,303,'expired rooms free capacity');
   await app.close();
   const restarted=await boot(dir,{PORTAL_DEMO_ROOM_LIMIT:'2',PORTAL_DEMO_ROOM_TTL_HOURS:'1'},{now:()=>clock});
@@ -170,10 +171,47 @@ test('render.yaml and the server agree: every variable the Blueprint sets is rea
  const {readFileSync}=await import('node:fs');
  const yaml=readFileSync(join(import.meta.dirname,'../../../render.yaml'),'utf8'),server=readFileSync(join(import.meta.dirname,'../src/production.ts'),'utf8');
  const keys=[...yaml.matchAll(/- key: ([A-Z0-9_]+)/g)].map(m=>m[1]);
- assert.deepEqual(keys,['NODE_ENV','PORTAL_DATA_DIR','PORTAL_LLM_PROVIDER','GEMINI_MODEL','GEMINI_API_KEY','PORTAL_AI_DAILY_REQUEST_LIMIT','PORTAL_DEMO_PASSPHRASE','PORTAL_SESSION_SECRET','PORTAL_DEMO_ROOM_LIMIT','PORTAL_DEMO_ROOM_TTL_HOURS','ACTIVATION_EVIDENCE_MAX_AGE_HOURS']);
+ assert.deepEqual(keys,['NODE_ENV','PORTAL_STORAGE','PORTAL_DATA_DIR','PORTAL_LLM_PROVIDER','GEMINI_MODEL','GEMINI_API_KEY','PORTAL_AI_REQUESTS_PER_MINUTE','PORTAL_AI_DAILY_REQUEST_LIMIT','PORTAL_DEMO_PASSPHRASE','PORTAL_SESSION_SECRET','PORTAL_DEMO_ROOM_LIMIT','PORTAL_DEMO_ROOM_TTL_HOURS','ACTIVATION_EVIDENCE_MAX_AGE_HOURS']);
  for(const k of keys)assert.ok(server.includes(k),`production.ts reads ${k}`);
  for(const secret of ['GEMINI_API_KEY','PORTAL_DEMO_PASSPHRASE'])assert.match(yaml,new RegExp(`- key: ${secret}\\n\\s+sync: false`),`${secret} is entered in the dashboard`);
  assert.match(yaml,/- key: PORTAL_SESSION_SECRET\n\s+generateValue: true/);
- assert.match(yaml,/autoDeploy: false/);assert.match(yaml,/dockerfilePath: \.\/Dockerfile/);assert.match(yaml,/healthCheckPath: \/healthz/);assert.match(yaml,/mountPath: \/var\/data/);
+ assert.match(yaml,/autoDeploy: false/);assert.match(yaml,/dockerfilePath: \.\/Dockerfile/);assert.match(yaml,/healthCheckPath: \/healthz/);
  assert.ok(existsSync(join(import.meta.dirname,'../../../Dockerfile')));
+});
+
+test('free tier: the Blueprint uses the free plan with no disk and temporary storage; the image needs no /var/data and no root',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const yaml=readFileSync(join(import.meta.dirname,'../../../render.yaml'),'utf8'),docker=readFileSync(join(import.meta.dirname,'../../../Dockerfile'),'utf8');
+ const live=(t:string)=>t.split('\n').filter(l=>!l.trim().startsWith('#')).join('\n');
+ assert.match(live(yaml),/^\s+plan: free$/m);assert.doesNotMatch(live(yaml),/disk:|mountPath|plan: starter|numInstances/);
+ assert.match(yaml,/- key: PORTAL_STORAGE\n\s+value: ephemeral/);assert.match(yaml,/- key: PORTAL_DATA_DIR\n\s+value: \/tmp\/spotify-portal-demo/);
+ assert.doesNotMatch(live(docker),/\/var\/data|ENTRYPOINT|setpriv|chown/);assert.match(live(docker),/^USER node$/m);assert.match(live(docker),/PORTAL_STORAGE=ephemeral/);
+ // Defaults: ephemeral storage under the OS temp directory, conservative AI pacing; persistent is opt-in.
+ const {tmpdir}=await import('node:os');
+ const c=configFromEnv({PORTAL_DEMO_PASSPHRASE:PASS,PORTAL_SESSION_SECRET:SECRET});
+ assert.equal(c.storage,'ephemeral');assert.equal(c.dataDir,join(tmpdir(),'spotify-portal-demo'));assert.equal(c.aiPerMinute,8);assert.equal(c.aiDailyLimit,200);
+ assert.equal(configFromEnv({PORTAL_STORAGE:'persistent',PORTAL_DATA_DIR:'/srv/data'}).storage,'persistent');
+ assert.throws(()=>configFromEnv({PORTAL_STORAGE:'disk'}));
+});
+
+test('free tier: visitors are told data is temporary; a restart that clears storage ends rooms honestly',async()=>{
+ const first=mkdtempSync(join(tmpdir(),'prod-')),second=mkdtempSync(join(tmpdir(),'prod-'));
+ try{
+  let app=await boot(first);
+  const a=client(app.origin);
+  const gate=await a.call('/demo-gate');
+  assert.match(gate.text,/Temporary demo data/);assert.match(gate.text,/lost when it restarts, redeploys or sleeps/);assert.match(gate.text,/Gemini’s free tier/);
+  const h=(await a.call('/healthz')).json;assert.equal(h.checks.storageMode,'ephemeral');assert.equal(h.checks.aiRequestsPerMinute,8);
+  await a.enter();
+  assert.deepEqual((({storage,aiProvider})=>({storage,aiProvider}))((await a.call('/demo-gate/room')).json),{storage:'ephemeral',aiProvider:'gemini'});
+  // The free service restarts with an empty /tmp: same secret, no data.
+  await app.close();app=await boot(second);
+  const b=client(app.origin);for(const [k,v] of a.jar)b.jar.set(k,v);
+  const r=await b.call('/operator');
+  assert.equal(r.headers.get('location'),'/demo-gate?ended=1');
+  assert.match((await b.call('/demo-gate?ended=1')).text,/Your previous demo room is no longer available/);
+  assert.equal((await b.call('/portal-auth/session')).json.error.code,'DEMO_GATE_REQUIRED');
+  assert.equal((await b.enter()).status,303,'a fresh room starts');
+  await app.close();
+ }finally{rmSync(first,{recursive:true,force:true});rmSync(second,{recursive:true,force:true});}
 });

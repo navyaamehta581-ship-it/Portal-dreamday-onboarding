@@ -1,5 +1,5 @@
 /** Phase 7: read-only repository evidence for approved work. Live mode is exercised against a mocked GitHub API
- * (no network); fixture mode against the labelled Northstar sample. Over HTTP with the real stores. */
+ * (no network); fixture mode against the labelled Aperture sample. Over HTTP with the real stores. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
@@ -10,10 +10,10 @@ import type {RepositoryConfig} from '../src/activation/repository.ts';
 import {approvedPlan,harness,ollamaStub,update,work,type Call} from './support/work-harness.ts';
 import {githubMock} from './support/github-mock.ts';
 
-const LIVE:RepositoryConfig={customerId:'northstar',id:'payments-api',label:'payments-api',repository:'example-org/payments-api',mode:'live',services:['payments-api']};
-const FIXTURE:RepositoryConfig={customerId:'northstar',id:'payments-api',label:'payments-api (sample)',repository:'northstar-commerce/payments-api',mode:'fixture',fixture:'northstar-payments-api',services:['payments-api']};
-const inspect=(call:Call,token:string,body:object={repositoryId:'payments-api'},actor?:string)=>call('northstar','repository-inspections',token,body,actor);
-const evidence=async(call:Call,token:string)=>(await call('northstar','repository-evidence',token)).json as RepositoryEvidence;
+const LIVE:RepositoryConfig={customerId:'aperture',id:'payments-api',label:'payments-api',repository:'example-org/payments-api',mode:'live',services:['payments-api']};
+const FIXTURE:RepositoryConfig={customerId:'aperture',id:'payments-api',label:'payments-api (sample)',repository:'aperture-commerce/payments-api',mode:'fixture',fixture:'aperture-payments-api',services:['payments-api']};
+const inspect=(call:Call,token:string,body:object={repositoryId:'payments-api'},actor?:string)=>call('aperture','repository-inspections',token,body,actor);
+const evidence=async(call:Call,token:string)=>(await call('aperture','repository-evidence',token)).json as RepositoryEvidence;
 const sig=(i:RepositoryInspection,s:string)=>i.observations.find(o=>o.signal===s)! as RepositoryObservation;
 
 test('live read-only inspection: what was observed, where, at which commit and when; GET requests to the configured repository only',async()=>{
@@ -83,7 +83,7 @@ test('fixture mode: the same checks on labelled sample data, never presented as 
   const i=(await inspect(h.call,'alex')).json.inspection as RepositoryInspection;
   assert.equal(i.mode,'fixture');assert.equal(i.status,'succeeded');
   assert.ok(i.observations.every(o=>o.mode==='fixture'&&o.source.kind==='fixture'&&o.source.url===null),'no GitHub links for sample data');
-  assert.ok(i.observations.filter(o=>o.source.request!=='none').every(o=>o.source.request.startsWith('Sample fixture fixtures/repositories/northstar-payments-api.json')));
+  assert.ok(i.observations.filter(o=>o.source.request!=='none').every(o=>o.source.request.startsWith('Sample fixture fixtures/repositories/aperture-payments-api.json')));
   assert.equal(sig(i,'codeowners').status,'missing');assert.equal(sig(i,'runbooks').status,'missing');
   assert.match(sig(i,'ci_config').summary,/2 GitHub Actions workflow files; other CI configuration: Jenkinsfile/);
   assert.ok(sig(i,'catalog_info').details.includes('owner: team-checkout'));
@@ -130,8 +130,8 @@ test('authorization: approved plan, configured repository, relevant milestone, i
   assert.equal((await inspect(h.call,'alex',{repositoryId:'docs-site'})).json.error.code,'NOT_FOUND','not relevant to any approved milestone');
   assert.equal((await inspect(h.call,'alex',{repositoryId:'recs-service'})).json.error.code,'NOT_FOUND','another customer’s repository');
   assert.equal((await inspect(h.call,'alex',{repository:'example-org/payments-api'})).json.error.code,'INVALID_REQUEST','only configured ids, never names or URLs');
-  assert.equal((await h.call('northstar','repository-evidence','lumen-alex')).status,403);
-  assert.equal((await h.call('northstar','repository-inspections','lumen-champ',{repositoryId:'payments-api'})).status,403);
+  assert.equal((await h.call('aperture','repository-evidence','lumen-alex')).status,403);
+  assert.equal((await h.call('aperture','repository-inspections','lumen-champ',{repositoryId:'payments-api'})).status,403);
   assert.deepEqual((await evidence(h.call,'alex')).repositories.map(r=>r.id),['payments-api']);
   assert.equal(gh.calls.length,0,'nothing reached GitHub');
   assert.equal((await inspect(h.call,'champ',{repositoryId:'payments-api'},'Maya Chen')).status,201,'Maya may inspect');
@@ -172,7 +172,7 @@ test('AiKA: verified repository claims must cite recorded observations; uncited 
   // Before any inspection a "verified" claim has nothing to cite.
   let h=await harness({repositories:[LIVE],github:gh.fetchImpl,modelUrl:stub.url});
   await approvedPlan(h.call);
-  const ask=async()=>{await h.call('northstar','aika-questions','alex',{question:'Who owns payments-api?',milestoneId:'m-alex'});for(let i=0;i<100;i++){const j=(await h.call('northstar','aika-questions','alex')).json.job;if(j.status!=='running')return j;await new Promise(r=>setTimeout(r,10));}};
+  const ask=async()=>{await h.call('aperture','aika-questions','alex',{question:'Who owns payments-api?',milestoneId:'m-alex'});for(let i=0;i<100;i++){const j=(await h.call('aperture','aika-questions','alex')).json.job;if(j.status!=='running')return j;await new Promise(r=>setTimeout(r,10));}};
   reply=()=>({sections:[{kind:'verified',text:'CODEOWNERS names @example-org/payments-team.',citations:['obs-0000000000']},{kind:'unknown',text:'Nobody has looked at the repository yet.',citations:[]}],next_step:null});
   let j=await ask();
   assert.deepEqual(j.answer.sections.map((s:any)=>s.kind),['unknown']);assert.equal(j.answer.removed,1);
@@ -192,7 +192,7 @@ test('AiKA: verified repository claims must cite recorded observations; uncited 
   // Fixture evidence: a "verified" claim citing it becomes "sample".
   h=await harness({repositories:[FIXTURE],modelUrl:stub.url});
   await approvedPlan(h.call);await inspect(h.call,'alex');
-  reply=prompt=>{const id=/\[(obs-[a-f0-9]{10})\] SAMPLE \(fixture data for a fictional repository, not a live observation\) northstar-commerce\/payments-api@5f1c0de2a9b4 catalog_info/.exec(prompt)![1];
+  reply=prompt=>{const id=/\[(obs-[a-f0-9]{10})\] SAMPLE \(fixture data for a fictional repository, not a live observation\) aperture-commerce\/payments-api@5f1c0de2a9b4 catalog_info/.exec(prompt)![1];
    return {sections:[{kind:'verified',text:'catalog-info.yaml names team-checkout as owner.',citations:[id]}],next_step:null};};
   j=await ask();
   assert.deepEqual(j.answer.sections.map((s:any)=>s.kind),['sample']);

@@ -17,8 +17,8 @@ AI output is never a repository fact. AiKA's "Verified" parts must cite a record
 The operator configures repositories per customer in a JSON file named by `ACTIVATION_REPOSITORIES_PATH`:
 
 ```json
-[{"customerId":"fictional-northstar-commerce","id":"payments-api","label":"payments-api",
-  "repository":"northstar-commerce/payments-api","mode":"fixture","fixture":"northstar-payments-api","services":["payments-api"]}]
+[{"customerId":"fictional-aperture-commerce","id":"payments-api","label":"payments-api",
+  "repository":"aperture-commerce/payments-api","mode":"fixture","fixture":"aperture-payments-api","services":["payments-api"]}]
 ```
 
 - **`services`** links a repository to approved milestones: a milestone is relevant when its system (service or repository) matches.
@@ -32,7 +32,7 @@ There are two modes:
   - Every observation is marked `fixture`, its source says "Sample fixture …", and there are no GitHub links.
   - The panel reads "Sample data · fictional repository, not live".
   - AiKA labels claims citing it "Sample data", never "Verified".
-  - The fictional Northstar `payments-api` **does not exist on GitHub**. The demo launcher uses the built-in `northstar-payments-api` sample by default.
+  - The fictional Aperture `payments-api` **does not exist on GitHub**. The demo launcher uses the built-in `aperture-payments-api` sample by default.
 
 ## What is inspected (live and fixture alike)
 
@@ -131,7 +131,7 @@ The AiKA page shows each cited observation: its signal, whether it is live or sa
 ## What remains simulated or unavailable
 
 - **No real GitHub call has been tested.** Live mode was exercised only against mocked GitHub responses: a stand-in `fetch` in the backend tests and a loopback test double in the browser e2e. No call to the real `api.github.com` was made in this environment; its outbound network is restricted.
-- **Northstar's repository is fictional.** Its `payments-api` evidence is sample data only.
+- **Aperture's repository is fictional.** Its `payments-api` evidence is sample data only.
 - **CI results aren't read.** Run results, required checks, branch protection and deployments are never inspected.
 - **Monorepos are read whole.** Signals are repository-wide; a service subdirectory isn't isolated.
 - **Older views keep their own evidence.** The Phase 2 Repository tab (inspection packets for the recommendation-service flow) is unchanged. Its observations still appear to Maya and Chris as "Other observations recorded by the Portal", and to AiKA as packet observations.

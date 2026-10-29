@@ -6,7 +6,7 @@ import type {Persona} from './session';
 import type {ChampionReview,MilestoneDraft,ReviewMilestone} from '../../../../contracts/activation/v1/handoff';
 
 // A fake session layer + workflow API: the persona lives in a "cookie" (server state), never in the page.
-const north={id:'north',label:'Northstar (fictional)',customerId:'orbit'};
+const north={id:'north',label:'Aperture (fictional)',customerId:'orbit'};
 const PERSONAS:Persona[]=[
  {id:'chris',name:'Chris',role:'operator',title:'Spotify account operator',customers:[north]},
  {id:'maya',name:'Maya Chen',role:'champion',title:'Platform Champion',customers:[north]},
@@ -59,12 +59,12 @@ function workView(me:Persona){
 }
 // Phase 7 in the fake API: one configured sample repository, relevant to both milestones; developers see their own.
 const fakeObservation=(signal:string,status:string,summary:string,limitation:string|null=null)=>({id:`obs-${signal}`,signal,status,mode:'fixture',summary,details:[],limitation,
- source:{kind:'fixture',request:'Sample fixture fixtures/repositories/test.json',path:null,url:null},repository:'northstar-commerce/payments-api',commit:'5f1c0de2a9b4e7c3d8f6a1b2c3d4e5f60718293a',retrievedAt:'2026-10-29T12:30:00Z'});
+ source:{kind:'fixture',request:'Sample fixture fixtures/repositories/test.json',path:null,url:null},repository:'aperture-commerce/payments-api',commit:'5f1c0de2a9b4e7c3d8f6a1b2c3d4e5f60718293a',retrievedAt:'2026-10-29T12:30:00Z'});
 function repoView(me:Persona){
  const all=[{id:'m-1',title:'Assess payments-api repository readiness',assignee:'Alex Rivera',focus:['readme','codeowners','ci_config'],actionLinks:[{index:0,signals:['codeowners','ci_config']}]},
   {id:'m-2',title:'Validate payments-api and docs discoverability',assignee:'Jordan Lee',focus:['catalog_info','docs'],actionLinks:[]}];
  const milestones=me.role==='developer'?all.filter(x=>x.assignee===me.name):all;
- return {repositories:server.repos?[{id:'payments-api',label:'payments-api',repository:'northstar-commerce/payments-api',mode:'fixture',canInspect:me.role!=='operator',milestones,latest:server.inspection??null,evidence:server.inspection??null,stale:false,maxAgeHours:24}]:[]};
+ return {repositories:server.repos?[{id:'payments-api',label:'payments-api',repository:'aperture-commerce/payments-api',mode:'fixture',canInspect:me.role!=='operator',milestones,latest:server.inspection??null,evidence:server.inspection??null,stale:false,maxAgeHours:24}]:[]};
 }
 let m:ReturnType<typeof mount>,server:{persona:string|null;review?:ChampionReview;work:Record<string,FakeWork>;repos?:boolean;inspection?:any},calls:{method:string;url:string;persona:string|null;body?:any}[];
 function backend(signedIn:string|null=null,review:ChampionReview|undefined=undefined){
@@ -100,7 +100,7 @@ function backend(signedIn:string|null=null,review:ChampionReview|undefined=undef
    if(server.review?.status!=='published')return json({error:{code:'NO_APPROVED_PLAN'}},404);
    if(url.endsWith('/repository-inspections')){
     if(me.role==='operator')return json({error:{code:'FORBIDDEN'}},403);
-    server.inspection={id:'i1',repositoryId:'payments-api',repository:'northstar-commerce/payments-api',mode:'fixture',status:'succeeded',errorCode:null,retryAfter:null,defaultBranch:'main',commit:'5f1c0de2a9b4e7c3d8f6a1b2c3d4e5f60718293a',startedAt:'2026-10-29T12:30:00Z',completedAt:'2026-10-29T12:30:01Z',requestedBy:me.name,
+    server.inspection={id:'i1',repositoryId:'payments-api',repository:'aperture-commerce/payments-api',mode:'fixture',status:'succeeded',errorCode:null,retryAfter:null,defaultBranch:'main',commit:'5f1c0de2a9b4e7c3d8f6a1b2c3d4e5f60718293a',startedAt:'2026-10-29T12:30:00Z',completedAt:'2026-10-29T12:30:01Z',requestedBy:me.name,
      observations:[fakeObservation('readme','observed','README found at README.md.'),fakeObservation('codeowners','missing','No CODEOWNERS file in .github/, docs/ or the root found.','A missing CODEOWNERS file is not proof that nobody owns the service.'),
       fakeObservation('ci_config','observed','2 GitHub Actions workflow files.','A workflow file is not proof that CI runs or passes.'),fakeObservation('catalog_info','observed','Backstage metadata at catalog-info.yaml: owner: team-checkout.'),
       fakeObservation('docs','observed','2 documentation files under docs/.'),fakeObservation('ci_runs','not_inspected','CI run results were not inspected.')]};

@@ -69,11 +69,11 @@ const developersPath=join(directory,'developers.json');
 writeFileSync(developersPath,JSON.stringify(developers),{mode:0o600});privatePath(developersPath);
 process.env.ACTIVATION_DEVELOPERS_PATH=developersPath;
 // Phase 7: repository evidence. ACTIVATION_REPOSITORIES_PATH may name an operator-owned configuration (live read-only
-// GitHub or fixture). Without one, the fictional Northstar scenario uses the labelled sample for payments-api: fixture
+// GitHub or fixture). Without one, the fictional Aperture scenario uses the labelled sample for payments-api: fixture
 // mode, never presented as a live GitHub observation (the repository doesn't exist).
 if(!process.env.ACTIVATION_REPOSITORIES_PATH){
  const path=join(directory,'repositories.json');
- writeFileSync(path,JSON.stringify([{customerId,id:'payments-api',label:'payments-api',repository:'northstar-commerce/payments-api',mode:'fixture',fixture:'northstar-payments-api',services:['payments-api']}],null,1),{mode:0o600});
+ writeFileSync(path,JSON.stringify([{customerId,id:'payments-api',label:'payments-api',repository:'aperture-commerce/payments-api',mode:'fixture',fixture:'aperture-payments-api',services:['payments-api']}],null,1),{mode:0o600});
  privatePath(path);process.env.ACTIVATION_REPOSITORIES_PATH=path;
 }
 if(command==='operator-token'){process.stdout.write(process.env.ACTIVATION_OPERATOR_TOKEN+'\n');process.exit(0);}

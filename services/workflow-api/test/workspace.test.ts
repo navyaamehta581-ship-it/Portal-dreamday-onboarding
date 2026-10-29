@@ -15,7 +15,7 @@ import {openHandoffStore} from '../src/activation/handoff/store.ts';
 import {createHandoffService} from '../src/activation/handoff/service.ts';
 import {ActivationError} from '../src/activation/store.ts';
 
-const p={tenantId:'t',customerId:'northstar',sessionId:'s'},other={...p,customerId:'lumen'};
+const p={tenantId:'t',customerId:'aperture',sessionId:'s'},other={...p,customerId:'lumen'};
 const CALL='Maya Chen: Nobody can tell who owns a service and the runbooks are missing.\nMaya Chen: Let’s pilot with payments-api on GitHub. Alex Rivera can do the repository readiness assessment.';
 const NOTES='Opportunity: $300K ARR. Her VP thinks Backstage is a nice-to-have.';
 const sources=[{id:'a',type:'conversation',label:'Discovery call',text:CALL},{id:'b',type:'chris_notes',label:'My notes',text:NOTES},{id:'c',type:'integration_tools',label:'Tools',text:'Docs live in Confluence.'}];
@@ -151,30 +151,30 @@ test('HTTP: workspace routes are operator-only; submission shows nothing to deve
  const call=async(customer:string,path:string,token:string,body?:unknown)=>{const r=await fetch(base+customer+'/'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:token,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,json:await r.json()};};
  try{
   for(const [path,body] of [['handoff',undefined],['handoff-workspace',{expectedRevision:0,sources}],['handoff-analyses',undefined],['handoff-analyses',{workspaceRevision:1}],['handoff-reviews',{}],['handoff-submissions',{}]] as const)
-   assert.equal((await call('northstar',path,'Bearer dev',body)).status,403,`developer refused on ${path}`);
-  assert.equal((await call('northstar','handoff','Bearer lumen-op')).status,403,'another customer’s operator is refused');
-  assert.equal((await call('northstar','handoff-workspace','Bearer op',{expectedRevision:0,sources})).status,200);
-  const started=await call('northstar','handoff-analyses','Bearer op',{workspaceRevision:1});
+   assert.equal((await call('aperture',path,'Bearer dev',body)).status,403,`developer refused on ${path}`);
+  assert.equal((await call('aperture','handoff','Bearer lumen-op')).status,403,'another customer’s operator is refused');
+  assert.equal((await call('aperture','handoff-workspace','Bearer op',{expectedRevision:0,sources})).status,200);
+  const started=await call('aperture','handoff-analyses','Bearer op',{workspaceRevision:1});
   assert.ok([200,202].includes(started.status));
-  for(let i=0;i<50&&(await call('northstar','handoff-analyses','Bearer op')).json.job.status==='running';i++)await new Promise(r=>setTimeout(r,5));
-  const overview=(await call('northstar','handoff','Bearer op')).json;
+  for(let i=0;i<50&&(await call('aperture','handoff-analyses','Bearer op')).json.job.status==='running';i++)await new Promise(r=>setTimeout(r,5));
+  const overview=(await call('aperture','handoff','Bearer op')).json;
   assert.equal(overview.analysis.status,'succeeded');assert.equal(overview.workspace.revision,1);
   const review=overview.drafts[0].review as ReviewDraft;
   const leaky={...review,milestones:[{id:'m',title:'Assess payments-api readiness',description:'Her VP thinks Backstage is a nice-to-have',system:'payments-api',actions:['Inspect the repository'],completionCriteria:['Each item marked verified, missing or inaccessible'],assignee:null,role:'developer',dependsOn:[],origin:'chris'}]};
-  assert.equal((await call('northstar','handoff-reviews','Bearer op',{draft:1,expectedRevision:0,review:leaky})).status,200);
-  const refused=await call('northstar','handoff-submissions','Bearer op',{draft:1,reviewRevision:1,action:'submit',confirmed:true});
+  assert.equal((await call('aperture','handoff-reviews','Bearer op',{draft:1,expectedRevision:0,review:leaky})).status,200);
+  const refused=await call('aperture','handoff-submissions','Bearer op',{draft:1,reviewRevision:1,action:'submit',confirmed:true});
   assert.equal(refused.status,400);assert.equal(refused.json.error.code,'CONFIDENTIAL_CONTENT');
   assert.deepEqual(refused.json.error.details.issues.map((i:{label:string})=>i.label),['Milestone 1 · description']);assert.ok(!JSON.stringify(refused.json).includes('nice-to-have'));
-  await call('northstar','handoff-reviews','Bearer op',{draft:1,expectedRevision:1,review:{...leaky,milestones:[{...leaky.milestones[0],description:'Establish a readiness baseline'}]}});
-  assert.equal((await call('northstar','handoff-submissions','Bearer op',{draft:1,reviewRevision:2,action:'submit',confirmed:true})).json.status,'submitted');
+  await call('aperture','handoff-reviews','Bearer op',{draft:1,expectedRevision:1,review:{...leaky,milestones:[{...leaky.milestones[0],description:'Establish a readiness baseline'}]}});
+  assert.equal((await call('aperture','handoff-submissions','Bearer op',{draft:1,reviewRevision:2,action:'submit',confirmed:true})).json.status,'submitted');
   // Submission publishes nothing: developer and Champion credentials still see no onboarding at all.
-  const dev=await call('northstar','state','Bearer dev');
+  const dev=await call('aperture','state','Bearer dev');
   assert.equal(dev.status,404);assert.ok(!JSON.stringify(dev.json).match(/payments-api|readiness|Discovery/));
   // The pre-Dream Day direct publication is refused, before and after withdrawal.
-  assert.equal((await call('northstar','handoff-publications','Bearer op',{draft:1,milestones:toMilestoneDrafts(review,overview.drafts[0]),outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})).json.error.code,'CHAMPION_APPROVAL_REQUIRED');
+  assert.equal((await call('aperture','handoff-publications','Bearer op',{draft:1,milestones:toMilestoneDrafts(review,overview.drafts[0]),outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})).json.error.code,'CHAMPION_APPROVAL_REQUIRED');
   assert.equal((await call('lumen','handoff','Bearer lumen-op')).json.drafts.length,0,'Lumen’s operator sees only Lumen');
-  assert.equal((await call('northstar','handoff-submissions','Bearer op',{draft:1,action:'withdraw'})).json.status,'draft');
-  assert.equal((await call('northstar','handoff-publications','Bearer op',{draft:1,fromReview:true,outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, discovery call',agreementConfirmed:true})).json.error.code,'CHAMPION_APPROVAL_REQUIRED');
-  assert.equal((await call('northstar','state','Bearer dev')).status,404,'still nothing for developers');
+  assert.equal((await call('aperture','handoff-submissions','Bearer op',{draft:1,action:'withdraw'})).json.status,'draft');
+  assert.equal((await call('aperture','handoff-publications','Bearer op',{draft:1,fromReview:true,outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, discovery call',agreementConfirmed:true})).json.error.code,'CHAMPION_APPROVAL_REQUIRED');
+  assert.equal((await call('aperture','state','Bearer dev')).status,404,'still nothing for developers');
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();}
 });

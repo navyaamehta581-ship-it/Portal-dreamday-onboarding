@@ -9,10 +9,11 @@ afterEach(async()=>{await m.unmount();vi.unstubAllGlobals();});
 
 it('shows the hosted demo room with its code and lets the visitor leave it',async()=>{
  const calls:string[]=[];
- vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{calls.push(`${init?.method??'GET'} ${url}`);return url==='/demo-gate/room'?new Response(JSON.stringify({room:'K7M2Q-9XRTB',expiresAt:'2026-10-30T10:00:00Z'})):new Response('{}');}));
+ vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{calls.push(`${init?.method??'GET'} ${url}`);return url==='/demo-gate/room'?new Response(JSON.stringify({room:'K7M2Q-9XRTB',expiresAt:'2026-10-30T10:00:00Z',storage:'ephemeral',aiProvider:'gemini'})):new Response('{}');}));
  const assign=vi.fn();vi.stubGlobal('location',{...window.location,assign});
  await m.render(<DemoRoomBar/>);await flush();await flush();
  expect(m.host.textContent).toContain('Fictional demo');expect(m.host.textContent).toContain('Room K7M2Q-9XRTB');
+ expect(m.host.textContent).toContain('Temporary data: lost if the service restarts, redeploys or sleeps');expect(m.host.textContent).toContain('Fictional data only (Gemini free tier)');
  await click(m.host,'Leave room');await flush();
  expect(calls).toEqual(['GET /demo-gate/room','POST /demo-gate/leave']);expect(assign).toHaveBeenCalledWith('/demo-gate');
 });
