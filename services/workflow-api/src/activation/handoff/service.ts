@@ -232,7 +232,10 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   if(deps.handoffs.all(p).some(r=>r.status==='published'))fail('REVISION_CONFLICT');
   if(!milestones.length||!milestones.every(validMilestone))fail('INVALID_REQUEST');
   if(milestones.some(m=>confidentialHits(m,outcome,record.understanding).length))fail('CONFIDENTIAL_CONTENT');
-  const at=approval.at,id=randomUUID(),developer={...developerHandoff(1,at,record.understanding,milestones),approval},m=milestones[0];
+  // The broader objective developers may see: the approved problem, goals and open questions, screened again.
+  const safe=(t:string)=>!!t.trim()&&!unsafeReason(t,record.understanding),r=record.review;
+  const objective=r?{problem:safe(r.problem.summary)?r.problem.summary:null,goals:r.goals.map(g=>g.text).filter(safe),questions:r.questions.map(q=>q.text).filter(safe)}:undefined;
+  const at=approval.at,id=randomUUID(),developer={...developerHandoff(1,at,record.understanding,milestones),approval,...(objective?{objective}:{})},m=milestones[0];
   const proof={type:'none' as const,actionId:'none',actionRevision:0,reference:'none',verifier:'none',result:'not_checked' as const};
   const ev=(suffix:string,kind:EvidenceRecord['kind'],claim:string,basisIds:string[]=[]):EvidenceRecord=>({id:`${id}-${suffix}`,kind,claim,source:'Chris activation intake',observedAt:at,sourceRevision:id,scope:m.objective,producer:'authenticated local intake operator',basisIds,proof});
   const kinds=[...new Set(record.sources.map(s=>s.type))].join(', ');

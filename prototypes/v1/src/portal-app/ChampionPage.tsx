@@ -6,11 +6,13 @@ import {Link,navigate} from './router';
 import {loadProblem} from './onboarding/model';
 import {DreamDay} from './dreamday/DreamDay';
 import {useDreamDay} from './dreamday/useDreamDay';
+import {TeamProgressList} from './work/WorkTab';
+import type {MilestoneWorkSession} from './work/useMilestoneWork';
 
 /** Team Coordination: Dream Day (review and approve Chris's plan) and the team overview of the published plan. */
-export function ChampionPage({session,account,api,tab}:{session:ActivationSession;account:PortalAccount;api:ReturnType<typeof activationClient>;tab:'dream-day'|'team'}){
+export function ChampionPage({session,account,api,work,tab}:{session:ActivationSession;account:PortalAccount;api:ReturnType<typeof activationClient>;work:MilestoneWorkSession;tab:'dream-day'|'team'}){
  // After a decision the onboarding state may change (approval publishes), so refresh it too.
- const dd=useDreamDay(api,()=>void session.refresh());
+ const dd=useDreamDay(api,()=>{void session.refresh();void work.reload();});
  return <div className="pt-page">
   <div className="pt-pagebar"><h1><span className="icon"><Users size={16} aria-hidden="true"/></span>Team Coordination</h1></div>
   <div className="pt-entity">
@@ -18,7 +20,7 @@ export function ChampionPage({session,account,api,tab}:{session:ActivationSessio
    <div className="pt-tabs" role="tablist" aria-label="Team Coordination sections">{([['dream-day','Dream Day','/champion'],['team','Team overview','/champion/team']] as const).map(([id,label,to])=>
     <button key={id} role="tab" aria-selected={tab===id} aria-controls="champion-panel" onClick={()=>navigate(to)}>{label}</button>)}</div>
    <div className="pt-tabpanel" role="tabpanel" id="champion-panel">
-    {tab==='dream-day'?<DreamDay dd={dd} customer={account.label}/>:<TeamOverview session={session} account={account}/>}
+    {tab==='dream-day'?<DreamDay dd={dd} customer={account.label}/>:<TeamOverview session={session} account={account} work={work}/>}
    </div>
   </div>
  </div>;
@@ -27,7 +29,7 @@ export function ChampionPage({session,account,api,tab}:{session:ActivationSessio
 /** Maya's coordination view: who is on the technical team and which work Chris published, as proposals.
  * Approving work and assignments is a later phase, so nothing here can approve, and nothing is shown as approved
  * unless the server says so. Assignees stay hidden until approved (developer-safe projection on the server). */
-function TeamOverview({session,account}:{session:ActivationSession;account:PortalAccount}){
+function TeamOverview({session,account,work}:{session:ActivationSession;account:PortalAccount;work:MilestoneWorkSession}){
  const {state,busy,error}=session,h=state?.handoff;
  return <div>
   {!state?<div className="pt-empty" role={error&&!busy?'alert':'status'}><div><h2>{busy||!error?'Loading your team’s onboarding…':loadProblem(error).title}</h2>{error&&!busy&&<p>{loadProblem(error).detail}</p>}</div></div>:
@@ -41,6 +43,10 @@ function TeamOverview({session,account}:{session:ActivationSession;account:Porta
      {h?.team?.length?<ul style={{listStyle:'none',padding:0,margin:'4px 0 0'}}>{h.team.map(p=><li key={p.name} style={{marginTop:12}}><strong>{p.name}</strong> — {p.role} <span className={'pt-pill'+(p.status==='reported'?' green':'')}>{p.status==='reported'?'Named in sources':'Inferred'}</span></li>)}</ul>
       :<p className="pt-note">No technical team has been published for {account.label} yet.</p>}
     </section>
+    {h?.approval&&<section className="pt-card" aria-label="Team progress">
+     <h3>Team progress</h3>
+     <TeamProgressList work={work}/>
+    </section>}
     <section className="pt-card" aria-label="Proposed work">
      <h3>{h?.approval?'Approved work':'Proposed work'}</h3>
      {h?.milestones.length?<ol className="pt-milestones">{h.milestones.map(m=><li key={m.id}>

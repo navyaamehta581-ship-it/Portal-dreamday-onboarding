@@ -6,6 +6,7 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:net';
+import {createServer as createHttpServer} from 'node:http';
 import assert from 'node:assert/strict';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE_PATH??'playwright');
 const frontend=fileURLToPath(new URL('..',import.meta.url)),repo=resolve(frontend,'../..');
@@ -23,12 +24,27 @@ const NORTHSTAR=['PRIVATE CONTRACT NOTE: renewal discount pending; exclude from 
  'SSO uses Okta; repository access is managed through GitHub teams. Docs live in Confluence.',
  'A solutions engineer can help with deep configuration.'].join('\n');
 const LUMEN='FICTIONAL TEST: Lumen Retail wants to create a new Python recommendation service from a Scaffolder template. Code is on GitLab; SSO via Entra ID.\nTemplate repo is gitlab.com/lumen/recs-service.';
+// A local stand-in for Ollama, used by AiKA only (AIKA_LLM_PROVIDER=ollama). It is not a language model: it answers from
+// the prompt it receives, so the test can check what AiKA was given and how the answer is labelled and screened.
+const aikaPrompts=[];let aikaMode='ok';
+const stubOllama=createHttpServer((req,res)=>{let body='';req.on('data',d=>body+=d);req.on('end',()=>{
+ if(req.url!=='/api/chat'||aikaMode==='down'){res.writeHead(503);res.end();return;}
+ const prompt=JSON.parse(body).messages.map(x=>x.content).join('\n');aikaPrompts.push(prompt);
+ const focus=/\(the question is about this one\): ([^—\n]+)/.exec(prompt)?.[1]?.trim()??'your approved milestones';
+ const content=JSON.stringify({sections:[{kind:'known',text:`Your milestone is ${focus}.`},{kind:'reported',text:'You reported a blocker about repository access.'},
+  {kind:'known',text:'I inspected the repository and verified the CODEOWNERS file.'},{kind:'suggestion',text:'Resolve the access blocker with your Champion before the next action.'},
+  {kind:'unknown',text:'Which CI system deploys it is not stated; your Champion could answer.'}],next_step:'Mark the next action started once access is granted.'});
+ res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({message:{content},done:true,eval_count:40,eval_duration:1e9}));});});
 try{
+ await new Promise(r=>stubOllama.listen(0,'127.0.0.1',r));const ollamaUrl=`http://127.0.0.1:${stubOllama.address().port}`;
  const uiPort=await port(),url=`http://127.0.0.1:${uiPort}`;
  const customers=[{id:'northstar',label:'Northstar Engineering',customerId:'fictional-northstar-engineering'},{id:'lumen',label:'Lumen Retail',customerId:'fictional-lumen-retail'}];
  for(const c of customers){
   c.dir=join(directory,c.id);mkdirSync(c.dir,{mode:0o700});c.apiOrigin=`http://127.0.0.1:${await port()}`;c.tokenFile=join(c.dir,'token');c.operatorTokenFile=join(c.dir,'operator-token');c.championTokenFile=join(c.dir,'champion-token');
-  await start(['scripts/demo.ts','handoff'],join(repo,'services/workflow-api'),{PORT:c.apiOrigin.split(':')[2],ACTIVATION_DEMO_DIR:c.dir,ACTIVATION_DEMO_CUSTOMER_ID:c.customerId,ACTIVATION_DEMO_FRONTEND_ORIGIN:url},out=>out.includes('FICTIONAL DEMO API:'));
+  await start(['scripts/demo.ts','handoff'],join(repo,'services/workflow-api'),{PORT:c.apiOrigin.split(':')[2],ACTIVATION_DEMO_DIR:c.dir,ACTIVATION_DEMO_CUSTOMER_ID:c.customerId,ACTIVATION_DEMO_FRONTEND_ORIGIN:url,
+   // Each developer gets their own credential; Northstar's AiKA uses the stub model, Lumen's has none.
+   ACTIVATION_DEMO_DEVELOPERS:c.id==='lumen'?'sam=Sam Okafor':'alex=Alex Rivera,jordan=Jordan Lee',
+   ...(c.id==='northstar'?{AIKA_LLM_PROVIDER:'ollama',OLLAMA_URL:ollamaUrl,OLLAMA_MODEL:'stub-model',OLLAMA_RETRIES:'0',OLLAMA_TIMEOUT_MS:'10000'}:{AIKA_LLM_PROVIDER:'',PORTAL_LLM_PROVIDER:''})},out=>out.includes('FICTIONAL DEMO API:'));
  }
  const accounts=join(directory,'accounts.json');
  // One entry, six fictional personas: Chris across both customers; Maya (Champion), Alex and Jordan at Northstar; Sam and Priya (Champion) at Lumen.
@@ -37,7 +53,7 @@ try{
    {id:'alex',name:'Alex Rivera',role:'developer',title:'Developer',customers:['northstar']},{id:'jordan',name:'Jordan Lee',role:'developer',title:'Developer',customers:['northstar']},{id:'sam',name:'Sam Okafor',role:'developer',title:'Developer',customers:['lumen']},{id:'priya',name:'Priya Nair',role:'champion',title:'Platform Champion',customers:['lumen']}]}),{mode:0o600});
  await start(['node_modules/vite/bin/vite.js','--port',String(uiPort),'--strictPort'],frontend,{PORTAL_DEMO_ACCOUNTS:accounts,ACTIVATION_API_ORIGIN:customers[0].apiOrigin},out=>out.includes('Local:'));
  const [north,lumen]=customers;
- const devToken=readFileSync(north.tokenFile,'utf8'),opToken=readFileSync(north.operatorTokenFile,'utf8'),champToken=readFileSync(north.championTokenFile,'utf8');
+ const devToken=readFileSync(north.tokenFile,'utf8'),alexToken=readFileSync(join(north.dir,'developer-token-alex'),'utf8'),opToken=readFileSync(north.operatorTokenFile,'utf8'),champToken=readFileSync(north.championTokenFile,'utf8');
  const api=(c,path,token,body)=>fetch(`${c.apiOrigin}/api/activation/v1/customers/${c.customerId}/${path}`,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
  browser=await chromium.launch({headless:true,...(process.env.BROWSER_CHANNEL?{channel:process.env.BROWSER_CHANNEL}:{})});
  const errors=[];const watch=page=>page.on('pageerror',e=>errors.push(e.message));
@@ -225,11 +241,64 @@ try{
  assert.equal(bearer.length,0,'developer browser never sends bearer tokens');
  assert.deepEqual(leaked,[],'developer API responses carry no private research');
 
+
+ console.log('Phase 5: Alex works on his approved milestone; AiKA answers from approved context');
+ const ALEX='Review checkout-api repository readiness',JORDAN='Independently validate that checkout-api and its docs are discoverable';
+ await dev.goto(url+'/activation/work');
+ const card=dev.locator(`[aria-label^="Milestone: ${ALEX}"]`);await card.waitFor();
+ assert.equal(await dev.locator(`[aria-label^="Milestone: ${JORDAN}"]`).count(),0,'Jordan’s workspace is not shown to Alex');
+ assert.ok((await dev.getByLabel('Team milestones').innerText()).includes('Jordan Lee'));
+ assert.ok((await dev.locator('body').innerText()).includes('Approved by Maya Chen in Dream Day'));
+ const status=c=>c.locator('[data-testid=milestone-status]').innerText();
+ await card.getByLabel('Status of action 1').selectOption('started');await card.getByText(/Started by Alex Rivera/).waitFor();
+ await card.getByLabel('Note type').selectOption('blocker');
+ await card.getByLabel('Short note').fill('No read access to northstar/platform yet.');
+ await card.getByLabel('Evidence reference').fill('https://example.test/northstar/access-request/17');
+ await card.getByRole('button',{name:'Record blocker'}).click();await card.getByText('No read access to northstar/platform yet.').waitFor();
+ assert.equal(await status(card),'Blocked');
+ await card.getByRole('button',{name:'Mark ready for review'}).click();
+ await card.getByRole('alert').filter({hasText:'open blockers are resolved'}).waitFor();
+ await dev.reload();await card.waitFor();assert.equal(await status(card),'Blocked','progress survives a refresh');
+ if(process.env.E2E_SCREENSHOTS)await dev.screenshot({path:join(process.env.E2E_SCREENSHOTS,'my-work.png'),fullPage:true});
+ assert.ok((await card.innerText()).includes('Reference (reported, not verified)'));
+ // The shared developer credential has no identity: it can read but never change anyone's work.
+ const ids=await (await api(north,'milestone-work',alexToken)).json();const alexId=ids.milestones.find(x=>x.title.startsWith(ALEX)).id,jordanId=ids.milestones.find(x=>x.title.startsWith(JORDAN)).id;
+ assert.equal((await api(north,'milestone-updates',devToken,{milestoneId:alexId,expectedRevision:2,status:'in_progress'})).status,403,'shared token cannot update');
+ assert.equal((await api(north,'milestone-updates',alexToken,{milestoneId:jordanId,expectedRevision:0,status:'in_progress'})).status,403,'Alex cannot change Jordan’s work');
+ assert.equal((await api(north,'milestone-updates',opToken,{milestoneId:alexId,expectedRevision:2,status:'in_progress'})).status,403,'Chris cannot change developer work');
+ // AiKA, through the Portal API only.
+ const modelCalls=[];dev.on('request',r=>{if(r.url().startsWith(ollamaUrl)||r.url().includes(':11434'))modelCalls.push(r.url());});
+ await card.getByRole('button',{name:'Ask AiKA about this milestone'}).click();await dev.waitForURL(/\/aika\?milestone=/);
+ assert.equal(await dev.getByLabel('Milestone for AiKA').inputValue(),alexId);
+ await dev.getByRole('button',{name:'What should I do next on this milestone?'}).click();
+ const answer=dev.getByLabel('AiKA answer');await answer.locator('.pt-aika-sections').waitFor({timeout:20000});
+ const said=await answer.innerText();
+ if(process.env.E2E_SCREENSHOTS)await dev.screenshot({path:join(process.env.E2E_SCREENSHOTS,'aika.png'),fullPage:true});
+ assert.ok(said.includes(`Your milestone is ${ALEX}`)&&said.includes('Known')&&said.includes('Reported')&&said.includes('Suggestion')&&said.includes('Unknown'),said);
+ assert.ok(!said.includes('I inspected')&&said.includes('1 part was removed'),'claimed inspections are removed: nothing was inspected');
+ const prompt=aikaPrompts.at(-1);
+ assert.ok(prompt.includes(`YOUR MILESTONE (the question is about this one): ${ALEX}`)&&prompt.includes('No read access to northstar/platform yet.')&&prompt.includes('REPOSITORY EVIDENCE: none'));
+ assert.ok(prompt.includes(`TEAM MILESTONE: ${JORDAN}`),'other milestones by title and status only');
+ for(const x of ['PRIVATE CONTRACT NOTE','renewal discount','solutions engineer','Fictional platform lead'])assert.ok(!prompt.includes(x),'AiKA context leaks '+x);
+ assert.deepEqual(modelCalls,[],'the browser never talks to the model');
+ aikaMode='down';
+ await dev.getByLabel('Question for AiKA').fill('What does my milestone depend on?');await dev.getByRole('button',{name:'Ask AiKA',exact:true}).click();
+ await answer.getByRole('alert').filter({hasText:'AiKA couldn’t reach its model'}).waitFor({timeout:20000});aikaMode='ok';
+ // Back to work: resolve the blocker, finish the actions, mark ready for review.
+ await dev.goto(url+'/activation/work');await card.waitFor();
+ await card.getByRole('button',{name:'Mark blocker resolved'}).click();await card.getByText(/resolved by Alex Rivera/).waitFor();
+ const actions=await card.locator('[aria-label^="Status of action"]').count();
+ for(let i=1;i<=actions;i++){await card.getByLabel(`Status of action ${i}`).selectOption('completed');await dev.waitForFunction(([a,n])=>{const s=document.querySelector(`[aria-label^="${a}"] [aria-label="Status of action ${n}"]`);return s&&!s.disabled&&s.value==='completed';},[`Milestone: ${ALEX}`,i]);}
+ await card.getByRole('button',{name:'Mark ready for review'}).click();
+ await dev.waitForFunction(a=>document.querySelector(`[aria-label^="${a}"] [data-testid=milestone-status]`)?.textContent==='Ready for review',`Milestone: ${ALEX}`);
+
  // --- Chris reviews evidence-backed follow-up.
  await op.goto(url+'/operator/progress');await op.getByRole('button',{name:'Account: Chris'}).waitFor();
  await op.getByText('Chris intervention requested',{exact:true}).waitFor();
  assert.ok((await op.getByLabel('Chris team handoff summary').innerText()).includes('blocked'));
  assert.ok((await op.getByLabel('Developer activity').innerText()).includes('deploy to staging'));
+ const opProgress=await op.getByLabel('Approved milestone progress').innerText();
+ assert.ok(opProgress.includes(ALEX)&&opProgress.includes('Ready for review')&&opProgress.includes('Jordan Lee'),opProgress);
  const state=await (await fetch(`${north.apiOrigin}/api/activation/v1/customers/${north.customerId}/state`,{headers:{Authorization:`Bearer ${devToken}`}})).json();
  assert.equal(state.chrisHelp.status,'requested');assert.equal(state.planRevision,1);
 
@@ -240,6 +309,12 @@ try{
  assert.ok(text.includes('Software Template')&&text.includes('lumen/recs-service')&&!text.includes('checkout-api')&&!text.includes('Okta'));
  assert.equal(await other.evaluate(async id=>(await fetch(`/portal-api/activation/v1/customers/${id}/state`)).status,north.customerId),403);
  assert.equal((await fetch(`${lumen.apiOrigin}/api/activation/v1/customers/${lumen.customerId}/state`,{headers:{Authorization:`Bearer ${devToken}`}})).status,403);
+ assert.equal((await api(lumen,'milestone-work',alexToken)).status,403,'Alex’s credential does not open another customer’s work');
+ await other.goto(url+'/activation/work');await other.locator('[aria-label^="Milestone: "]').first().waitFor();
+ text=await other.locator('body').innerText();assert.ok(!text.includes('checkout-api')&&!text.includes('Alex Rivera'));
+ const before=aikaPrompts.length;
+ await other.goto(url+'/aika');await other.getByLabel('Question for AiKA').fill('What should I do first?');await other.getByRole('button',{name:'Ask AiKA',exact:true}).click();
+ await other.getByRole('alert').filter({hasText:'AiKA isn’t connected to a model'}).waitFor();assert.equal(aikaPrompts.length,before,'Lumen never reaches Northstar’s model');
 
  // --- Maya: the approved plan in Team overview, same as Dream Day; Jordan: only his approved work.
  await maya.getByRole('tab',{name:'Team overview'}).click();await maya.getByLabel('Proposed work').waitFor();
@@ -255,6 +330,24 @@ try{
  assert.equal(await jordan.locator('[aria-label^="Assigned: "]').count(),1,'Jordan sees only his own approved work');
  assert.equal(await jordan.getByRole('link',{name:'Team Coordination'}).count(),0);
  assert.equal(await jordan.evaluate(async c=>(await fetch(`/portal-api/activation/v1/customers/${c}/champion-review`)).status,north.customerId),403,'developers cannot open Dream Day');
+ console.log('Phase 5: Jordan works independently; his work waits for Alex’s');
+ await jordan.getByRole('link',{name:'Open my work'}).click();
+ const jcard=jordan.locator(`[aria-label^="Milestone: ${JORDAN}"]`);await jcard.waitFor();
+ const jteam=await jordan.getByLabel('Team milestones').innerText();
+ assert.ok(jteam.includes(ALEX)&&jteam.includes('Ready for review'),jteam);
+ assert.ok(!(await jordan.locator('body').innerText()).includes('No read access to northstar/platform'),'Alex’s notes stay in his workspace');
+ assert.ok((await jcard.innerText()).includes('can only be completed after Alex Rivera’s work'));
+ const jactions=await jcard.locator('[aria-label^="Status of action"]').count();
+ for(let i=1;i<=jactions;i++){await jcard.getByLabel(`Status of action ${i}`).selectOption('completed');await jordan.waitForFunction(([a,n])=>{const s=document.querySelector(`[aria-label^="${a}"] [aria-label="Status of action ${n}"]`);return s&&!s.disabled&&s.value==='completed';},[`Milestone: ${JORDAN}`,i]);}
+ await jcard.getByRole('button',{name:'Mark completed'}).click();
+ await jcard.getByRole('alert').filter({hasText:'the work it depends on is completed by its owner'}).waitFor();
+ assert.equal(await jcard.locator('[data-testid=milestone-status]').innerText(),'In progress','dependent work is never completed early or automatically');
+ const mine=await jordan.evaluate(async c=>(await fetch(`/portal-api/activation/v1/customers/${c}/milestone-work`)).json(),north.customerId);
+ assert.equal(mine.milestones.find(x=>x.title.startsWith(ALEX)).detail,null,'Alex’s workspace detail is not sent to Jordan');
+ assert.ok(mine.milestones.find(x=>x.title.startsWith(JORDAN)).detail.actions.every(a=>a.by==='Jordan Lee'),'Jordan’s changes are attributed to Jordan');
+ await maya.goto(url+'/champion/team');const team=await maya.getByLabel('Team progress').innerText();
+ assert.ok(team.includes('Alex Rivera')&&team.includes('Jordan Lee')&&team.includes('Ready for review'),team);
+ if(process.env.E2E_SCREENSHOTS){await jordan.screenshot({path:join(process.env.E2E_SCREENSHOTS,'jordan-work.png'),fullPage:true});await maya.screenshot({path:join(process.env.E2E_SCREENSHOTS,'maya-team.png'),fullPage:true});}
 
  // --- Sign-out ends the session; mobile layouts do not overflow.
  await dev.getByRole('button',{name:/Account:/}).click();await dev.getByRole('menuitem',{name:'Sign out'}).click();
@@ -263,8 +356,8 @@ try{
  const entry=await (await browser.newContext({viewport:{width:390,height:844}})).newPage();watch(entry);await entry.goto(url+'/login');await entry.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  for(const page of [op,other,maya,entry]){await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal overflow');}
  assert.deepEqual(errors,[]);
- console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
+ console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
 }catch(error){console.error(error);throw error;}finally{
  await browser?.close();for(const child of children.reverse()){if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(()=>{child.kill('SIGKILL');r();},3000))]);}}
- rmSync(directory,{recursive:true,force:true});
+ stubOllama.close();rmSync(directory,{recursive:true,force:true});
 }

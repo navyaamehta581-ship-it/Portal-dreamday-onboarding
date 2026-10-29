@@ -3,12 +3,13 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {act} from 'react';
 import {OnboardingPage,type Tab} from './OnboardingPage';
 import {useActivation,type ActivationSession} from '../../activation/useActivation';
+import {useMilestoneWork} from '../work/useMilestoneWork';
 import {byLabel,click,fixtureState,mockApi,mount,type} from '../../activation/testing';
 import type {ActivationState} from '../../../../../contracts/activation/v1/state';
 
 let api:ReturnType<typeof mockApi>,m:ReturnType<typeof mount>,session:ActivationSession;
 const account={id:'a',label:'Orbit',user:'Alex',customerId:'orbit'};
-function Harness({tab}:{tab:Tab}){session=useActivation(api,'scope');return <OnboardingPage session={session} tab={tab} account={account}/>;}
+function Harness({tab}:{tab:Tab}){session=useActivation(api,'scope');const work=useMilestoneWork(api);return <OnboardingPage session={session} tab={tab} account={account} work={work}/>;}
 async function load(state:ActivationState,tab:Tab='overview'){api.read.mockResolvedValue(state);await m.render(<Harness tab={tab}/>);await act(async()=>{await session.refresh();});}
 beforeEach(()=>{vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);api=mockApi();m=mount();});
 afterEach(async()=>{await m.unmount();vi.unstubAllGlobals();sessionStorage.clear();});

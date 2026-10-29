@@ -73,7 +73,33 @@ export type DeveloperHandoff = {
   team?: { name: string; role: string; status: 'reported' | 'inferred' }[];
   /** The Champion's Dream Day approval of this plan. Absent for plans published before Dream Day. */
   approval?: { by: string; at: string };
+  /** The approved plan's engineering problem, technical goals and open clarification questions (developer-safe). */
+  objective?: { problem: string | null; goals: string[]; questions: string[] };
 };
+
+// ---- Phase 5: developers working on approved milestones. Attributed by server-side developer identity.
+export type ActionStatus = 'not_started' | 'started' | 'blocked' | 'completed';
+export type WorkStatus = 'not_started' | 'in_progress' | 'blocked' | 'ready_for_review' | 'completed';
+/** A note on a milestone. `evidence` is a reference the developer reported (a link, commit or PR); it is not verified. */
+export type WorkUpdate = { id: string; at: string; by: string; kind: 'update' | 'blocker' | 'question'; text: string; evidence: string | null; resolved: { at: string; by: string } | null };
+/** Stored per approved milestone. `explicit` is a status the assignee set (ready for review, completed); otherwise
+ * the status is derived from the actions and open blockers. */
+export type MilestoneWorkRecord = { milestoneId: string; revision: number; explicit: 'ready_for_review' | 'completed' | null;
+  actions: { status: ActionStatus; at: string | null; by: string | null }[]; updates: WorkUpdate[]; updatedAt: string | null; updatedBy: string | null };
+export type MilestoneDependency = { id: string; title: string; assignee: string | null; status: WorkStatus };
+/** One approved milestone as a viewer may see it. `detail` is present for the viewer's own milestones (and for the
+ * Champion and Chris); other developers' milestones show only title, assignee and status. */
+export type MilestoneProgress = { id: string; title: string; assignee: string | null; status: WorkStatus; openBlockers: number; mine: boolean;
+  dependsOn: MilestoneDependency[];
+  detail: { description: string; system: string | null; actions: { index: number; text: string; status: ActionStatus; at: string | null; by: string | null }[];
+    completionCriteria: string[]; updates: WorkUpdate[]; revision: number; updatedAt: string | null; updatedBy: string | null } | null };
+export type TeamProgress = { viewer: { role: 'developer' | 'champion' | 'operator'; name: string | null };
+  approval: { by: string; at: string } | null; objective: DeveloperHandoff['objective'] | null; milestones: MilestoneProgress[] };
+
+// ---- Phase 5: AiKA. Answers come from the approved, developer-safe context only.
+export type AikaSection = { kind: 'known' | 'reported' | 'suggestion' | 'unknown'; text: string };
+export type AikaJob = { id: string; status: 'running' | 'succeeded' | 'failed'; question: string; milestoneId: string | null; startedAt: string; elapsedMs: number;
+  answer: { sections: AikaSection[]; nextStep: string | null; removed: number } | null; error: string | null; model: string | null };
 
 /** Operator-only record. Drafts are numbered; publishing freezes one draft as a published version. */
 export type Approval = { status: 'pending' | 'approved'; by: string | null; at: string | null };

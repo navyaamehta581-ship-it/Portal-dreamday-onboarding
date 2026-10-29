@@ -6,7 +6,7 @@ One entry URL serves every persona: `/` (Welcome) → **Get started** → `/logi
 |---|---|---|---|
 | Chris | `operator` | `/operator` | Customer Onboarding: the existing activation and handoff workspace (Customer Context, Activation Goal, Developer Progress) for the customers listed for Chris |
 | Maya Chen | `champion` | `/portal` | The developer Portal (Home, Onboarding) plus **Team Coordination**: **Dream Day** review and approval (`/champion`) and the team overview (`/champion/team`) |
-| Alex Rivera, Jordan Lee | `developer` | `/portal` | The developer Portal: Home with **Your assigned work** and the team's onboarding, and Onboarding (`/activation`) |
+| Alex Rivera, Jordan Lee | `developer` | `/portal` | The developer Portal: Home with **Your assigned work** and the team's onboarding, Onboarding (`/activation`) with **My work** (`/activation/work`), and **AiKA** (`/aika`) |
 
 All surfaces use the existing Portal shell, navigation and components (`src/portal-app/Shell.tsx`, `portal.css`). The sign-in page reuses the existing entry layout; Team Coordination adds one navigation entry for the Champion.
 
@@ -21,7 +21,7 @@ All surfaces use the existing Portal shell, navigation and components (`src/port
 
 Choosing a persona is a simulated sign-in for fictional people. It is not authentication: anyone using the local demo can pick any persona, and the page says so. Hiding or showing a surface in the browser grants nothing. What a persona can do is decided on the server:
 
-1. `server/portal-session.mjs` maps the cookie to a persona and holds that persona's credential. Developers use their customer's **developer** token and the Champion the customer's **Champion** token through `/portal-api/…`. The operator uses each listed customer's **operator** token through `/operator-api/<customer>/…`. The browser never holds a token, and a pasted `Authorization` header is ignored.
+1. `server/portal-session.mjs` maps the cookie to a persona and holds that persona's credential. Each developer uses their own **developer** token (`developer-token-<persona id>` beside the customer's token, falling back to the shared developer token, which can read but not update work), and the Champion the customer's **Champion** token through `/portal-api/…`. The operator uses each listed customer's **operator** token through `/operator-api/<customer>/…`. The browser never holds a token, and a pasted `Authorization` header is ignored.
 2. The session layer refuses before forwarding:
    - an operator persona on `/portal-api` (`WRONG_SURFACE`);
    - a customer persona on `/operator-api` (`FORBIDDEN`);
@@ -38,7 +38,7 @@ Choosing a persona is a simulated sign-in for fictional people. It is not authen
 ## Placeholders and honest states (not built yet)
 
 - **Approvals** happen in Dream Day; see [dream-day.md](dream-day.md).
-- **Assigned work.** After the Champion approves, each developer's Home shows only the approved milestones assigned to them.
-- **Shared onboarding state.** The backend keeps one developer session per customer. Maya, Alex and Jordan therefore see and change the same onboarding progress, and actions are not attributed per person. Per-person sessions need a backend change.
-- **Other features.** Portal entries such as Catalog, Docs, Insights and AiKA keep the existing "isn't available in this demo" page.
+- **Assigned work.** After the Champion approves, each developer's Home shows only the approved milestones assigned to them, and **My work** lets them update them with attributed, revision-checked progress. AiKA answers from approved context only. See [developer-work.md](developer-work.md).
+- **Shared onboarding state.** The earlier Guide, repository and team-plan tabs still use one developer session per customer, so those reports are team-level. Milestone work is per developer.
+- **Other features.** Portal entries such as Catalog, Docs and Insights keep the existing "isn't available in this demo" page.
 - **Chris's workflow.** Information entry, background analysis, the editable draft and submission for Champion review are described in [chris-workspace.md](chris-workspace.md). Champion review and approval are in [dream-day.md](dream-day.md).
