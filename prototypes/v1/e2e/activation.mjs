@@ -317,11 +317,12 @@ try{
  await other.getByRole('alert').filter({hasText:'AiKA isn’t connected to a model'}).waitFor();assert.equal(aikaPrompts.length,before,'Lumen never reaches Northstar’s model');
 
  // --- Maya: the approved plan in Team overview, same as Dream Day; Jordan: only his approved work.
- await maya.getByRole('tab',{name:'Team overview'}).click();await maya.getByLabel('Proposed work').waitFor();
- const work=await maya.getByLabel('Proposed work').innerText();
- assert.ok(work.includes('Approved work')&&work.includes('Alex Rivera')&&work.includes('Jordan Lee'),work);
+ await maya.getByRole('tab',{name:'Team overview'}).click();
+ const mayaAlex=maya.locator('[aria-label^="Coordination: Review checkout-api repository readiness"]');await mayaAlex.waitFor();
+ assert.ok((await mayaAlex.innerText()).includes('Alex Rivera'));
+ assert.ok((await maya.locator('[aria-label^="Coordination: Independently validate"]').innerText()).includes('Jordan Lee'));
  assert.ok(!(await maya.locator('body').innerText()).includes('renewal'));
- await maya.reload();await maya.getByLabel('Proposed work').waitFor();assert.equal(new URL(maya.url()).pathname,'/champion/team','reload keeps the persona and page');
+ await maya.reload();await mayaAlex.waitFor();assert.equal(new URL(maya.url()).pathname,'/champion/team','reload keeps the persona and page');
  assert.equal(await maya.evaluate(async c=>(await fetch(`/operator-api/northstar/activation/v1/customers/${c}/handoff`)).status,north.customerId),403,'the Champion has no operator access');
  const jordan=await (await browser.newContext({viewport:{width:1440,height:1000}})).newPage();watch(jordan);
  await signInAs(jordan,'Jordan Lee');await jordan.getByLabel('Your assigned work').waitFor();
@@ -345,9 +346,54 @@ try{
  const mine=await jordan.evaluate(async c=>(await fetch(`/portal-api/activation/v1/customers/${c}/milestone-work`)).json(),north.customerId);
  assert.equal(mine.milestones.find(x=>x.title.startsWith(ALEX)).detail,null,'Alex’s workspace detail is not sent to Jordan');
  assert.ok(mine.milestones.find(x=>x.title.startsWith(JORDAN)).detail.actions.every(a=>a.by==='Jordan Lee'),'Jordan’s changes are attributed to Jordan');
- await maya.goto(url+'/champion/team');const team=await maya.getByLabel('Team progress').innerText();
- assert.ok(team.includes('Alex Rivera')&&team.includes('Jordan Lee')&&team.includes('Ready for review'),team);
- if(process.env.E2E_SCREENSHOTS){await jordan.screenshot({path:join(process.env.E2E_SCREENSHOTS,'jordan-work.png'),fullPage:true});await maya.screenshot({path:join(process.env.E2E_SCREENSHOTS,'maya-team.png'),fullPage:true});}
+ console.log('Phase 6: Maya coordinates, answers, reviews and asks for follow-up; Alex replies; Chris reads');
+ await jcard.getByLabel('Note type').selectOption('question');
+ await jcard.getByLabel('Short note').fill('Which docs site should the discoverability check cover?');
+ await jcard.getByRole('button',{name:'Record question'}).click();await jcard.getByText('awaiting a reply').waitFor();
+ await maya.goto(url+'/champion/team');
+ const attention=await maya.getByLabel('Needs attention').innerText();
+ assert.ok(attention.includes('Ready for your review')&&attention.includes('Unanswered question'),attention);
+ const summary=await maya.getByLabel('Team progress').innerText();
+ assert.match(summary,/AWAITING YOUR REVIEW\s*1/i);assert.match(summary,/COMPLETED\s*0 of 2/i);
+ const mayaJordan=maya.locator('[aria-label^="Coordination: Independently validate"]');
+ assert.equal(await mayaJordan.locator('[data-testid=coord-status]').innerText(),'In progress');
+ await mayaJordan.getByRole('button',{name:'Respond'}).click();
+ await mayaJordan.getByLabel('Response').fill('Cover the TechDocs site for checkout-api only.');
+ await mayaJordan.getByRole('button',{name:'Send response'}).click();await mayaJordan.getByText('Maya Chen (Champion)').waitFor();
+ assert.ok((await mayaAlex.innerText()).includes('Reference (reported, not verified)'),'developer references are marked reported');
+ await mayaAlex.getByRole('button',{name:'Mark reviewed'}).click();
+ await maya.waitForFunction(a=>document.querySelector(`[aria-label^="${a}"] [data-testid=review-state]`)?.textContent==='Reviewed','Coordination: Review checkout-api');
+ assert.equal(await mayaAlex.locator('[data-testid=coord-status]').innerText(),'Ready for review','a review never completes the milestone');
+ await mayaAlex.getByLabel('Coordination type').selectOption('followUp');
+ await mayaAlex.getByLabel('Coordination text').fill('Please share the access request link for the record.');
+ await mayaAlex.getByRole('button',{name:'Request follow-up'}).click();await mayaAlex.getByText('Please share the access request link for the record.').waitFor();
+ await maya.reload();await mayaAlex.waitFor();assert.equal(await mayaAlex.locator('[data-testid=review-state]').innerText(),'Reviewed','review persists across a refresh');
+ // Role boundaries and stale writes at the API.
+ const champCall=(c,token,body)=>fetch(`${c.apiOrigin}/api/activation/v1/customers/${c.customerId}/milestone-coordination`,{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Portal-Actor':'Maya Chen'},body:JSON.stringify(body)});
+ for(const t of [alexToken,devToken,opToken])assert.equal((await champCall(north,t,{milestoneId:alexId,expectedRevision:0,note:{text:'Not allowed'}})).status,403,'only the Champion coordinates');
+ assert.equal((await champCall(north,readFileSync(lumen.championTokenFile,'utf8'),{milestoneId:alexId,expectedRevision:0,note:{text:'Other customer'}})).status,403,'another customer’s Champion');
+ const stale=await champCall(north,champToken,{milestoneId:alexId,expectedRevision:0,note:{text:'Stale'}});
+ assert.equal(stale.status,409);assert.equal((await stale.json()).error.code,'REVISION_CONFLICT');
+ // Jordan sees Maya's answer; Alex's follow-up stays on Alex's milestone.
+ await jordan.reload();await jcard.getByText('Cover the TechDocs site for checkout-api only.').waitFor();
+ assert.ok(!(await jordan.locator('body').innerText()).includes('access request link'),'Alex’s discussion stays on his milestone');
+ // Alex sees the review and answers the follow-up.
+ await dev.goto(url+'/activation/work');await card.waitFor();
+ assert.equal(await card.locator('[data-testid=review-state]').innerText(),'Reviewed by Maya Chen');
+ await card.locator('[data-entry-kind=follow_up]').getByRole('button',{name:'Reply to Maya Chen'}).click();
+ await card.getByLabel('Short note').fill('The request is linked in my blocker note.');
+ await card.getByRole('button',{name:'Send reply'}).click();await card.getByText('The request is linked in my blocker note.').waitFor();
+ assert.equal(await status(card),'Ready for review');
+ // Chris observes the same progress, read-only.
+ await op.goto(url+'/operator/progress');const observed=op.getByLabel('Approved milestone progress');await observed.waitFor();
+ const seen=await observed.innerText();
+ assert.ok(seen.includes('Reviewed by Maya Chen')&&seen.includes('The request is linked in my blocker note.')&&seen.includes('Cover the TechDocs site'),seen);
+ assert.equal(await observed.getByRole('button',{name:/Mark reviewed|Respond|Add note|Request follow-up/}).count(),0,'Chris cannot coordinate');
+ const chrisView=await op.evaluate(async c=>(await fetch(`/operator-api/northstar/activation/v1/customers/${c}/milestone-work`)).json(),north.customerId);
+ const mayaView=await maya.evaluate(async c=>(await fetch(`/portal-api/activation/v1/customers/${c}/milestone-work`)).json(),north.customerId);
+ assert.deepEqual(chrisView.summary,mayaView.summary,'one source of truth for the numbers');
+ assert.ok(!JSON.stringify(mayaView).includes('renewal')&&!JSON.stringify(mayaView).includes('PRIVATE CONTRACT'),'no commercial notes in coordination');
+ if(process.env.E2E_SCREENSHOTS){await jordan.screenshot({path:join(process.env.E2E_SCREENSHOTS,'jordan-work.png'),fullPage:true});await maya.goto(url+'/champion/team');await mayaAlex.waitFor();await maya.screenshot({path:join(process.env.E2E_SCREENSHOTS,'maya-team.png'),fullPage:true});}
 
  // --- Sign-out ends the session; mobile layouts do not overflow.
  await dev.getByRole('button',{name:/Account:/}).click();await dev.getByRole('menuitem',{name:'Sign out'}).click();
@@ -356,7 +402,7 @@ try{
  const entry=await (await browser.newContext({viewport:{width:390,height:844}})).newPage();watch(entry);await entry.goto(url+'/login');await entry.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  for(const page of [op,other,maya,entry]){await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal overflow');}
  assert.deepEqual(errors,[]);
- console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
+ console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress → Phase 6: Maya sees attention and summary, answers Jordan’s question, reviews Alex’s milestone without completing it, requests follow-up; Alex replies; review persists; coordination refused for developers, Chris, the shared token, another customer and stale revisions; Chris sees the same numbers read-only; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
 }catch(error){console.error(error);throw error;}finally{
  await browser?.close();for(const child of children.reverse()){if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(()=>{child.kill('SIGKILL');r();},3000))]);}}
  stubOllama.close();rmSync(directory,{recursive:true,force:true});

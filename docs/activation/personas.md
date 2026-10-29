@@ -5,7 +5,7 @@ One entry URL serves every persona: `/` (Welcome) → **Get started** → `/logi
 | Persona | Role | Starts at | What opens |
 |---|---|---|---|
 | Chris | `operator` | `/operator` | Customer Onboarding: the existing activation and handoff workspace (Customer Context, Activation Goal, Developer Progress) for the customers listed for Chris |
-| Maya Chen | `champion` | `/portal` | The developer Portal (Home, Onboarding) plus **Team Coordination**: **Dream Day** review and approval (`/champion`) and the team overview (`/champion/team`) |
+| Maya Chen | `champion` | `/portal` | The developer Portal (Home, Onboarding) plus **Team Coordination**: **Dream Day** review and approval (`/champion`) and the team overview (`/champion/team`), where she coordinates, answers and reviews approved work ([team-coordination.md](team-coordination.md)) |
 | Alex Rivera, Jordan Lee | `developer` | `/portal` | The developer Portal: Home with **Your assigned work** and the team's onboarding, Onboarding (`/activation`) with **My work** (`/activation/work`), and **AiKA** (`/aika`) |
 
 All surfaces use the existing Portal shell, navigation and components (`src/portal-app/Shell.tsx`, `portal.css`). The sign-in page reuses the existing entry layout; Team Coordination adds one navigation entry for the Champion.

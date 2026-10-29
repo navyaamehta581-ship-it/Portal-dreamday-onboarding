@@ -35,16 +35,27 @@ function approvedFor(persona:Persona){
  return fixtureState('orbit',{handoff:{version:1,publishedAt:'2026-10-29T10:00:00Z',interpreter:'hosted_model',summary:'s',context:[],unknowns:[],milestones:mine,approval:server.review!.approval!,
   team:[{name:'Maya Chen',role:'Champion',status:'reported'},{name:'Alex Rivera',role:'Developer',status:'reported'},{name:'Jordan Lee',role:'Developer',status:'reported'}]}});
 }
-type FakeWork={revision:number;explicit:string|null;actions:{status:string;at:string|null;by:string|null}[];updates:{id:string;at:string;by:string;kind:string;text:string;evidence:string|null;resolved:{at:string;by:string}|null}[];updatedAt:string|null;updatedBy:string|null};
-const workOf=(id:string)=>server.work[id]??=({revision:0,explicit:null,actions:server.review!.plan!.milestones.find(x=>x.id===id)!.actions.map(()=>({status:'not_started',at:null,by:null})),updates:[],updatedAt:null,updatedBy:null});
-const statusOf=(id:string)=>{const w=workOf(id);return w.explicit??(w.updates.some(u=>u.kind==='blocker'&&!u.resolved)||w.actions.some(a=>a.status==='blocked')?'blocked':w.actions.some(a=>a.status!=='not_started')||w.updates.length?'in_progress':'not_started');};
+type FakeEntry={id:string;at:string;by:string;role:'developer'|'champion';kind:string;text:string;evidence:string|null;replyTo:string|null;resolved:{at:string;by:string}|null};
+type FakeWork={revision:number;developerRevision:number;explicit:string|null;actions:{status:string;at:string|null;by:string|null}[];updates:FakeEntry[];updatedAt:string|null;updatedBy:string|null;review:{decision:'reviewed';at:string;by:string;note:string|null;developerRevision:number}|null};
+const workOf=(id:string)=>server.work[id]??=({revision:0,developerRevision:0,explicit:null,actions:server.review!.plan!.milestones.find(x=>x.id===id)!.actions.map(()=>({status:'not_started',at:null,by:null})),updates:[],updatedAt:null,updatedBy:null,review:null});
+const openBlockers=(w:FakeWork)=>w.updates.filter(u=>u.kind==='blocker'&&!u.resolved).length;
+const unanswered=(w:FakeWork,kind:string)=>w.updates.filter(u=>u.kind===kind&&!w.updates.some(x=>x.replyTo===u.id)).length;
+const statusOf=(id:string)=>{const w=workOf(id);return w.explicit??(openBlockers(w)||w.actions.some(a=>a.status==='blocked')?'blocked':w.actions.some(a=>a.status!=='not_started')||w.updates.some(u=>u.role==='developer')?'in_progress':'not_started');};
+const reviewStateOf=(id:string)=>{const w=workOf(id),s=statusOf(id);return w.review?(w.review.developerRevision===w.developerRevision?'reviewed':'reviewed_outdated'):s==='ready_for_review'||s==='completed'?'awaiting_review':'none';};
 function workView(me:Persona){
  const r=server.review!,ms=r.plan!.milestones,title=(id:string)=>ms.find(x=>x.id===id)!.title;
- return {viewer:{role:me.role,name:me.name},approval:r.approval,objective:{problem:r.plan!.problem.summary,goals:r.plan!.goals.map(g=>g.text),questions:r.plan!.questions.map(q=>q.text)},
-  milestones:ms.map(x=>{const w=workOf(x.id),mine=me.role==='developer'&&x.assignee===me.name;
-   return {id:x.id,title:x.title,assignee:x.assignee,status:statusOf(x.id),openBlockers:w.updates.filter(u=>u.kind==='blocker'&&!u.resolved).length,mine,
-    dependsOn:x.dependsOn.map(d=>({id:d,title:title(d),assignee:ms.find(y=>y.id===d)!.assignee,status:statusOf(d)})),
-    detail:mine||me.role!=='developer'?{description:x.description,system:x.system,actions:x.actions.map((text,index)=>({index,text,...w.actions[index]})),completionCriteria:x.completionCriteria,updates:w.updates,revision:w.revision,updatedAt:w.updatedAt,updatedBy:w.updatedBy}:null};})};
+ const milestones=ms.map(x=>{const w=workOf(x.id),mine=me.role==='developer'&&x.assignee===me.name,s=statusOf(x.id),rs=reviewStateOf(x.id),full=mine||me.role!=='developer',last=w.updates.at(-1);
+  return {id:x.id,title:x.title,assignee:x.assignee,status:s,openBlockers:openBlockers(w),mine,
+   dependsOn:x.dependsOn.map(d=>({id:d,title:title(d),assignee:ms.find(y=>y.id===d)!.assignee,status:statusOf(d)})),
+   openQuestions:unanswered(w,'question'),openFollowUps:unanswered(w,'follow_up'),actionsCompleted:w.actions.filter(a=>a.status==='completed').length,actionsTotal:x.actions.length,
+   reviewState:rs,review:w.review,attention:[...(s==='blocked'?['blocked']:[]),...(unanswered(w,'question')?['open_question']:[]),...(rs==='awaiting_review'?['awaiting_review']:[]),...(rs==='reviewed_outdated'?['review_outdated']:[])],
+   latest:full&&last?{at:last.at,by:last.by,kind:last.kind}:null,
+   detail:full?{description:x.description,system:x.system,actions:x.actions.map((text,index)=>({index,text,...w.actions[index]})),completionCriteria:x.completionCriteria,updates:w.updates,revision:w.revision,updatedAt:w.updatedAt,updatedBy:w.updatedBy}:null};});
+ const n=(f:(m:typeof milestones[number])=>number)=>milestones.reduce((a,m)=>a+f(m),0);
+ return {viewer:{role:me.role,name:me.name},approval:r.approval,objective:{problem:r.plan!.problem.summary,goals:r.plan!.goals.map(g=>g.text),questions:r.plan!.questions.map(q=>q.text)},milestones,
+  summary:{milestones:milestones.length,notStarted:n(m=>+(m.status==='not_started')),inProgress:n(m=>+(m.status==='in_progress')),blocked:n(m=>+(m.status==='blocked')),readyForReview:n(m=>+(m.status==='ready_for_review')),completed:n(m=>+(m.status==='completed')),
+   reviewed:n(m=>+(m.reviewState==='reviewed')),awaitingReview:n(m=>+(m.reviewState==='awaiting_review'||m.reviewState==='reviewed_outdated')),openBlockers:n(m=>m.openBlockers),openQuestions:n(m=>m.openQuestions),openFollowUps:n(m=>m.openFollowUps),actionsCompleted:n(m=>m.actionsCompleted),actionsTotal:n(m=>m.actionsTotal),overdue:null},
+  ...(me.role!=='developer'?{verifiedEvidence:[]}:{})};
 }
 let m:ReturnType<typeof mount>,server:{persona:string|null;review?:ChampionReview;work:Record<string,FakeWork>},calls:{method:string;url:string;persona:string|null;body?:any}[];
 function backend(signedIn:string|null=null,review:ChampionReview|undefined=undefined){
@@ -76,23 +87,35 @@ function backend(signedIn:string|null=null,review:ChampionReview|undefined=undef
   }
   // Phase 5 routes, with the server's rules: approved plans only, assignee and revision checks, no completing ahead
   // of a dependency, and another developer's workspace reduced to title and status.
-  if(/\/(milestone-work|milestone-updates|aika-questions)$/.test(url)){
+  if(/\/(milestone-work|milestone-updates|milestone-coordination|aika-questions)$/.test(url)){
    if(server.review?.status!=='published')return json({error:{code:'NO_APPROVED_PLAN'}},404);
    if(url.endsWith('/aika-questions'))return me.role==='operator'?json({error:{code:'FORBIDDEN'}},403):json({job:null});
+   if(url.endsWith('/milestone-coordination')){
+    if(me.role!=='champion')return json({error:{code:'CHAMPION_REQUIRED'}},403);
+    const body=JSON.parse(String(init!.body)),w=workOf(body.milestoneId),at='2026-10-29T12:00:00Z';
+    if(w.revision!==body.expectedRevision)return json({error:{code:'REVISION_CONFLICT'}},409);
+    const add=(kind:string,text:string,replyTo:string|null)=>w.updates.push({id:`u${w.updates.length+1}`,at,by:me.name,role:'champion',kind,text,evidence:null,replyTo,resolved:null});
+    if(body.note)add('coordination',body.note.text,null);else if(body.followUp)add('follow_up',body.followUp.text,null);
+    else if(body.respond){add('response',body.respond.text,body.respond.to);if(body.respond.resolve)w.updates=w.updates.map(u=>u.id===body.respond.to?{...u,resolved:{at,by:me.name}}:u);}
+    else{const rs=reviewStateOf(body.milestoneId);if(rs==='none')return json({error:{code:'REVIEW_NOT_READY'}},409);if(rs==='reviewed')return json({error:{code:'ALREADY_REVIEWED'}},409);
+     w.review={decision:'reviewed',at,by:me.name,note:body.review.note??null,developerRevision:w.developerRevision};}
+    w.revision++;w.updatedBy=me.name;w.updatedAt=at;return json(workView(me));
+   }
    if(url.endsWith('/milestone-updates')){
     const body=JSON.parse(String(init!.body)),ms=server.review.plan!.milestones.find(x=>x.id===body.milestoneId);
     if(me.role!=='developer')return json({error:{code:'DEVELOPER_IDENTITY_REQUIRED'}},403);
     if(!ms)return json({error:{code:'NOT_FOUND'}},404);
     if(ms.assignee!==me.name)return json({error:{code:'NOT_ASSIGNEE'}},403);
     const w=workOf(ms.id);if(w.revision!==body.expectedRevision)return json({error:{code:'REVISION_CONFLICT'}},409);
+    let dev=true;
     if(body.action){w.actions[body.action.index]={status:body.action.status,at:'2026-10-29T11:00:00Z',by:me.name};w.explicit=null;}
-    else if(body.note)w.updates.push({id:`u${w.updates.length+1}`,at:'2026-10-29T11:00:00Z',by:me.name,kind:body.note.kind,text:body.note.text,evidence:body.note.evidence??null,resolved:null});
+    else if(body.note){w.updates.push({id:`u${w.updates.length+1}`,at:'2026-10-29T11:00:00Z',by:me.name,role:'developer',kind:body.note.kind,text:body.note.text,evidence:body.note.evidence??null,replyTo:body.note.replyTo??null,resolved:null});dev=body.note.kind==='update'||body.note.kind==='blocker';}
     else if(body.resolve)w.updates=w.updates.map(u=>u.id===body.resolve?{...u,resolved:{at:'2026-10-29T11:05:00Z',by:me.name}}:u);
     else{const issues=[...(w.actions.some(a=>a.status!=='completed')?['actions_incomplete']:[]),...(w.updates.some(u=>u.kind==='blocker'&&!u.resolved)?['open_blockers']:[]),
       ...(body.status==='completed'&&ms.dependsOn.some(d=>statusOf(d)!=='completed')?['dependencies_incomplete']:[])];
      if(body.status!=='in_progress'&&issues.length)return json({error:{code:'MILESTONE_NOT_READY',details:{issues}}},409);
      w.explicit=body.status==='in_progress'?null:body.status;}
-    w.revision++;w.updatedBy=me.name;w.updatedAt='2026-10-29T11:00:00Z';
+    w.revision++;if(dev)w.developerRevision++;w.updatedBy=me.name;w.updatedAt='2026-10-29T11:00:00Z';
    }
    return json(workView(me));
   }
@@ -185,7 +208,9 @@ it('Dream Day: Maya reviews the submitted plan, assigns Alex and Jordan, saves, 
  expect(table).toContain('Alex Rivera');expect(table).toContain('Jordan Lee');expect(table).toContain('Assess payments-api repository readiness');
  // The team overview shows the same approved plan.
  await click(m.host,'Team overview');await settle();
- expect(m.host.querySelector('[aria-label="Proposed work"]')!.textContent).toMatch(/Approved.*Alex Rivera/s);
+ expect(m.host.querySelector('[aria-label="Coordination: Assess payments-api repository readiness"]')!.textContent).toContain('Alex Rivera');
+ expect(m.host.querySelector('[aria-label="Coordination: Independently validate payments-api and docs discoverability"]')!.textContent).toContain('Jordan Lee');
+ expect(m.host.querySelector('[aria-label="Proposed work"]')).toBeNull();
 });
 
 it('Dream Day: approval needs every assignee; requesting changes needs a reason and hides the plan while Chris revises',async()=>{
@@ -260,8 +285,54 @@ it('Phase 5: Alex and Jordan each work on their own approved milestone, attribut
 
  // Maya sees consolidated, attributed progress.
  await m.unmount();server.persona='maya';await render('/champion/team');
- const progress=m.host.querySelector('[aria-label="Team progress"]')!.textContent!;
- expect(progress).toContain('Alex Rivera · 1 of 2 actions completed');expect(progress).toContain('Jordan Lee · 2 of 2 actions completed');
+ const coord=(t:string)=>m.host.querySelector(`[aria-label="Coordination: ${t}"]`)!.textContent!;
+ expect(coord('Assess payments-api repository readiness')).toContain('Alex Rivera · 1 of 2 actions completed');expect(coord('Validate payments-api and docs discoverability')).toContain('Jordan Lee · 2 of 2 actions completed');
+ expect(m.host.querySelector('[aria-label="Team progress"]')!.textContent).toContain('Actions done3 of 4');
+});
+
+it('Phase 6: Maya answers, reviews and asks for follow-up; review is separate from completion; Alex replies; Chris only reads',async()=>{
+ const r=submitted();r.plan!.milestones[0].assignee='Alex Rivera';r.plan!.milestones[1].assignee='Jordan Lee';
+ backend('alex',{...r,status:'published',approval:{by:'Maya Chen',at:'2026-10-29T10:00:00Z'}});await render('/activation/work');
+ const card=()=>m.host.querySelector('[aria-label="Milestone: Assess payments-api repository readiness"]') as HTMLElement;
+ for(const i of [1,2]){await type(byLabel<HTMLSelectElement>(card(),`Status of action ${i}`)!,'completed');await settle();}
+ await type(byLabel<HTMLSelectElement>(card(),'Note type')!,'question');
+ await type(byLabel<HTMLTextAreaElement>(card(),'Short note')!,'Who owns the payments-api runbook?');
+ await click(card(),'Record question');await settle();
+ await click(card(),'Mark ready for review');await settle();
+ expect(card().querySelector('[data-testid=review-state]')!.textContent).toBe('Awaiting Champion review');
+
+ await m.unmount();server.persona='maya';calls=[];await render('/champion/team');
+ expect(m.host.querySelector('[aria-label="Needs attention"]')!.textContent).toMatch(/Unanswered question.*Ready for your review/);
+ expect(m.host.querySelector('[aria-label="Team progress"]')!.textContent).toContain('Awaiting your review1');
+ const coord=()=>m.host.querySelector('[aria-label="Coordination: Assess payments-api repository readiness"]') as HTMLElement;
+ await click(coord(),'Respond');
+ await type(byLabel<HTMLTextAreaElement>(coord(),'Response')!,'The platform team owns it.');
+ await click(coord(),'Send response');await settle();
+ expect(calls.at(-1)!.body).toEqual({milestoneId:'m-1',expectedRevision:4,respond:{to:'u1',text:'The platform team owns it.'}});
+ expect(coord().textContent).toContain('Maya Chen (Champion)');expect(coord().textContent).toContain('answered');
+ await click(coord(),'Mark reviewed');await settle();
+ expect(calls.at(-1)!.body).toEqual({milestoneId:'m-1',expectedRevision:5,review:{decision:'reviewed',note:null}});
+ expect(coord().querySelector('[data-testid=review-state]')!.textContent).toBe('Reviewed');
+ expect(coord().querySelector('[data-testid=coord-status]')!.textContent).toBe('Ready for review');
+ await type(byLabel<HTMLSelectElement>(coord(),'Coordination type')!,'followUp');
+ await type(byLabel<HTMLTextAreaElement>(coord(),'Coordination text')!,'Please link the readiness checklist.');
+ await click(coord(),'Request follow-up');await settle();
+ expect(server.work['m-1'].updates.map(u=>[u.kind,u.by,u.role])).toEqual([['question','Alex Rivera','developer'],['response','Maya Chen','champion'],['follow_up','Maya Chen','champion']]);
+ expect(server.work['m-1'].explicit).toBe('ready_for_review');
+
+ await m.unmount();server.persona='alex';calls=[];await render('/activation/work');
+ expect(card().querySelector('[data-testid=review-state]')!.textContent).toBe('Reviewed by Maya Chen');
+ const {act}=await import('react');
+ await act(async()=>{(card().querySelector('[data-entry-kind=follow_up] button') as HTMLButtonElement).click();});
+ await type(byLabel<HTMLTextAreaElement>(card(),'Short note')!,'Linked in the repository README.');
+ await click(card(),'Send reply');await settle();
+ expect(calls.at(-1)!.body).toEqual({milestoneId:'m-1',expectedRevision:7,note:{kind:'response',text:'Linked in the repository README.',evidence:null,replyTo:'u3'}});
+
+ await m.unmount();server.persona='chris';calls=[];await render('/operator/progress');
+ const view=m.host.querySelector('[aria-label="Approved milestone progress"]') as HTMLElement;
+ expect(view.textContent).toContain('Reviewed by Maya Chen');expect(view.textContent).toContain('Linked in the repository README.');
+ expect(Array.from(view.querySelectorAll('button')).map(b=>b.textContent)).toEqual(['Refresh progress']);
+ expect(calls.filter(c=>c.method==='POST')).toEqual([]);
 });
 
 it('Phase 5: before approval there is no My work tab, and AiKA is in the Portal navigation',async()=>{

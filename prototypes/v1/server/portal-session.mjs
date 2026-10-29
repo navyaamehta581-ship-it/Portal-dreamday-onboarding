@@ -24,7 +24,7 @@ import {join} from 'node:path';
 
 const COOKIE = 'portal_demo_session';
 const SESSION_MS = 8 * 3600_000;
-const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|aika-questions)$/;
+const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions)$/;
 const LOOPBACK = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;
 const ROLES = ['operator', 'champion', 'developer'];
 // Model-assisted drafting can take minutes on a laptop; every other route keeps the short limit.

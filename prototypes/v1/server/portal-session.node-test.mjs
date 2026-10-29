@@ -167,3 +167,15 @@ test('each developer uses their own developer credential when one exists; otherw
     assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${devB}`);
   } finally {await h.close(); rmSync(file);}
 });
+
+test('Champion coordination is forwarded with the Champion credential and her name; the API decides who may coordinate', async () => {
+  const h = await harness();
+  try {
+    const maya = await h.signIn('maya');
+    const r = await h.call('/portal-api/activation/v1/customers/fictional-north/milestone-coordination', {method: 'POST', headers: {...maya, Origin: h.origin, 'X-Portal-Actor': 'Someone Else'}, body: '{"milestoneId":"m","expectedRevision":0,"note":{"text":"Hi"}}'});
+    assert.equal(r.status, 200);
+    assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${champA}`);
+    assert.equal(h.calls.at(-1).init.headers['X-Portal-Actor'], 'Maya Chen');
+    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-other/milestone-coordination', {method: 'POST', headers: {...maya, Origin: h.origin}, body: '{}'})).status, 403, 'not another customer');
+  } finally {await h.close();}
+});

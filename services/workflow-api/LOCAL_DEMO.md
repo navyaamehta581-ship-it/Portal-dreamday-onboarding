@@ -39,6 +39,7 @@ Then:
    - then either **Request changes** (Chris sees your reason and resubmits) or confirm and **Approve onboarding plan**.
 7. Sign out and choose **Alex** or **Jordan**: each sees only the work assigned to them. **Chris** sees that Champion approval is complete.
 8. As **Alex**, select **Open my work**: set action statuses, record an update or blocker (with an optional reference), and mark the milestone ready for review once every action is completed and no blocker is open. Select **Ask AiKA about this milestone** to ask AiKA. As **Jordan**, work on the dependent milestone: it can't be marked completed until Alex's is. **Maya** (Team overview) and **Chris** (Developer Progress) see the consolidated progress.
+9. As **Maya**, open **Team Coordination → Team overview**: check **Needs your attention**, **Respond** to a question or blocker (optionally marking the blocker resolved), add a coordination note or **Request follow-up**, and **Mark reviewed** once a developer marks their milestone ready for review. Reviewing doesn't complete the milestone. Alex or Jordan reply from **My work**; Chris sees it all read-only.
 
 No tokens are copied or pasted: the Portal's local session layer reads them from `ACTIVATION_DEMO_DIR` on the server side.
 

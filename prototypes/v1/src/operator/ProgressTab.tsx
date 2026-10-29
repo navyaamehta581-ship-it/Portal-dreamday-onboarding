@@ -2,7 +2,7 @@ import type {ActivationState} from '../../../../contracts/activation/v1/state';
 import {championPlan} from '../activation/champion';
 import {milestoneTone} from '../portal-app/onboarding/model';
 import {planLabel} from './versions';
-import {TeamProgressList} from '../portal-app/work/WorkTab';
+import {CoordinationView} from '../portal-app/work/Coordination';
 import type {MilestoneWorkSession} from '../portal-app/work/useMilestoneWork';
 
 /** Developer Progress: what developers reported, what was observed, and what needs Chris's decision. */
@@ -27,9 +27,10 @@ export function ProgressTab({state,work}:{state:ActivationState|null;work?:Miles
    {state.outcome.summary&&<p className="pt-note">Latest reported outcome text: “{state.outcome.summary.slice(0,300)}”</p>}
   </section>
 
-  {work?.progress&&<section className="pt-card pt-span" aria-label="Approved milestone progress">
-   <h3>Approved milestone progress</h3>
-   <TeamProgressList work={work}/>
+  {work?.progress&&<section className="pt-span" aria-label="Approved milestone progress">
+   <h3 style={{fontSize:17,fontWeight:700,marginBottom:4}}>Approved milestone progress</h3>
+   <p className="pt-note" style={{marginTop:0,marginBottom:16}}>Read-only: the same records Maya coordinates from. Developers and Maya make every change.</p>
+   <CoordinationView work={work} mode="observer"/>
   </section>}
 
   <section className="pt-card pt-span" aria-label="Follow-up">
