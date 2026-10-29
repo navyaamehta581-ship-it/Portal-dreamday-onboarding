@@ -60,7 +60,7 @@ AiKA is in the Portal navigation (`/aika`), and each milestone card has **Ask Ai
   - unknowns;
   - the viewer's own milestones in full (actions, criteria, dependencies, their notes);
   - other milestones by title and status;
-  - "REPOSITORY EVIDENCE" — only GitHub observations the backend actually recorded, otherwise "none. Nothing has been inspected."
+  - "REPOSITORY OBSERVATIONS" — only observations the backend recorded, each with an id AiKA must cite (Phase 7, [repository-evidence.md](repository-evidence.md)), otherwise "none. No repository has been inspected."
   
   Every line passes the developer privacy screen again before it reaches the model. Chris's sources and notes, commercial information and unapproved drafts are never included.
 - **Labelled answers.** Each part is **Known**, **Reported**, **Suggestion** or **Unknown**, plus an optional next step. The server checks the answer:

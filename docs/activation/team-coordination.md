@@ -18,7 +18,7 @@ The approved plan has no deadlines, so nothing is shown as overdue. The server r
 - ready for her review, or changed since her review;
 - started while waiting on a dependency.
 
-**Evidence** has two kinds:
+**Evidence** has two kinds (Phase 7 adds repository panels; see [repository-evidence.md](repository-evidence.md)):
 - **Verified**: only GitHub observations the Portal backend recorded itself. Nothing else is ever marked verified.
 - **Reported**: references developers add to their notes. They appear with each milestone and are never checked.
 

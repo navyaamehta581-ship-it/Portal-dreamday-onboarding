@@ -14,6 +14,7 @@ import {ReviewTab} from './ReviewTab';
 import {ProgressTab} from './ProgressTab';
 import {IntegrationTools} from './IntegrationTools';
 import {useMilestoneWork} from '../portal-app/work/useMilestoneWork';
+import {useRepositoryEvidence} from '../portal-app/work/useRepositoryEvidence';
 
 const TABS=[['context','Customer Context',''],['draft','Onboarding Draft','/draft'],['progress','Developer Progress','/progress']] as const;
 // Same Portal navigation; the onboarding entry opens Chris's page and other entries stay within /operator.
@@ -31,7 +32,7 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
  const api=useMemo(()=>customer?activationClient(customer.customerId,'','',`/operator-api/${customer.id}`,persona.id):null,[customer,persona.id]);
  const session=useActivation(api,`${persona.id}:${customerId}`);
  const ws=useCustomerWorkspace(api);
- const work=useMilestoneWork(api);
+ const work=useMilestoneWork(api),repos=useRepositoryEvidence(api);
  useEffect(()=>{if(api)void session.refresh();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
  useEffect(()=>{if(session.error==='PERSONA_CHANGED'||session.error==='SIGN_IN_REQUIRED')onPersonaChanged();},[session.error]); // eslint-disable-line react-hooks/exhaustive-deps
  // Once the customer is known to be unpublished, keep the draft mounted through later errors (e.g. conflicts).
@@ -55,7 +56,7 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
   {feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2></div></div></div>:
   <div className="pt-page">
    <div className="pt-pagebar"><h1><span className="icon"><Flag size={16} aria-hidden="true"/></span>Customer Onboarding</h1>
-    <div className="tools">{customer&&<button className="pt-tool" disabled={busy} onClick={()=>{void session.refresh();void work.reload();}}><RefreshCw size={15} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button>}</div></div>
+    <div className="tools">{customer&&<button className="pt-tool" disabled={busy} onClick={()=>{void session.refresh();void work.reload();void repos.reload();}}><RefreshCw size={15} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button>}</div></div>
    <div className="pt-entity">
     <div className="pt-entity-head">
      <div><p className="pt-crumb">Customer Onboarding — {customer?.label??'No customer'}</p><h2>{state?state.context.agreedGoal.text:ready?'Not published yet':customer?'Loading…':'No customer is assigned to you'}</h2></div>
@@ -77,7 +78,7 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
      <div className="pt-tabpanel" role="tabpanel" id="operator-panel" aria-labelledby={'op-tab-'+tab}>
       {tab==='context'&&<InformationTab ws={ws} locked={!!state}/>}
       {tab==='draft'&&<ReviewTab ws={ws} state={state}/>}
-      {tab==='progress'&&<ProgressTab state={state} work={work}/>}
+      {tab==='progress'&&<ProgressTab state={state} work={work} repos={repos}/>}
       {/* Integrator tools only for a published customer: nothing here can publish around Dream Day. */}
       {tab==='progress'&&state&&<IntegrationTools session={session}/>}
      </div>

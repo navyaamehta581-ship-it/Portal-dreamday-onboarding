@@ -4,9 +4,10 @@ import {milestoneTone} from '../portal-app/onboarding/model';
 import {planLabel} from './versions';
 import {CoordinationView} from '../portal-app/work/Coordination';
 import type {MilestoneWorkSession} from '../portal-app/work/useMilestoneWork';
+import type {RepositoryEvidenceSession} from '../portal-app/work/useRepositoryEvidence';
 
 /** Developer Progress: what developers reported, what was observed, and what needs Chris's decision. */
-export function ProgressTab({state,work}:{state:ActivationState|null;work?:MilestoneWorkSession}){
+export function ProgressTab({state,work,repos}:{state:ActivationState|null;work?:MilestoneWorkSession;repos?:RepositoryEvidenceSession}){
  if(!state)return <section className="pt-card"><h3>Nothing published yet</h3><p className="pt-note">Developer progress appears here after you publish the customer context.</p></section>;
  const reports=state.evidence.filter(e=>e.kind==='developer_report').sort((a,b)=>b.observedAt.localeCompare(a.observedAt));
  const observed=[...state.evidence,...state.plan.evidence].filter((e,i,all)=>e.kind==='github_observation'&&all.findIndex(x=>x.id===e.id)===i);
@@ -30,7 +31,7 @@ export function ProgressTab({state,work}:{state:ActivationState|null;work?:Miles
   {work?.progress&&<section className="pt-span" aria-label="Approved milestone progress">
    <h3 style={{fontSize:17,fontWeight:700,marginBottom:4}}>Approved milestone progress</h3>
    <p className="pt-note" style={{marginTop:0,marginBottom:16}}>Read-only: the same records Maya coordinates from. Developers and Maya make every change.</p>
-   <CoordinationView work={work} mode="observer"/>
+   <CoordinationView work={work} repos={repos} mode="observer"/>
   </section>}
 
   <section className="pt-card pt-span" aria-label="Follow-up">

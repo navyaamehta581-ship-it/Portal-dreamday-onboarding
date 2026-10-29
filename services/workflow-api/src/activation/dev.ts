@@ -63,7 +63,7 @@ export function developmentActivation(goalFilename:string) {
   if(apiOrigin&&apiOrigin!=='https://api.github.com'&&!/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(apiOrigin))throw new Error('ACTIVATION_GITHUB_API_ORIGIN must be https://api.github.com or a loopback test origin');
   const repositoryStore=openRepositoryStore(filename);
   const repositories=createRepositoryService({config:repositoryConfig,store:repositoryStore,published:p=>handoffs.published(p),
-   github:{token:process.env.ACTIVATION_GITHUB_REPOSITORY_TOKEN||undefined,...(apiOrigin?{apiOrigin}:{})},maxAgeHours:Number(process.env.ACTIVATION_EVIDENCE_MAX_AGE_HOURS??24)});
+   github:{token:process.env.ACTIVATION_GITHUB_REPOSITORY_TOKEN||undefined,...(apiOrigin?{apiOrigin}:{})},maxAgeHours:Number(process.env.ACTIVATION_EVIDENCE_MAX_AGE_HOURS??24),cooldownMs:Number(process.env.ACTIVATION_INSPECTION_COOLDOWN_SECONDS??30)*1000});
   const aikaModel=ollama??ollamaConfigFromEnv({...process.env,PORTAL_LLM_PROVIDER:process.env.AIKA_LLM_PROVIDER});
   const aika=createAika({model:aikaModel?createOllama(aikaModel):null,work,publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,
    // Phase 7 observations carry ids AiKA must cite; older inspection-packet evidence is live GitHub evidence too.

@@ -57,7 +57,16 @@ function workView(me:Persona){
    reviewed:n(m=>+(m.reviewState==='reviewed')),awaitingReview:n(m=>+(m.reviewState==='awaiting_review'||m.reviewState==='reviewed_outdated')),openBlockers:n(m=>m.openBlockers),openQuestions:n(m=>m.openQuestions),openFollowUps:n(m=>m.openFollowUps),actionsCompleted:n(m=>m.actionsCompleted),actionsTotal:n(m=>m.actionsTotal),overdue:null},
   ...(me.role!=='developer'?{verifiedEvidence:[]}:{})};
 }
-let m:ReturnType<typeof mount>,server:{persona:string|null;review?:ChampionReview;work:Record<string,FakeWork>},calls:{method:string;url:string;persona:string|null;body?:any}[];
+// Phase 7 in the fake API: one configured sample repository, relevant to both milestones; developers see their own.
+const fakeObservation=(signal:string,status:string,summary:string,limitation:string|null=null)=>({id:`obs-${signal}`,signal,status,mode:'fixture',summary,details:[],limitation,
+ source:{kind:'fixture',request:'Sample fixture fixtures/repositories/test.json',path:null,url:null},repository:'northstar-commerce/payments-api',commit:'5f1c0de2a9b4e7c3d8f6a1b2c3d4e5f60718293a',retrievedAt:'2026-10-29T12:30:00Z'});
+function repoView(me:Persona){
+ const all=[{id:'m-1',title:'Assess payments-api repository readiness',assignee:'Alex Rivera',focus:['readme','codeowners','ci_config'],actionLinks:[{index:0,signals:['codeowners','ci_config']}]},
+  {id:'m-2',title:'Validate payments-api and docs discoverability',assignee:'Jordan Lee',focus:['catalog_info','docs'],actionLinks:[]}];
+ const milestones=me.role==='developer'?all.filter(x=>x.assignee===me.name):all;
+ return {repositories:server.repos?[{id:'payments-api',label:'payments-api',repository:'northstar-commerce/payments-api',mode:'fixture',canInspect:me.role!=='operator',milestones,latest:server.inspection??null,evidence:server.inspection??null,stale:false,maxAgeHours:24}]:[]};
+}
+let m:ReturnType<typeof mount>,server:{persona:string|null;review?:ChampionReview;work:Record<string,FakeWork>;repos?:boolean;inspection?:any},calls:{method:string;url:string;persona:string|null;body?:any}[];
 function backend(signedIn:string|null=null,review:ChampionReview|undefined=undefined){
  server={persona:signedIn,review,work:{}};calls=[];
  vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
@@ -87,6 +96,18 @@ function backend(signedIn:string|null=null,review:ChampionReview|undefined=undef
   }
   // Phase 5 routes, with the server's rules: approved plans only, assignee and revision checks, no completing ahead
   // of a dependency, and another developer's workspace reduced to title and status.
+  if(/\/(repository-evidence|repository-inspections)$/.test(url)){
+   if(server.review?.status!=='published')return json({error:{code:'NO_APPROVED_PLAN'}},404);
+   if(url.endsWith('/repository-inspections')){
+    if(me.role==='operator')return json({error:{code:'FORBIDDEN'}},403);
+    server.inspection={id:'i1',repositoryId:'payments-api',repository:'northstar-commerce/payments-api',mode:'fixture',status:'succeeded',errorCode:null,retryAfter:null,defaultBranch:'main',commit:'5f1c0de2a9b4e7c3d8f6a1b2c3d4e5f60718293a',startedAt:'2026-10-29T12:30:00Z',completedAt:'2026-10-29T12:30:01Z',requestedBy:me.name,
+     observations:[fakeObservation('readme','observed','README found at README.md.'),fakeObservation('codeowners','missing','No CODEOWNERS file in .github/, docs/ or the root found.','A missing CODEOWNERS file is not proof that nobody owns the service.'),
+      fakeObservation('ci_config','observed','2 GitHub Actions workflow files.','A workflow file is not proof that CI runs or passes.'),fakeObservation('catalog_info','observed','Backstage metadata at catalog-info.yaml: owner: team-checkout.'),
+      fakeObservation('docs','observed','2 documentation files under docs/.'),fakeObservation('ci_runs','not_inspected','CI run results were not inspected.')]};
+    return json({inspection:server.inspection,reused:false,evidence:repoView(me)},201);
+   }
+   return json(repoView(me));
+  }
   if(/\/(milestone-work|milestone-updates|milestone-coordination|aika-questions)$/.test(url)){
    if(server.review?.status!=='published')return json({error:{code:'NO_APPROVED_PLAN'}},404);
    if(url.endsWith('/aika-questions'))return me.role==='operator'?json({error:{code:'FORBIDDEN'}},403):json({job:null});
@@ -333,6 +354,38 @@ it('Phase 6: Maya answers, reviews and asks for follow-up; review is separate fr
  expect(view.textContent).toContain('Reviewed by Maya Chen');expect(view.textContent).toContain('Linked in the repository README.');
  expect(Array.from(view.querySelectorAll('button')).map(b=>b.textContent)).toEqual(['Refresh progress']);
  expect(calls.filter(c=>c.method==='POST')).toEqual([]);
+});
+
+it('Phase 7: sample repository evidence beside each milestone’s work, labelled; Maya sees it; Chris can’t inspect; nothing completes',async()=>{
+ const r=submitted();r.plan!.milestones[0].assignee='Alex Rivera';r.plan!.milestones[1].assignee='Jordan Lee';
+ backend('alex',{...r,status:'published',approval:{by:'Maya Chen',at:'2026-10-29T10:00:00Z'}});server.repos=true;await render('/activation/work');
+ const card=()=>m.host.querySelector('[aria-label="Milestone: Assess payments-api repository readiness"]') as HTMLElement;
+ const panel=()=>card().querySelector('[aria-label="Repository evidence: payments-api"]') as HTMLElement;
+ expect(panel().querySelector('[data-testid=evidence-mode]')!.textContent).toBe('Sample data · fictional repository, not live');
+ expect(panel().textContent).toContain('nothing about this repository is verified');
+ await click(panel(),'Inspect repository (read-only)');await settle();
+ expect(calls.at(-1)!.body).toEqual({repositoryId:'payments-api'});
+ const signals=Array.from(panel().querySelectorAll('.pt-work-log>li')).slice(0,3).map(li=>li.getAttribute('data-signal'));
+ expect(signals).toEqual(['readme','codeowners','ci_config']);
+ expect(panel().querySelector('[data-signal=codeowners]')!.textContent).toContain('not proof that nobody owns the service');
+ expect(panel().querySelector('[data-signal=ci_config]')!.textContent).toContain('Sample · observed');
+ expect(card().querySelector('[data-testid=action-evidence]')!.textContent).toContain('CODEOWNERS (ownership): not found');
+ expect(card().querySelector('[data-testid=milestone-status]')!.textContent).toBe('Not started');
+ expect(server.work['m-1']?.actions.every(a=>a.status==='not_started')??true).toBe(true);
+
+ await m.unmount();server.persona='jordan';await render('/activation/work');
+ const jpanel=m.host.querySelector('[aria-label="Milestone: Validate payments-api and docs discoverability"] [aria-label="Repository evidence: payments-api"]') as HTMLElement;
+ expect(Array.from(jpanel.querySelectorAll('.pt-work-log>li')).slice(0,2).map(li=>li.getAttribute('data-signal'))).toEqual(['catalog_info','docs']);
+
+ await m.unmount();server.persona='maya';await render('/champion/team');
+ const maya=m.host.querySelector('[aria-label="Repository evidence: payments-api"]') as HTMLElement;
+ expect(maya.textContent).toContain('inspected');expect(maya.textContent).toContain('by Alex Rivera');
+ expect(m.host.querySelector('[aria-label="Evidence"]')!.textContent).toContain('reported, not verified');
+
+ await m.unmount();server.persona='chris';calls=[];await render('/operator/progress');
+ const chris=m.host.querySelector('[aria-label="Approved milestone progress"] [aria-label="Repository evidence: payments-api"]') as HTMLElement;
+ expect(chris.textContent).toContain('Sample · observed');
+ expect(Array.from(chris.querySelectorAll('button')).map(b=>b.textContent)).toEqual([]);
 });
 
 it('Phase 5: before approval there is no My work tab, and AiKA is in the Portal navigation',async()=>{

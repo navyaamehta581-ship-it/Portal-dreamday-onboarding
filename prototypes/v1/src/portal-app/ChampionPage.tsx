@@ -8,11 +8,12 @@ import {DreamDay} from './dreamday/DreamDay';
 import {useDreamDay} from './dreamday/useDreamDay';
 import {CoordinationView} from './work/Coordination';
 import type {MilestoneWorkSession} from './work/useMilestoneWork';
+import type {RepositoryEvidenceSession} from './work/useRepositoryEvidence';
 
 /** Team Coordination: Dream Day (review and approve Chris's plan) and the team overview of the published plan. */
-export function ChampionPage({session,account,api,work,tab}:{session:ActivationSession;account:PortalAccount;api:ReturnType<typeof activationClient>;work:MilestoneWorkSession;tab:'dream-day'|'team'}){
+export function ChampionPage({session,account,api,work,repos,tab}:{session:ActivationSession;account:PortalAccount;api:ReturnType<typeof activationClient>;work:MilestoneWorkSession;repos?:RepositoryEvidenceSession;tab:'dream-day'|'team'}){
  // After a decision the onboarding state may change (approval publishes), so refresh it too.
- const dd=useDreamDay(api,()=>{void session.refresh();void work.reload();});
+ const dd=useDreamDay(api,()=>{void session.refresh();void work.reload();void repos?.reload();});
  return <div className="pt-page">
   <div className="pt-pagebar"><h1><span className="icon"><Users size={16} aria-hidden="true"/></span>Team Coordination</h1></div>
   <div className="pt-entity">
@@ -20,7 +21,7 @@ export function ChampionPage({session,account,api,work,tab}:{session:ActivationS
    <div className="pt-tabs" role="tablist" aria-label="Team Coordination sections">{([['dream-day','Dream Day','/champion'],['team','Team overview','/champion/team']] as const).map(([id,label,to])=>
     <button key={id} role="tab" aria-selected={tab===id} aria-controls="champion-panel" onClick={()=>navigate(to)}>{label}</button>)}</div>
    <div className="pt-tabpanel" role="tabpanel" id="champion-panel">
-    {tab==='dream-day'?<DreamDay dd={dd} customer={account.label}/>:<TeamOverview session={session} account={account} work={work}/>}
+    {tab==='dream-day'?<DreamDay dd={dd} customer={account.label}/>:<TeamOverview session={session} account={account} work={work} repos={repos}/>}
    </div>
   </div>
  </div>;
@@ -29,7 +30,7 @@ export function ChampionPage({session,account,api,work,tab}:{session:ActivationS
 /** Maya's coordination view. For a plan approved in Dream Day: team progress, what needs her attention, each
  * milestone's work, discussion and review, all from the server's progress records. A plan published before Dream Day
  * is shown as proposals; nothing is shown as approved unless the server says so. */
-function TeamOverview({session,account,work}:{session:ActivationSession;account:PortalAccount;work:MilestoneWorkSession}){
+function TeamOverview({session,account,work,repos}:{session:ActivationSession;account:PortalAccount;work:MilestoneWorkSession;repos?:RepositoryEvidenceSession}){
  const {state,busy,error}=session,h=state?.handoff;
  return <div>
   {!state?<div className="pt-empty" role={error&&!busy?'alert':'status'}><div><h2>{busy||!error?'Loading your team’s onboarding…':loadProblem(error).title}</h2>{error&&!busy&&<p>{loadProblem(error).detail}</p>}</div></div>:
@@ -38,7 +39,7 @@ function TeamOverview({session,account,work}:{session:ActivationSession;account:
    {h?.approval?<div className="pt-banner" role="status" style={{marginTop:22}}>Approved by {h.approval.by} in Dream Day on {new Date(h.approval.at).toLocaleString()}. Each developer sees the work assigned to them.</div>
     :<div className="pt-banner warn" role="status" style={{marginTop:22}}>This onboarding was published before Dream Day. Nothing here has been approved; plans are reviewed and approved in Dream Day.</div>}
    <div style={{display:'grid',gap:20,marginTop:22}}>
-    {h?.approval&&<CoordinationView work={work} mode="champion"/>}
+    {h?.approval&&<CoordinationView work={work} repos={repos} mode="champion"/>}
     <section className="pt-card" aria-label="Technical team">
      <h3>Technical team</h3>
      {h?.team?.length?<ul style={{listStyle:'none',padding:0,margin:'4px 0 0'}}>{h.team.map(p=><li key={p.name} style={{marginTop:12}}><strong>{p.name}</strong> — {p.role} <span className={'pt-pill'+(p.status==='reported'?' green':'')}>{p.status==='reported'?'Named in sources':'Inferred'}</span></li>)}</ul>

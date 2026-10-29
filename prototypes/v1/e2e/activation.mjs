@@ -7,6 +7,7 @@ import {fileURLToPath} from 'node:url';
 import {createRequire} from 'node:module';
 import {createServer} from 'node:net';
 import {createServer as createHttpServer} from 'node:http';
+import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE_PATH??'playwright');
 const frontend=fileURLToPath(new URL('..',import.meta.url)),repo=resolve(frontend,'../..');
@@ -31,17 +32,50 @@ const stubOllama=createHttpServer((req,res)=>{let body='';req.on('data',d=>body+
  if(req.url!=='/api/chat'||aikaMode==='down'){res.writeHead(503);res.end();return;}
  const prompt=JSON.parse(body).messages.map(x=>x.content).join('\n');aikaPrompts.push(prompt);
  const focus=/\(the question is about this one\): ([^—\n]+)/.exec(prompt)?.[1]?.trim()??'your approved milestones';
+// Phase 7: once the prompt carries a recorded live CODEOWNERS observation, the stub cites it in a "verified" part and
+ // adds an uncited repository claim, which AiKA must remove.
+ const owners=/\[(obs-[a-f0-9]{10})\] OBSERVED \(live, read-only\) example-org\/checkout-api@[a-f0-9]{12} codeowners/.exec(prompt)?.[1];
+ if(owners){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({message:{content:JSON.stringify({sections:[{kind:'verified',text:'CODEOWNERS at .github/CODEOWNERS names @example-org/checkout-team.',citations:[owners]},
+  {kind:'known',text:'The repository has a catalog-info.yaml and passing CI.',citations:[]},{kind:'suggestion',text:'Confirm with @example-org/checkout-team that they own checkout-api.',citations:[]}],next_step:null})},done:true}));return;}
  const content=JSON.stringify({sections:[{kind:'known',text:`Your milestone is ${focus}.`},{kind:'reported',text:'You reported a blocker about repository access.'},
   {kind:'known',text:'I inspected the repository and verified the CODEOWNERS file.'},{kind:'suggestion',text:'Resolve the access blocker with your Champion before the next action.'},
   {kind:'unknown',text:'Which CI system deploys it is not stated; your Champion could answer.'}],next_step:'Mark the next action started once access is granted.'});
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({message:{content},done:true,eval_count:40,eval_duration:1e9}));});});
+// A loopback stand-in for GitHub's REST API (a test double, not GitHub): one repository, GET only. Every request is
+// recorded so the test can prove the inspector only reads. githubMode switches it to a rate limit.
+const githubCalls=[];let githubMode='ok';
+const GH_FILES={'README.md':'# checkout-api\n\nTest double content.\n','.github/CODEOWNERS':'* @example-org/checkout-team\n','.github/workflows/ci.yml':'name: ci\non: [push]\n',
+ 'docs/index.md':'# Docs\n','mkdocs.yml':'site_name: checkout-api\n','Dockerfile':'FROM scratch\n','src/index.ts':'export {};\n'};
+const ghSha=c=>{const b=Buffer.from(c);return createHash('sha1').update(`blob ${b.length}\0`).update(b).digest('hex');};
+const stubGitHub=createHttpServer((req,res)=>{
+ githubCalls.push({method:req.method,path:req.url,auth:req.headers.authorization??null});
+ const json=(v,status=200,headers={})=>{res.writeHead(status,{'Content-Type':'application/json',...headers});res.end(JSON.stringify(v));};
+ if(githubMode==='limit')return json({message:'API rate limit exceeded'},403,{'x-ratelimit-remaining':'0','x-ratelimit-reset':String(Math.floor(Date.now()/1000)+900)});
+ const root='/repos/example-org/checkout-api',commit='c'.repeat(40),tree='d'.repeat(40);
+ if(req.method!=='GET')return json({message:'read-only test double'},405);
+ if(req.url===root)return json({full_name:'example-org/checkout-api',default_branch:'main',html_url:'https://github.com/example-org/checkout-api',pushed_at:'2026-10-28T10:00:00Z',visibility:'private',archived:false});
+ if(req.url===`${root}/commits/main`)return json({sha:commit,commit:{committer:{date:'2026-10-28T09:00:00Z'},tree:{sha:tree}}});
+ if(req.url===`${root}/git/trees/${tree}?recursive=1`)return json({sha:tree,truncated:false,tree:Object.entries(GH_FILES).map(([path,c])=>({path,type:'blob',mode:'100644',sha:ghSha(c),size:Buffer.byteLength(c)}))});
+ const blob=/\/git\/blobs\/([a-f0-9]{40})$/.exec(req.url??'');const file=blob&&Object.values(GH_FILES).find(c=>ghSha(c)===blob[1]);
+ if(file)return json({sha:blob[1],encoding:'base64',size:Buffer.byteLength(file),content:Buffer.from(file).toString('base64')});
+ return json({message:'Not Found'},404);
+});
 try{
+ await new Promise(r=>stubGitHub.listen(0,'127.0.0.1',r));const githubOrigin=`http://127.0.0.1:${stubGitHub.address().port}`;
  await new Promise(r=>stubOllama.listen(0,'127.0.0.1',r));const ollamaUrl=`http://127.0.0.1:${stubOllama.address().port}`;
  const uiPort=await port(),url=`http://127.0.0.1:${uiPort}`;
  const customers=[{id:'northstar',label:'Northstar Engineering',customerId:'fictional-northstar-engineering'},{id:'lumen',label:'Lumen Retail',customerId:'fictional-lumen-retail'}];
  for(const c of customers){
-  c.dir=join(directory,c.id);mkdirSync(c.dir,{mode:0o700});c.apiOrigin=`http://127.0.0.1:${await port()}`;c.tokenFile=join(c.dir,'token');c.operatorTokenFile=join(c.dir,'operator-token');c.championTokenFile=join(c.dir,'champion-token');
+  c.dir=join(directory,c.id);mkdirSync(c.dir,{mode:0o700});
+  // Phase 7: Northstar's checkout-api in live mode against the GitHub test double; Lumen's service as labelled sample data.
+  c.repositories=join(c.dir,'repositories.json');
+  if(c.id==='lumen')writeFileSync(join(c.dir,'recs-fixture.json'),JSON.stringify({repository:'lumen/recs-service',defaultBranch:'main',commit:'e'.repeat(40),committedAt:'2026-10-01T00:00:00Z',pushedAt:'2026-10-01T00:00:00Z',
+   files:{'README.md':'# recs-service (sample)\n','.github/workflows/ci.yml':'name: ci\n'}}));
+  writeFileSync(c.repositories,JSON.stringify(c.id==='lumen'?[{customerId:c.customerId,id:'recs-service',label:'recs-service',repository:'lumen/recs-service',mode:'fixture',fixture:join(c.dir,'recs-fixture.json'),services:['recs-service','recommendation-service','lumen/recs-service','gitlab.com/lumen/recs-service']}]
+   :[{customerId:c.customerId,id:'checkout-api',label:'checkout-api',repository:'example-org/checkout-api',mode:'live',services:['checkout-api']}]));c.apiOrigin=`http://127.0.0.1:${await port()}`;c.tokenFile=join(c.dir,'token');c.operatorTokenFile=join(c.dir,'operator-token');c.championTokenFile=join(c.dir,'champion-token');
   await start(['scripts/demo.ts','handoff'],join(repo,'services/workflow-api'),{PORT:c.apiOrigin.split(':')[2],ACTIVATION_DEMO_DIR:c.dir,ACTIVATION_DEMO_CUSTOMER_ID:c.customerId,ACTIVATION_DEMO_FRONTEND_ORIGIN:url,
+   ACTIVATION_REPOSITORIES_PATH:c.repositories,ACTIVATION_INSPECTION_COOLDOWN_SECONDS:'0',
+   ...(c.id==='northstar'?{ACTIVATION_GITHUB_API_ORIGIN:githubOrigin,ACTIVATION_GITHUB_REPOSITORY_TOKEN:'e2e-read-only-test-token'}:{}),
    // Each developer gets their own credential; Northstar's AiKA uses the stub model, Lumen's has none.
    ACTIVATION_DEMO_DEVELOPERS:c.id==='lumen'?'sam=Sam Okafor':'alex=Alex Rivera,jordan=Jordan Lee',
    ...(c.id==='northstar'?{AIKA_LLM_PROVIDER:'ollama',OLLAMA_URL:ollamaUrl,OLLAMA_MODEL:'stub-model',OLLAMA_RETRIES:'0',OLLAMA_TIMEOUT_MS:'10000'}:{AIKA_LLM_PROVIDER:'',PORTAL_LLM_PROVIDER:''})},out=>out.includes('FICTIONAL DEMO API:'));
@@ -114,6 +148,7 @@ try{
  await op.getByLabel('Milestone 1 title').fill('Review checkout-api repository readiness and prepare it for Catalog registration');
  await op.getByRole('button',{name:'Add milestone'}).click();
  await op.getByLabel('Milestone 2 title').fill('Validate that checkout-api is discoverable in the Catalog');
+ await op.getByLabel('Milestone 2 system').fill('checkout-api · northstar/platform');
  await op.getByLabel('Milestone 2 actions').fill('Search the Catalog for checkout-api\nOpen its docs link');
  await op.getByLabel('Milestone 2 completion criteria').fill('checkout-api is found from Catalog search with a working docs link');
  await op.getByLabel('Milestone 2').getByRole('checkbox').check();
@@ -277,7 +312,7 @@ try{
  assert.ok(said.includes(`Your milestone is ${ALEX}`)&&said.includes('Known')&&said.includes('Reported')&&said.includes('Suggestion')&&said.includes('Unknown'),said);
  assert.ok(!said.includes('I inspected')&&said.includes('1 part was removed'),'claimed inspections are removed: nothing was inspected');
  const prompt=aikaPrompts.at(-1);
- assert.ok(prompt.includes(`YOUR MILESTONE (the question is about this one): ${ALEX}`)&&prompt.includes('No read access to northstar/platform yet.')&&prompt.includes('REPOSITORY EVIDENCE: none'));
+ assert.ok(prompt.includes(`YOUR MILESTONE (the question is about this one): ${ALEX}`)&&prompt.includes('No read access to northstar/platform yet.')&&prompt.includes('REPOSITORY OBSERVATIONS: none'));
  assert.ok(prompt.includes(`TEAM MILESTONE: ${JORDAN}`),'other milestones by title and status only');
  for(const x of ['PRIVATE CONTRACT NOTE','renewal discount','solutions engineer','Fictional platform lead'])assert.ok(!prompt.includes(x),'AiKA context leaks '+x);
  assert.deepEqual(modelCalls,[],'the browser never talks to the model');
@@ -395,6 +430,60 @@ try{
  assert.ok(!JSON.stringify(mayaView).includes('renewal')&&!JSON.stringify(mayaView).includes('PRIVATE CONTRACT'),'no commercial notes in coordination');
  if(process.env.E2E_SCREENSHOTS){await jordan.screenshot({path:join(process.env.E2E_SCREENSHOTS,'jordan-work.png'),fullPage:true});await maya.goto(url+'/champion/team');await mayaAlex.waitFor();await maya.screenshot({path:join(process.env.E2E_SCREENSHOTS,'maya-team.png'),fullPage:true});}
 
+
+ console.log('Phase 7: read-only repository evidence (live via a GitHub test double, sample for Lumen), Maya, Chris and AiKA');
+ await dev.goto(url+'/activation/work');await card.waitFor();
+ const panel=card.locator('[aria-label="Repository evidence: checkout-api"]');await panel.waitFor();
+ assert.equal(await panel.getByTestId('evidence-mode').innerText(),'Live GitHub · read-only');
+ assert.ok((await panel.innerText()).includes('nothing about this repository is verified'));
+ await panel.getByRole('button',{name:'Inspect repository (read-only)'}).click();
+ await panel.locator('[data-signal=codeowners][data-status=observed]').waitFor();
+ const seenByAlex=await panel.innerText();
+ assert.ok(seenByAlex.includes('CODEOWNERS at .github/CODEOWNERS with 1 rule naming @example-org/checkout-team')&&seenByAlex.includes('by Alex Rivera at commit cccccccccccc'),seenByAlex);
+ assert.ok(seenByAlex.includes('A workflow file is not proof that CI runs or passes'),'CI configuration is not CI working');
+ assert.ok((await panel.locator('[data-signal=runbooks]').innerText()).includes('Not found'));
+ assert.equal(await panel.locator('[data-signal=codeowners] a').getAttribute('href'),`https://github.com/example-org/checkout-api/blob/${'c'.repeat(40)}/.github/CODEOWNERS`);
+ assert.deepEqual([...new Set(githubCalls.map(c=>c.method))],['GET'],'the inspector only reads');
+ assert.ok(githubCalls.every(c=>c.path.startsWith('/repos/example-org/checkout-api')&&c.auth==='Bearer e2e-read-only-test-token'));
+ assert.ok(!(await dev.content()).includes('e2e-read-only-test-token'),'the GitHub credential stays on the server');
+ assert.equal(await status(card),'Ready for review','an inspection completes nothing');
+ assert.ok((await card.getByTestId('action-evidence').first().innerText()).includes('Related evidence (checkout-api)'));
+ // Requests name a configured repository only.
+ assert.equal((await api(north,'repository-inspections',alexToken,{repository:'torvalds/linux'})).status,400);
+ assert.equal((await api(north,'repository-inspections',opToken,{repositoryId:'checkout-api'})).status,403,'Chris observes');
+ assert.equal((await api(lumen,'repository-evidence',alexToken)).status,403,'another customer’s evidence');
+ // AiKA cites the recorded observation; an uncited repository claim is removed.
+ await dev.goto(url+`/aika?milestone=${alexId}`);await dev.getByLabel('Question for AiKA').fill('Who owns checkout-api?');
+ await dev.getByRole('button',{name:'Ask AiKA',exact:true}).click();
+ const cited=dev.getByLabel('AiKA answer');await cited.getByText('Verified · repository').waitFor({timeout:20000});
+ const citedText=await cited.innerText();
+ assert.ok(citedText.includes('Based on: CODEOWNERS (ownership) (live, example-org/checkout-api@cccccccccccc')&&!citedText.includes('passing CI')&&citedText.includes('1 part was removed'),citedText);
+ // Jordan: the same repository, with discoverability first.
+ await jordan.goto(url+'/activation/work');
+ const jpanel=jordan.locator(`[aria-label^="Milestone: ${JORDAN}"] [aria-label="Repository evidence: checkout-api"]`);await jpanel.waitFor();
+ const jfirst=await jpanel.locator('.pt-work-log > li').first().getAttribute('data-signal');
+ assert.ok(['docs','catalog_info','readme'].includes(jfirst),jfirst);
+ // Maya: observations beside the team's reported progress; a GitHub failure keeps the earlier evidence, labelled.
+ await maya.goto(url+'/champion/team');const mpanel=maya.locator('[aria-label="Repository evidence: checkout-api"]');await mpanel.waitFor();
+ assert.ok((await mpanel.innerText()).includes('by Alex Rivera'));
+ assert.ok((await maya.getByLabel('Evidence',{exact:true}).innerText()).includes('reported, not verified'));
+ githubMode='limit';
+ await mpanel.getByRole('button',{name:'Inspect again (read-only)'}).click();
+ await mpanel.getByText(/GitHub’s rate limit was reached/).waitFor();
+ assert.ok((await mpanel.innerText()).includes('The evidence below is from the earlier inspection'));
+ githubMode='ok';
+ // Chris: the same evidence, read-only.
+ await op.goto(url+'/operator/progress');const opanel=op.locator('[aria-label="Approved milestone progress"] [aria-label="Repository evidence: checkout-api"]');await opanel.waitFor();
+ assert.equal(await opanel.getByRole('button').count(),0,'Chris cannot inspect');
+ // Lumen: sample data, never presented as live.
+ const githubBefore=githubCalls.length;
+ await other.goto(url+'/activation/work');const spanel=other.locator('[aria-label="Repository evidence: recs-service"]');await spanel.waitFor();
+ assert.equal(await spanel.getByTestId('evidence-mode').innerText(),'Sample data · fictional repository, not live');
+ await spanel.getByRole('button',{name:'Inspect repository (read-only)'}).click();await spanel.getByText('Sample · observed').first().waitFor();
+ assert.equal(await spanel.locator('a').count(),0,'no GitHub links for sample data');
+ assert.equal(githubCalls.length,githubBefore,'sample data never calls GitHub');
+ if(process.env.E2E_SCREENSHOTS){await dev.goto(url+'/activation/work');await panel.waitFor();await panel.screenshot({path:join(process.env.E2E_SCREENSHOTS,'repo-evidence.png')});}
+
  // --- Sign-out ends the session; mobile layouts do not overflow.
  await dev.getByRole('button',{name:/Account:/}).click();await dev.getByRole('menuitem',{name:'Sign out'}).click();
  await dev.getByRole('heading',{name:'Portal is ready for you'}).waitFor();
@@ -402,8 +491,8 @@ try{
  const entry=await (await browser.newContext({viewport:{width:390,height:844}})).newPage();watch(entry);await entry.goto(url+'/login');await entry.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  for(const page of [op,other,maya,entry]){await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal overflow');}
  assert.deepEqual(errors,[]);
- console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress → Phase 6: Maya sees attention and summary, answers Jordan’s question, reviews Alex’s milestone without completing it, requests follow-up; Alex replies; review persists; coordination refused for developers, Chris, the shared token, another customer and stale revisions; Chris sees the same numbers read-only; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
+ console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress → Phase 6: Maya sees attention and summary, answers Jordan’s question, reviews Alex’s milestone without completing it, requests follow-up; Alex replies; review persists; coordination refused for developers, Chris, the shared token, another customer and stale revisions; Chris sees the same numbers read-only → Phase 7: Alex inspects checkout-api read-only (GitHub test double, GET only, server-side token), evidence with provenance and limits beside his actions, nothing completed; AiKA cites the observation and drops an uncited claim; Jordan’s focus is discoverability; Maya sees evidence vs reported work and a rate limit keeps earlier evidence labelled; Chris read-only; Lumen sample data labelled and never calls GitHub; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
 }catch(error){console.error(error);throw error;}finally{
  await browser?.close();for(const child of children.reverse()){if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(()=>{child.kill('SIGKILL');r();},3000))]);}}
- stubOllama.close();rmSync(directory,{recursive:true,force:true});
+ stubOllama.close();stubGitHub.close();rmSync(directory,{recursive:true,force:true});
 }

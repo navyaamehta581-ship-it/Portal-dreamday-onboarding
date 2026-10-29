@@ -2,6 +2,8 @@ import {useState} from 'react';
 import {RefreshCw} from 'lucide-react';
 import type {AttentionReason,MilestoneProgress,WorkUpdate} from '../../../../../contracts/activation/v1/handoff';
 import {Thread,isOpen,when} from './Thread';
+import {RepositoryPanel} from './RepositoryEvidence';
+import {repositoryProblem,type RepositoryEvidenceSession} from './useRepositoryEvidence';
 import {REVIEW_LABEL,STATUS_LABEL,statusTone,workProblem,type MilestoneWorkSession} from './useMilestoneWork';
 
 const ACTION_LABEL={not_started:'Not started',started:'Started',blocked:'Blocked',completed:'Completed'} as const;
@@ -10,7 +12,7 @@ const reviewTone=(s:MilestoneProgress['reviewState'])=>s==='reviewed'?'green':s=
 
 /** Team progress from the server's progress records. The Champion coordinates and reviews here; Chris sees the same
  * view read-only. Every number comes from the server, so this view, Chris's and the developers' always agree. */
-export function CoordinationView({work,mode}:{work:MilestoneWorkSession;mode:'champion'|'observer'}){
+export function CoordinationView({work,repos,mode}:{work:MilestoneWorkSession;repos?:RepositoryEvidenceSession;mode:'champion'|'observer'}){
  const {progress,loading,error}=work,champion=mode==='champion';
  if(!progress)return <p className="pt-note" role={error&&!loading?'alert':'status'}>{loading?'Loading team progress…':error?workProblem(error):''}</p>;
  const s=progress.summary,attention=progress.milestones.filter(m=>m.attention?.length);
@@ -35,10 +37,12 @@ export function CoordinationView({work,mode}:{work:MilestoneWorkSession;mode:'ch
   </section>
   <section className="pt-card" aria-label="Evidence">
    <h3>Evidence</h3>
-   {progress.verifiedEvidence?.length?<><p className="pt-label" style={{marginTop:16}}>Verified by the Portal</p><ul className="pt-plain-list">{progress.verifiedEvidence.map(e=><li key={e}><span className="pt-pill green">Verified</span> {e}</li>)}</ul></>
-    :<p className="pt-note">Nothing has been verified by the Portal yet.</p>}
-   <p className="pt-note">References developers add to their notes are shown with each milestone as reported, not verified.</p>
+   <p className="pt-note">Repository observations below are what the Portal retrieved itself, read-only (or sample data, labelled as such). References developers add to their notes appear with each milestone as <strong>reported</strong>, not verified.</p>
+   {progress.verifiedEvidence?.length?<><p className="pt-label" style={{marginTop:16}}>Other observations recorded by the Portal</p><ul className="pt-plain-list">{progress.verifiedEvidence.map(e=><li key={e}><span className="pt-pill green">Observed</span> {e}</li>)}</ul></>:null}
+   {repos&&!repos.data&&!repos.loading&&repos.error&&<p className="pt-note" role="status">{repositoryProblem(repos.error.code)}</p>}
+   {repos?.data&&!repos.data.repositories.length&&<p className="pt-note">No repository is configured for this team’s approved work, so nothing about its repositories is verified.</p>}
   </section>
+  {repos?.data?.repositories.map(r=><RepositoryPanel key={r.id} repo={r} repos={repos} canInspect={champion&&r.canInspect}/>)}
   {progress.milestones.map(m=><MilestoneCoordination key={m.id} m={m} work={work} champion={champion}/>)}
  </div>;
 }

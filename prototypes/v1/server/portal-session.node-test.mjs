@@ -179,3 +179,18 @@ test('Champion coordination is forwarded with the Champion credential and her na
     assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-other/milestone-coordination', {method: 'POST', headers: {...maya, Origin: h.origin}, body: '{}'})).status, 403, 'not another customer');
   } finally {await h.close();}
 });
+
+test('repository evidence routes pass through with the persona’s credential; only configured ids are sent, never tokens to the browser', async () => {
+  const h = await harness();
+  try {
+    const maya = await h.signIn('maya');
+    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-north/repository-evidence', {headers: maya})).status, 200);
+    assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${champA}`);
+    const post = await h.call('/portal-api/activation/v1/customers/fictional-north/repository-inspections', {method: 'POST', headers: {...maya, Origin: h.origin}, body: '{"repositoryId":"payments-api"}'});
+    assert.equal(post.status, 200);assert.equal(h.calls.at(-1).init.body, '{"repositoryId":"payments-api"}');
+    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-north/repository-inspections', {method: 'POST', headers: maya, body: '{}'})).status, 403, 'cross-site POST refused');
+    const chris = await h.signIn('chris');
+    assert.equal((await h.call('/operator-api/north/activation/v1/customers/fictional-north/repository-evidence', {headers: chris})).status, 200);
+    assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${opA}`);
+  } finally {await h.close();}
+});

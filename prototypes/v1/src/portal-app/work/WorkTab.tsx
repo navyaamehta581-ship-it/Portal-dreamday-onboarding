@@ -3,13 +3,15 @@ import {Sparkles} from 'lucide-react';
 import type {MilestoneProgress,WorkUpdate} from '../../../../../contracts/activation/v1/handoff';
 import {navigate} from '../router';
 import {Thread,when} from './Thread';
+import {RepositoryPanel,relatedEvidence} from './RepositoryEvidence';
+import type {RepositoryEvidenceSession} from './useRepositoryEvidence';
 import {REVIEW_LABEL,STATUS_LABEL,statusTone,workProblem,type MilestoneWorkSession} from './useMilestoneWork';
 
 const ACTION_LABEL={not_started:'Not started',started:'Started',blocked:'Blocked',completed:'Completed'} as const;
 
 /** “My work”: the developer's own approved milestones, prominent and editable, with the team's objective and the
  * rest of the team's milestones by status only. Another developer's notes and action progress stay theirs. */
-export function WorkTab({work}:{work:MilestoneWorkSession}){
+export function WorkTab({work,repos}:{work:MilestoneWorkSession;repos?:RepositoryEvidenceSession}){
  const {progress,loading,error}=work;
  if(!progress)return <section className="pt-card" role={error&&!loading?'alert':'status'}><h3>{loading?'Loading your work…':error?.code==='NO_APPROVED_PLAN'?'No approved plan yet':'Your work isn’t available'}</h3>{error&&!loading&&<p className="pt-note">{workProblem(error)}</p>}</section>;
  const mine=progress.milestones.filter(m=>m.mine),others=progress.milestones.filter(m=>!m.mine),o=progress.objective;
@@ -21,7 +23,7 @@ export function WorkTab({work}:{work:MilestoneWorkSession}){
    {mine.length?<p className="pt-note">Update each action as you go. Notes and references are recorded as reported by you; the Portal doesn’t verify them.</p>
     :<p className="pt-note">{progress.viewer.name?`None of the approved milestones are assigned to ${progress.viewer.name}. Ask your Champion if you expected work.`:'Your sign-in isn’t linked to your own developer credential, so no milestones can be shown as yours.'}</p>}
   </section>
-  {mine.map(m=><MilestoneCard key={m.id} m={m} work={work}/>)}
+  {mine.map(m=><MilestoneCard key={m.id} m={m} work={work} repos={repos}/>)}
   {o&&<section className="pt-card" aria-label="Engineering objective">
    <h3>The team’s engineering objective</h3>
    {o.problem&&<><p className="pt-label" style={{marginTop:18}}>Problem</p><p style={{marginTop:6}}>{o.problem}</p></>}
@@ -36,7 +38,9 @@ export function WorkTab({work}:{work:MilestoneWorkSession}){
  </div>;
 }
 
-function MilestoneCard({m,work}:{m:MilestoneProgress;work:MilestoneWorkSession}){
+function MilestoneCard({m,work,repos}:{m:MilestoneProgress;work:MilestoneWorkSession;repos?:RepositoryEvidenceSession}){
+ // Configured repositories this approved milestone relies on, with the signals its own work points to.
+ const linked=(repos?.data?.repositories??[]).flatMap(r=>r.milestones.filter(x=>x.id===m.id).map(x=>({r,x})));
  const d=m.detail!,busy=work.busy===m.id,locked=!!work.busy;
  const [kind,setKind]=useState<'update'|'blocker'|'question'>('update'),[text,setText]=useState(''),[evidence,setEvidence]=useState(''),[replyTo,setReplyTo]=useState<WorkUpdate|null>(null);
  const err=work.error?.milestoneId===m.id?work.error:null;
@@ -54,11 +58,13 @@ function MilestoneCard({m,work}:{m:MilestoneProgress;work:MilestoneWorkSession})
    {waiting.length>0&&<p className="pt-note">You can start now, but this milestone can only be completed after {waiting.map(x=>x.assignee?`${x.assignee}’s`:'the').join(' and ')} work it depends on is completed. Nothing completes automatically.</p>}</>}
   <p className="pt-label" style={{marginTop:20}}>Actions</p>
   <ol className="pt-work-actions">{d.actions.map(a=><li key={a.index}>
-   <span>{a.text}{a.by&&<small>{ACTION_LABEL[a.status]} by {a.by}, {when(a.at)}</small>}</span>
+   <span>{a.text}{a.by&&<small>{ACTION_LABEL[a.status]} by {a.by}, {when(a.at)}</small>}
+    {linked.map(({r,x})=>{const l=x.actionLinks.find(y=>y.index===a.index);return l&&<small key={r.id} data-testid="action-evidence">Related evidence ({r.label}{r.mode==='fixture'?', sample':''}): {relatedEvidence(r,l.signals)}</small>;})}</span>
    <select className="pt-input" aria-label={`Status of action ${a.index+1}`} value={a.status} disabled={locked} onChange={e=>void work.update(m.id,{action:{index:a.index,status:e.target.value as keyof typeof ACTION_LABEL}})}>
     {Object.entries(ACTION_LABEL).map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
   </li>)}</ol>
   {d.completionCriteria.length>0&&<><p className="pt-label" style={{marginTop:20}}>Done when</p><ul className="pt-plain-list">{d.completionCriteria.map(c=><li key={c}>{c}</li>)}</ul></>}
+  {linked.length>0&&<div style={{marginTop:20,display:'grid',gap:14}}>{linked.map(({r,x})=><RepositoryPanel key={r.id} repo={r} repos={repos!} focus={x.focus}/>)}</div>}
   <hr/>
   <p className="pt-label">Updates, blockers, questions and replies</p>
   <p className="pt-note" style={{marginTop:4}}>Shared with your Champion; Chris can read it. Other developers see only the milestone’s status.</p>

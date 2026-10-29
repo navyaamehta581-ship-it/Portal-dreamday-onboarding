@@ -4,13 +4,14 @@ import type {AikaSection} from '../../../../../contracts/activation/v1/handoff';
 import type {activationClient} from '../../activation/client';
 import type {MilestoneWorkSession} from '../work/useMilestoneWork';
 import {aikaProblem,useAika} from './useAika';
+import {SIGNAL_LABEL,type RepositoryEvidenceSession} from '../work/useRepositoryEvidence';
 
-const KIND:Record<AikaSection['kind'],[string,string]>={known:['Known','green'],reported:['Reported','blue'],suggestion:['Suggestion','amber'],unknown:['Unknown','']};
+const KIND:Record<AikaSection['kind'],[string,string]>={known:['Known','green'],verified:['Verified · repository','green'],sample:['Sample data','amber'],reported:['Reported','blue'],suggestion:['Suggestion','amber'],unknown:['Unknown','']};
 const SUGGESTIONS=['What should I do next on this milestone?','What does this milestone depend on, and is it ready?','What is still unknown, and who could answer it?'];
 
 /** AiKA inside the Portal. The server builds its context from the approved, developer-safe plan and this
  * person's own progress, runs the local model, and checks the answer; the browser never talks to the model. */
-export function AikaPage({api,work}:{api:ReturnType<typeof activationClient>;work:MilestoneWorkSession}){
+export function AikaPage({api,work,repos}:{api:ReturnType<typeof activationClient>;work:MilestoneWorkSession;repos?:RepositoryEvidenceSession}){
  const aika=useAika(api);
  const options=(work.progress?.milestones??[]).filter(m=>m.detail);
  const initial=new URLSearchParams(window.location.search).get('milestone');
@@ -43,9 +44,10 @@ export function AikaPage({api,work}:{api:ReturnType<typeof activationClient>;wor
      {job.status==='running'&&<p className="pt-note" role="status">AiKA is working on your question with the local model. This can take a minute on a laptop; you can keep using the Portal.</p>}
      {job.status==='failed'&&<div className="pt-banner error" role="alert">{aikaProblem(job.error??'AIKA_FAILED')}</div>}
      {job.answer&&<>
-      <ul className="pt-aika-sections">{job.answer.sections.map((s,i)=><li key={i}><span className={'pt-pill '+KIND[s.kind][1]}>{KIND[s.kind][0]}</span><p>{s.text}</p></li>)}</ul>
+      <ul className="pt-aika-sections">{job.answer.sections.map((s,i)=><li key={i}><span className={'pt-pill '+KIND[s.kind][1]}>{KIND[s.kind][0]}</span><div><p>{s.text}</p>
+       {s.citations?.length?<p className="pt-note" style={{marginTop:4}} data-testid="aika-citations">Based on: {s.citations.map(c=>{const o=repos?.observations.get(c);return o?`${SIGNAL_LABEL[o.signal]} (${o.mode==='fixture'?'sample data':`live, ${o.repository}${o.commit?`@${o.commit.slice(0,12)}`:''}`}, retrieved ${new Date(o.retrievedAt).toLocaleString()})`:`recorded observation ${c}`;}).join('; ')}</p>:null}</div></li>)}</ul>
       {job.answer.nextStep&&<><p className="pt-label" style={{marginTop:20}}>Suggested next step</p><p style={{marginTop:6}}>{job.answer.nextStep}</p></>}
-      <p className="pt-note">{job.answer.removed?`${job.answer.removed} part${job.answer.removed===1?' was':'s were'} removed because ${job.answer.removed===1?'it':'they'} didn’t pass AiKA’s checks. `:''}AiKA can be wrong. “Known” means stated in your approved plan or its verified facts; nothing here was inspected or verified by AiKA.</p>
+      <p className="pt-note">{job.answer.removed?`${job.answer.removed} part${job.answer.removed===1?' was':'s were'} removed because ${job.answer.removed===1?'it':'they'} didn’t pass AiKA’s checks. `:''}AiKA can be wrong. “Known” means stated in your approved plan; “Verified” cites a repository observation the Portal recorded (“Sample data” cites sample evidence). AiKA itself inspected nothing.</p>
      </>}
     </section>}
    </div>
