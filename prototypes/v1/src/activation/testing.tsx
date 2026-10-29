@@ -11,7 +11,7 @@ export function fixtureState(scenario:'orbit'|'ledger',patch:Partial<ActivationS
  return {contractVersion:'1.0.0',customerId:scenario,developerSessionId:`session-${scenario}`,revision:0,contextRevision:0,planRevision:0,context:f.context,plan:f.plan,actions:{},evidence:f.plan.evidence,milestone:{id:'first-value',status:'pending',requiredActions:[],evidenceIds:[]},replan:{status:'none',blockerId:null,replacementPlanRevision:null,errorCode:null},chrisHelp:{status:'none',blockerIds:[],owner:null,reason:null,evidenceIds:[]},outcome:{agreedGoalContextRevision:0,status:'unassessed',summary:'',evidenceIds:[],scope:'goal'},...patch} as ActivationState;
 }
 export function mockApi(){
- return {handoffOverview:vi.fn().mockResolvedValue({drafts:[]}),draftHandoff:vi.fn(),publishHandoff:vi.fn(),acceptSetupProposal:vi.fn(),prepareGitHub:vi.fn(),intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn(),reportProgress:vi.fn()} satisfies Record<keyof ActivationApi,unknown>;
+ return {handoffOverview:vi.fn().mockResolvedValue({drafts:[],workspace:{revision:0,updatedAt:null,sources:[]},analysis:null}),saveWorkspace:vi.fn(),startAnalysis:vi.fn(),analysisStatus:vi.fn().mockResolvedValue({job:null}),saveReview:vi.fn(),submitReview:vi.fn(),withdrawReview:vi.fn(),publishReviewed:vi.fn(),draftHandoff:vi.fn(),publishHandoff:vi.fn(),acceptSetupProposal:vi.fn(),prepareGitHub:vi.fn(),intake:vi.fn(),read:vi.fn(),initialize:vi.fn(),blocker:vi.fn(),progress:vi.fn(),reportBlocker:vi.fn(),reportProgress:vi.fn()} satisfies Record<keyof ActivationApi,unknown>;
 }
 export function mount(){
  const host=document.createElement('div');document.body.append(host);

@@ -27,10 +27,13 @@ PORTAL_DEMO_LABEL="Northstar Commerce (fictional)" npm run dev --prefix prototyp
 
 Then:
 
-1. Open http://127.0.0.1:5173/, select **Get started** and choose a persona.
-2. As **Chris**, paste the Northstar sources from `services/workflow-api/test/fixtures/scenarios.json` (scenario A) into Customer Context and select **Analyze sources**. With a local model this takes one to three minutes, and the page shows only the button's busy state.
-3. Review the Activation Goal, then **Publish to developers**.
-4. Sign out and choose **Maya**, **Alex** or **Jordan** to see their Portals.
+1. Open http://127.0.0.1:5173/, select **Get started** and choose **Chris**.
+2. In **Customer Context**, add the scenario A information from `services/workflow-api/test/fixtures/scenarios.json` as separate entries, choose each entry's category, and select **Save information**.
+3. Select **Analyze customer**. The page shows the running stage and elapsed time; with a local model this takes one to three minutes, and you can keep working.
+4. Open **Onboarding Draft**, edit the problem, stakeholders, goals, milestones and questions, and select **Save draft**.
+5. Confirm and select **Mark ready for Champion review**. Nothing becomes visible to Maya or developers: Maya's review step is Phase 4.
+6. Optional, to show the developer Portals: select **Withdraw to make changes**, open **Integration tools**, and use **Publish without Champion review**. This is a labelled demo path, not an approval.
+7. Sign out and choose **Maya**, **Alex** or **Jordan**.
 
 No tokens are copied or pasted: the Portal's local session layer reads them from `ACTIVATION_DEMO_DIR` on the server side.
 

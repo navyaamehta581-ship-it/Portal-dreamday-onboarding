@@ -57,20 +57,55 @@ try{
  await signInAs(op,'Chris');assert.equal(new URL(op.url()).pathname,'/operator','Chris starts in Customer Onboarding');
  assert.ok(!(await op.content()).includes(opToken),'operator token never reaches the page');
  assert.equal(await op.getByLabel('Operator access token').count(),0,'no token entry');
- async function publish(account,notes,outcome,by){
+ // Chris: information → analysis → review → (Northstar) submission for Champion review → labelled direct publication.
+ async function prepare(account,notes){
   await op.getByLabel('Customer account').selectOption(account);await op.getByRole('tab',{name:'Customer Context'}).click();
-  await op.getByLabel('Raw account and call notes').fill(notes);await op.getByRole('button',{name:'Analyze sources'}).click();
-  await op.getByText('Kept internal').waitFor();
-  await op.getByRole('tab',{name:'Activation Goal'}).click();
+  await op.getByLabel('Information 1 text').fill(notes);await op.getByLabel('Information 1 name').fill('Discovery call');
+  await op.getByRole('button',{name:'Add information'}).click();
+  await op.getByLabel('Information 2 category').selectOption('integration_tools');await op.getByLabel('Information 2 text').fill('Docs live in Confluence; CI runs in GitHub Actions.');
+  await op.getByRole('button',{name:'Save information'}).click();await op.getByText(/^Saved \d/).waitFor();
+  await op.getByRole('button',{name:'Analyze customer'}).click();
+  await op.getByRole('button',{name:'Review the onboarding draft'}).waitFor({timeout:20000});
+  await op.getByRole('button',{name:'Review the onboarding draft'}).click();
+  await op.getByLabel('Onboarding milestones').waitFor();
+ }
+ async function publishDirectly(outcome,by){
+  await op.getByText('Integration tools').click();
   await op.getByLabel('Agreed activation outcome').fill(outcome);await op.getByLabel('Agreement attribution').fill(by);
-  await op.getByRole('checkbox',{name:/I reviewed this developer-visible/}).check();
+  await op.getByRole('checkbox',{name:/publishes to developers without Champion review/}).check();
   const sent=op.waitForRequest(r=>r.url().endsWith('/handoff-publications')&&r.method()==='POST');
-  await op.getByRole('button',{name:'Publish to developers'}).click();
+  await op.getByRole('button',{name:'Publish without Champion review'}).click();
   const body=(await sent).postData();await op.getByRole('heading',{name:'Agreed activation outcome'}).waitFor();return body;
  }
- const posted=await publish('northstar',NORTHSTAR,'Register checkout-api in the Software Catalog with an owner','Fictional platform lead, local test call');
- assert.ok(!posted.includes('PRIVATE CONTRACT NOTE'),'private line held back');
- await publish('lumen',LUMEN,'Generate a first recommendation service from an approved template','Fictional data lead, local test call');
+ await prepare('northstar',NORTHSTAR);
+ assert.ok((await op.getByLabel('Kept internal').innerText()).includes('Kept internal'));
+ // Edit the draft: retitle the first milestone, add a second one that depends on it, add a question; save.
+ await op.getByLabel('Milestone 1 title').fill('Review checkout-api repository readiness and prepare it for Catalog registration');
+ await op.getByRole('button',{name:'Add milestone'}).click();
+ await op.getByLabel('Milestone 2 title').fill('Validate that checkout-api is discoverable in the Catalog');
+ await op.getByLabel('Milestone 2 actions').fill('Search the Catalog for checkout-api\nOpen its docs link');
+ await op.getByLabel('Milestone 2 completion criteria').fill('checkout-api is found from Catalog search with a working docs link');
+ await op.getByLabel('Milestone 2').getByRole('checkbox').check();
+ await op.getByRole('button',{name:'Save draft'}).click();await op.getByLabel('Draft status').getByText(/^Saved/).waitFor();
+ // Persisted on the server: a reload brings the edited draft back.
+ await op.reload();await op.getByLabel('Milestone 2 title').waitFor();
+ assert.equal(await op.getByLabel('Milestone 2 title').inputValue(),'Validate that checkout-api is discoverable in the Catalog');
+ await op.getByRole('checkbox',{name:/I reviewed this draft/}).check();
+ await op.getByRole('button',{name:'Mark ready for Champion review'}).click();
+ await op.getByRole('heading',{name:'Submitted for Champion review'}).waitFor();
+ // Submission publishes nothing: the developer credential still has no onboarding, and no workspace route.
+ const asDev=await fetch(`${north.apiOrigin}/api/activation/v1/customers/${north.customerId}/state`,{headers:{Authorization:`Bearer ${devToken}`}});
+ assert.equal(asDev.status,404,'developers see nothing after submission');
+ assert.equal((await fetch(`${north.apiOrigin}/api/activation/v1/customers/${north.customerId}/handoff`,{headers:{Authorization:`Bearer ${devToken}`}})).status,403);
+ const early=await (await browser.newContext()).newPage();watch(early);await signInAs(early,'Alex Rivera');
+ await early.getByText('Your onboarding hasn’t been published yet').waitFor();
+ assert.ok(!(await early.locator('body').innerText()).includes('Validate that checkout-api'),'Alex does not see the submitted draft');
+ await early.close();
+ await op.getByRole('button',{name:'Withdraw to make changes'}).click();await op.getByRole('button',{name:'Mark ready for Champion review'}).waitFor();
+ const posted=await publishDirectly('Register checkout-api in the Software Catalog with an owner','Fictional platform lead, local test call');
+ assert.ok(!posted.includes('PRIVATE CONTRACT NOTE')&&!posted.includes('Discovery call')&&!JSON.parse(posted).milestones&&JSON.parse(posted).fromReview===true,'publication sends no source text; the server uses the saved draft');
+ await prepare('lumen',LUMEN);
+ await publishDirectly('Generate a first recommendation service from an approved template','Fictional data lead, local test call');
  console.log('Both customers published');
  // Same Portal shell, separate navigation targets and access.
  assert.equal(await op.locator('.pt-shell .pt-side').count(),1);
@@ -170,7 +205,7 @@ try{
  const entry=await (await browser.newContext({viewport:{width:390,height:844}})).newPage();watch(entry);await entry.goto(url+'/login');await entry.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  for(const page of [op,other,maya,entry]){await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal overflow');}
  assert.deepEqual(errors,[]);
- console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam) → Chris publishes both customers without a token in the page (private notes held back) → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: Team Coordination proposals only, reload keeps persona → Jordan: no Champion view; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
+ console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam) → Chris: saved information in two categories, background analysis, edited multi-milestone draft (survives reload), submitted for Champion review with nothing visible to developers, withdrawn, then published without Champion review via the labelled path for both customers (private notes held back) → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: Team Coordination proposals only, reload keeps persona → Jordan: no Champion view; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
 }catch(error){console.error(error);throw error;}finally{
  await browser?.close();for(const child of children.reverse()){if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(()=>{child.kill('SIGKILL');r();},3000))]);}}
  rmSync(directory,{recursive:true,force:true});

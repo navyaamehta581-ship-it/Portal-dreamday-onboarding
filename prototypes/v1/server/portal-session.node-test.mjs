@@ -81,6 +81,7 @@ test('customer personas use their customer developer credential; a forged header
       const before = h.calls.length;
       assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-other/state', {headers: jar})).status, 403);
       assert.equal((await h.call('/operator-api/north' + STATE, {headers: jar})).status, 403, 'no operator credential for customer personas');
+      assert.equal((await h.call('/operator-api/north/activation/v1/customers/fictional-north/handoff-workspace', {method: 'POST', headers: {...jar, Origin: h.origin}, body: '{}'})).status, 403, 'no access to Chris’s workspace');
       assert.equal(h.calls.length, before, 'refused before anything is forwarded');
     }
     const jar = await h.signIn('alex');
@@ -99,6 +100,11 @@ test('the operator persona uses operator credentials only for its listed custome
     assert.equal((await h.call('/operator-api/other/activation/v1/customers/fictional-other/handoff', {headers: jar})).status, 200);
     assert.equal(h.calls.at(-1).url, 'http://127.0.0.1:7002/api/activation/v1/customers/fictional-other/handoff');
     assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${opB}`);
+    // Chris's workspace routes (saved information, analysis, review, submission) go through the same operator path.
+    for (const route of ['handoff-workspace', 'handoff-analyses', 'handoff-reviews', 'handoff-submissions']) {
+      assert.equal((await h.call(`/operator-api/north/activation/v1/customers/fictional-north/${route}`, {method: 'POST', headers: {...jar, Origin: h.origin}, body: '{}'})).status, 200);
+      assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${opA}`);
+    }
     const before = h.calls.length;
     assert.equal((await h.call('/operator-api/missing/activation/v1/customers/fictional-missing/state', {headers: jar})).status, 403, 'not one of Chris’s customers');
     assert.equal((await h.call('/operator-api/north/activation/v1/customers/fictional-other/state', {headers: jar})).status, 403, 'customer ID must match the selected customer');

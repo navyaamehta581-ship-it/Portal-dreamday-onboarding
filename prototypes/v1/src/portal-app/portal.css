@@ -335,3 +335,30 @@ select.pt-input{appearance:auto;height:46px}
 .pt-notes dd{margin:4px 0 0;font-size:14.5px;line-height:22px;color:#e0e0e0}
 .pt-sub{display:block;color:var(--p-subtle);font-size:13px}
 .pt-steps-list{margin:8px 0 0;padding-left:20px;display:grid;gap:6px;font-size:15px;line-height:23px}
+/* Chris's customer workspace (Phase 3): saved-state, analysis stages and the review editor. Existing tokens only. */
+.pt-savestate{display:inline-flex;align-items:center;gap:6px;color:var(--p-muted);font-size:13.5px}
+.pt-analysis-stages{margin:18px 0 0;padding:0;list-style:none;display:grid;gap:10px}
+.pt-analysis-stages li{display:flex;align-items:center;gap:12px;color:var(--p-subtle);font-size:14.5px}
+.pt-analysis-stages li .mark{width:22px;height:22px;flex:none;display:grid;place-items:center;border-radius:50%;border:1px solid #444}
+.pt-analysis-stages li.done{color:#dcdcdc}.pt-analysis-stages li.done .mark{background:#1d3b20;border-color:#1d3b20;color:#8be192}
+.pt-analysis-stages li.current{color:#fff;font-weight:700}.pt-analysis-stages li.current .mark{border-color:var(--p-green)}
+.pt-analysis-stages li small{font-weight:500;color:var(--p-muted)}
+.pt-review{display:grid;gap:22px}
+.pt-review>.pt-banner{margin-top:0}
+.pt-savebar{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px 16px;border:1px solid var(--p-card-line);border-radius:4px;background:var(--p-raised)}
+.pt-savebar .grow,.pt-milestone-head .grow{flex:1}
+.pt-fieldset{border:0;margin:0;padding:0;min-width:0;display:grid;gap:22px}
+.pt-fieldset:disabled .pt-input,.pt-fieldset:disabled .pt-textarea{opacity:.75}
+.pt-fieldset:disabled .pt-link,.pt-fieldset:disabled .pt-icon,.pt-fieldset:disabled .pt-tool,.pt-fieldset:disabled .pt-btn{display:none}
+.pt-item{margin-top:14px}
+.pt-item-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px}
+.pt-item-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}
+.pt-textarea.compact{min-height:0}
+.pt-person{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;margin-bottom:8px}
+.pt-milestone{margin-top:18px;padding:18px 20px;border:1px solid #333;border-radius:6px;background:#141414}
+.pt-milestone-head{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.pt-milestone .pt-form-field:first-of-type{margin-top:14px}
+.pt-form-row.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}
+.pt-depends{border:0;margin:18px 0 0;padding:0}
+.pt-depends legend{font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#bdbdbd}
+@media (max-width:760px){.pt-person,.pt-form-row.two{grid-template-columns:1fr}.pt-savebar{position:static}}

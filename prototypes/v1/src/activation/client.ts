@@ -1,9 +1,10 @@
 import type { ActivationState } from '../../../../contracts/activation/v1/state';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types';
-import type { HandoffRecord, MilestoneDraft, SourceType } from '../../../../contracts/activation/v1/handoff';
+import type { AnalysisJob, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
 
 export class ActivationRequestError extends Error {
-  constructor(public readonly code:string, public readonly status:number){super(code);this.name='ActivationRequestError';}
+  /** Server details such as which review fields failed a check (labels and reason codes, never content). */
+  constructor(public readonly code:string, public readonly status:number, public readonly details:unknown=null){super(code);this.name='ActivationRequestError';}
 }
 
 /** Separate client: the existing conversation StateResponse remains unchanged.
@@ -24,12 +25,20 @@ export function activationClient(customerId:string,token:string,base='',apiPrefi
   async function call<T>(route:string,body?:unknown,timeout=60000):Promise<T> {
     const response=await fetch(root+route,{method:body===undefined?'GET':'POST',headers:headers(body!==undefined),...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store',signal:AbortSignal.timeout(timeout)});
     const data=await response.json().catch(()=>null);
-    if(!response.ok)throw new ActivationRequestError(data?.error?.code??'ACTIVATION_UNAVAILABLE',response.status);
+    if(!response.ok)throw new ActivationRequestError(data?.error?.code??'ACTIVATION_UNAVAILABLE',response.status,data?.error?.details??null);
     return data as T;
   }
   // On timeout retain the exact command ID/body; GET then retry the same body, never invent progress.
   return {
-    handoffOverview:()=>call<{drafts:HandoffRecord[]}>('/handoff'),
+    handoffOverview:()=>call<HandoffOverview>('/handoff'),
+    saveWorkspace:(expectedRevision:number,sources:SourceInput[])=>call<Workspace>('/handoff-workspace',{expectedRevision,sources}),
+    // Analysis runs on the server; starting returns at once and the status is polled.
+    startAnalysis:(workspaceRevision:number)=>call<{job:AnalysisJob;duplicate:boolean}>('/handoff-analyses',{workspaceRevision}),
+    analysisStatus:()=>call<{job:AnalysisJob|null}>('/handoff-analyses'),
+    saveReview:(draft:number,expectedRevision:number,review:ReviewDraft)=>call<HandoffRecord>('/handoff-reviews',{draft,expectedRevision,review}),
+    submitReview:(draft:number,reviewRevision:number)=>call<HandoffRecord>('/handoff-submissions',{draft,reviewRevision,action:'submit',confirmed:true}),
+    withdrawReview:(draft:number)=>call<HandoffRecord>('/handoff-submissions',{draft,action:'withdraw'}),
+    publishReviewed:(draft:number,outcome:string,agreedBy:string)=>request('/handoff-publications',{draft,fromReview:true,outcome,agreedBy,agreementConfirmed:true}),
     draftHandoff:(sources:{type:SourceType;label:string;text:string}[])=>call<HandoffRecord>('/handoff-drafts',{sources},300000),
     publishHandoff:(body:{draft:number;milestones:MilestoneDraft[];outcome:string;agreedBy:string;agreementConfirmed:true})=>request('/handoff-publications',body),
     intake:(briefing:string,outcome:string,agreedBy:string,agreementConfirmed:boolean)=>request('/intake',{briefing,outcome,agreedBy,agreementConfirmed}),

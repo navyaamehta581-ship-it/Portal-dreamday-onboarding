@@ -1,5 +1,5 @@
 import {DatabaseSync} from 'node:sqlite';
-import type {DeveloperHandoff,HandoffRecord} from '../../../../../contracts/activation/v1/handoff.ts';
+import type {DeveloperHandoff,HandoffRecord,Workspace} from '../../../../../contracts/activation/v1/handoff.ts';
 import type {Principal} from '../store.ts';
 
 /** Operator-only handoff records: private sources, full understanding and proposals, one row per draft.
@@ -7,7 +7,8 @@ import type {Principal} from '../store.ts';
 export function openHandoffStore(filename:string){
  const db=new DatabaseSync(filename);
  db.exec(`PRAGMA busy_timeout=5000;
-  CREATE TABLE IF NOT EXISTS activation_handoffs (tenant TEXT NOT NULL, customer TEXT NOT NULL, session TEXT NOT NULL, draft INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(tenant,customer,session,draft)) STRICT;`);
+  CREATE TABLE IF NOT EXISTS activation_handoffs (tenant TEXT NOT NULL, customer TEXT NOT NULL, session TEXT NOT NULL, draft INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(tenant,customer,session,draft)) STRICT;
+  CREATE TABLE IF NOT EXISTS activation_handoff_workspaces (tenant TEXT NOT NULL, customer TEXT NOT NULL, session TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(tenant,customer,session)) STRICT;`);
  const key=(p:Principal)=>[p.tenantId,p.customerId,p.sessionId];
  const all=(p:Principal)=>db.prepare('SELECT body FROM activation_handoffs WHERE tenant=? AND customer=? AND session=? ORDER BY draft').all(...key(p)).map(r=>JSON.parse(r.body as string) as HandoffRecord);
  return {
@@ -18,6 +19,9 @@ export function openHandoffStore(filename:string){
    db.prepare('INSERT INTO activation_handoffs VALUES (?,?,?,?,?)').run(...key(p),draft,JSON.stringify(full));return full;
   },
   save(p:Principal,record:HandoffRecord){db.prepare('UPDATE activation_handoffs SET body=? WHERE tenant=? AND customer=? AND session=? AND draft=?').run(JSON.stringify(record),...key(p),record.draft);},
+  /** Chris's saved information before analysis; revision 0 when nothing was saved yet. */
+  workspace(p:Principal):Workspace{const row=db.prepare('SELECT body FROM activation_handoff_workspaces WHERE tenant=? AND customer=? AND session=?').get(...key(p));return row?JSON.parse(row.body as string) as Workspace:{revision:0,updatedAt:null,sources:[]};},
+  saveWorkspace(p:Principal,w:Workspace){db.prepare('INSERT INTO activation_handoff_workspaces VALUES (?,?,?,?) ON CONFLICT(tenant,customer,session) DO UPDATE SET body=excluded.body').run(...key(p),JSON.stringify(w));},
   published:(p:Principal):DeveloperHandoff|null=>all(p).filter(r=>r.status==='published').at(-1)?.developer??null,
   close:()=>db.close(),
  };
