@@ -22,6 +22,29 @@ const task={name:'t',system:'Answer as JSON.',user:'Question',schema:{type:'obje
 const gemini=(f:typeof fetch,extra={})=>createGemini({apiKey:KEY,model:'gemini-2.5-flash',timeoutMs:2000,retries:1,maxOutputTokens:8192,apiOrigin:'http://127.0.0.1:9',...extra},f);
 const code=async(p:Promise<unknown>)=>{try{await p;return 'none';}catch(e){return (e as ModelError).code+((e as ModelError).detail?':'+(e as ModelError).detail:'');}};
 
+test('check(): asks for the model’s metadata only and names the configuration problem',async()=>{
+ const answer=(status:number,body:object)=>(async()=>new Response(JSON.stringify(body),{status})) as unknown as typeof fetch;
+ const err=(status:number,reason:string,s='INVALID_ARGUMENT')=>answer(status,{error:{code:status,status:s,details:[{reason}]}});
+ const seen:string[]=[];
+ const ok=(async(u:string|URL|Request,init?:RequestInit)=>{seen.push(`${init?.method??'GET'} ${u} ${new Headers(init?.headers).get('x-goog-api-key')}`);return new Response('{"name":"models/gemini-2.5-flash"}');}) as typeof fetch;
+ assert.deepEqual(await gemini(ok).check!(),{ok:true});
+ assert.deepEqual(seen,[`GET http://127.0.0.1:9/v1beta/models/gemini-2.5-flash ${KEY}`],'no generation, key in the header only');
+ assert.deepEqual(await gemini(err(400,'API_KEY_INVALID')).check!(),{ok:false,code:'MODEL_NOT_CONFIGURED',detail:'invalid_api_key'});
+ assert.deepEqual(await gemini(err(403,'','PERMISSION_DENIED')).check!(),{ok:false,code:'MODEL_NOT_CONFIGURED',detail:'permission_denied'});
+ assert.deepEqual(await gemini(err(404,'','NOT_FOUND')).check!(),{ok:false,code:'MODEL_NOT_CONFIGURED',detail:'model_not_found'});
+ assert.deepEqual(await gemini(err(400,'','FAILED_PRECONDITION')).check!(),{ok:false,code:'MODEL_NOT_CONFIGURED',detail:'precondition_failed'});
+ assert.deepEqual(await gemini(err(429,'','RESOURCE_EXHAUSTED')).check!(),{ok:false,code:'MODEL_RATE_LIMITED',detail:null});
+ assert.deepEqual(await gemini(err(503,'','UNAVAILABLE')).check!(),{ok:false,code:'MODEL_UNAVAILABLE',detail:'http_503'});
+ assert.deepEqual(await gemini((async()=>{throw new TypeError('fetch failed');}) as unknown as typeof fetch).check!(),{ok:false,code:'MODEL_UNAVAILABLE',detail:'unreachable'});
+ assert.deepEqual(await gemini(ok,{apiKey:null}).check!(),{ok:false,code:'MODEL_NOT_CONFIGURED',detail:'missing_api_key'});
+});
+
+test('a region or billing refusal is a configuration error, not a schema problem, and is not retried',async()=>{
+ const s=stub(()=>new Response(JSON.stringify({error:{code:400,message:'User location is not supported for the API use.',status:'FAILED_PRECONDITION'}}),{status:400}));
+ assert.equal(await code(gemini(s.fetchImpl).run(task)),'MODEL_NOT_CONFIGURED:precondition_failed');
+ assert.equal(s.calls.length,1);
+});
+
 test('structured JSON request: key in a header only, schema attached, thinking off for 2.5 Flash, answer fitted and validated',async()=>{
  const s=stub(()=>ok({answer:'a very long answer'}));
  const r=await gemini(s.fetchImpl).run(task);

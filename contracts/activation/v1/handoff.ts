@@ -180,6 +180,8 @@ export type AnalysisJob = {
   startedAt: string; finishedAt: string | null; elapsedMs: number; workspaceRevision: number;
   /** The analysis record created on success, and how it was produced (model or rule-based fallback). */
   draft: number | null; interpreter: Understanding['interpreter'] | null; modelOk: boolean | null; modelError: string | null;
+  /** Why the model failed, as a code (for example invalid_api_key, model_not_found); never provider text. */
+  modelErrorDetail?: string | null;
   error: string | null;
 };
 

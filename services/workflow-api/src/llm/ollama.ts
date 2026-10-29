@@ -50,7 +50,11 @@ export function fit(value:unknown,schema:any):unknown{
 export type StageStats={name:string;ms:number;attempts:number;attemptErrors:string[];promptTokens:number|null;outputTokens:number|null;
  promptEvalMs:number|null;evalMs:number|null;loadMs:number|null;tokensPerSecond:number|null;thinkingChars:number;numCtx:number;truncated:boolean};
 export type JsonTask<T>={name:string;system:string;user:string|object;schema:Record<string,unknown>;validate:(value:unknown)=>T;maxChars?:number;numCtx?:number;numPredict?:number};
-export type JsonModel={provider:'ollama'|'gemini';model:string;maxCtx:number;run<T>(task:JsonTask<T>):Promise<{value:T;durationMs:number;stats:StageStats}>};
+/** Result of a configuration check: whether the provider accepts this key and model, as codes only. */
+export type ModelCheck={ok:true}|{ok:false;code:ModelErrorCode;detail:string|null};
+export type JsonModel={provider:'ollama'|'gemini';model:string;maxCtx:number;run<T>(task:JsonTask<T>):Promise<{value:T;durationMs:number;stats:StageStats}>;
+ /** Optional: asks the provider whether the key and model work, without generating anything. */
+ check?():Promise<ModelCheck>};
 
 const ms=(ns:unknown)=>typeof ns==='number'?Math.round(ns/1e6):null;
 const add=(a:number|null,b:number|null)=>a===null&&b===null?null:(a??0)+(b??0);

@@ -35,6 +35,9 @@ const stdoutLog:Log=(level,event,fields={})=>{process.stdout.write(JSON.stringif
 
 /** Reads and checks the environment. Missing secrets don't stop the process: /healthz reports them (503) so a
  * misconfigured deploy is visible in Render, and the demo stays closed until they are set. */
+/** A key pasted into a dashboard often carries spaces, a line break or quotes; none of those are ever part of a key. */
+export const cleanKey=(v:string|undefined)=>v?.trim().replace(/^(["'])(.*)\1$/,'$2').trim()||null;
+
 export function configFromEnv(env:Record<string,string|undefined>=process.env){
  const num=(name:string,fallback:number)=>{const v=env[name];if(v===undefined||v==='')return fallback;const n=Number(v);if(!Number.isFinite(n))throw new Error(`${name} must be a number`);return n;};
  const missing:string[]=[];
@@ -50,7 +53,7 @@ export function configFromEnv(env:Record<string,string|undefined>=process.env){
  if(storage!=='ephemeral'&&storage!=='persistent')throw new Error('PORTAL_STORAGE must be ephemeral or persistent');
  return {production,secure:production&&env.PORTAL_ALLOW_HTTP!=='1',port:num('PORT',10000),
   dataDir:resolve(env.PORTAL_DATA_DIR||join(tmpdir(),'spotify-portal-demo')),storage:storage as 'ephemeral'|'persistent',passphrase,secret,missing,
-  provider:provider as 'gemini'|'ollama'|'rules',geminiModel:env.GEMINI_MODEL||'gemini-2.5-flash',geminiKey:env.GEMINI_API_KEY||null,geminiOrigin,
+  provider:provider as 'gemini'|'ollama'|'rules',geminiModel:env.GEMINI_MODEL?.trim()||'gemini-2.5-flash',geminiKey:cleanKey(env.GEMINI_API_KEY),geminiOrigin,
   aiDailyLimit:num('PORTAL_AI_DAILY_REQUEST_LIMIT',200),aiPerMinute:num('PORTAL_AI_REQUESTS_PER_MINUTE',8),roomLimit:num('PORTAL_DEMO_ROOM_LIMIT',50),roomTtlHours:num('PORTAL_DEMO_ROOM_TTL_HOURS',24),
   evidenceMaxAgeHours:num('ACTIVATION_EVIDENCE_MAX_AGE_HOURS',24),commit:env.RENDER_GIT_COMMIT?.slice(0,12)??null};
 }
@@ -130,6 +133,10 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
  if(config.provider==='gemini'&&config.geminiKey)model=createGemini({apiKey:config.geminiKey,model:config.geminiModel,timeoutMs:90_000,retries:1,maxOutputTokens:8192,apiOrigin:config.geminiOrigin,admit:()=>budget.admit(),now},fetchImpl);
  if(config.provider==='ollama'){const o=ollamaConfigFromEnv({...process.env,PORTAL_LLM_PROVIDER:'ollama'});if(o)model=createOllama(o,fetchImpl);}
  const ai=model?`${model.provider}:${model.model}`:config.provider==='gemini'?'not_configured (GEMINI_API_KEY missing)':'rules';
+ // Once at startup: does the provider accept this key and model? Shown in /healthz and the log (codes only), so a
+ // rejected key is visible to the site owner before anyone uploads a document.
+ let aiCheck=model?.check?'pending':model?'not_checked':'not_configured';
+ if(model?.check)void model.check().then(r=>{aiCheck=r.ok?'ok':`${r.code}${r.detail?':'+r.detail:''}`;log(r.ok?'info':'warn','ai_check',{result:aiCheck});}).catch(()=>{aiCheck='MODEL_UNAVAILABLE:check_failed';});
  const hosted=createHostedActivation({filename,rooms,analysisModel:model,aikaModel:model,evidenceMaxAgeHours:config.evidenceMaxAgeHours});
  const goals=openGoalStore(join(config.dataDir,'goals.sqlite'));
  const api=createApp(goals,'http://127.0.0.1',hosted.options);
@@ -183,7 +190,7 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
   const url=new URL(req.url??'/','http://local'),path=url.pathname;
   if(path==='/healthz'){
    const storage=storageOk(),ok=storage&&!config.missing.length;
-   return json(res,ok?200:503,{status:ok?'ok':'misconfigured',checks:{storage:storage?'ok':'error',storageMode:config.storage,aiRequestsPerMinute:config.aiPerMinute,config:config.missing.length?{missing:config.missing}:'ok',ai,aiRequestsToday:`${budget.used()}/${budget.limit}`,activeRooms:rooms.active()},commit:config.commit});
+   return json(res,ok?200:503,{status:ok?'ok':'misconfigured',checks:{storage:storage?'ok':'error',storageMode:config.storage,aiRequestsPerMinute:config.aiPerMinute,config:config.missing.length?{missing:config.missing}:'ok',ai,aiCheck,aiRequestsToday:`${budget.used()}/${budget.limit}`,activeRooms:rooms.active()},commit:config.commit});
   }
   if(config.missing.length)return send(res,503,page(null,'This demo isn’t configured yet. The site owner needs to set its demo passphrase and session secret.'),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
   if(path==='/demo-gate'&&req.method==='GET')return send(res,200,page(null,null,url.searchParams.get('ended')==='1',url.searchParams.get('step')==='passphrase'?'passphrase':'welcome'),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
