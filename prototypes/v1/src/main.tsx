@@ -6,5 +6,6 @@ import {surfaceOf} from './portal-app/session';
 // Paths outside the Portal keep the earlier standalone prototype, loaded on its own so styles never mix.
 const App=lazy(()=>import('./portal-app/App').then(m=>({default:m.App})));
 const LegacyPortal=lazy(()=>import('./styles.css').then(()=>import('./portal/Portal')));
+const DemoRoomBar=lazy(()=>import('./portal-app/DemoRoom').then(m=>({default:m.DemoRoomBar})));
 const Surface=surfaceOf(window.location.pathname)?App:LegacyPortal;
-createRoot(document.getElementById('root')!).render(<React.StrictMode><Suspense fallback={null}><Surface/></Suspense></React.StrictMode>);
+createRoot(document.getElementById('root')!).render(<React.StrictMode><Suspense fallback={null}><Surface/>{Surface===App&&<DemoRoomBar/>}</Suspense></React.StrictMode>);

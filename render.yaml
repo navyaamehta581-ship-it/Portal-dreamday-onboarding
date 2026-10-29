@@ -4,10 +4,10 @@
 # demo gate, the Portal session layer and the workflow API (bound to the container's loopback only). All state is
 # SQLite on the persistent disk below, so the service runs as a single instance.
 #
-# Status: NOT READY TO APPLY. ./Dockerfile and the production server it starts (with the /healthz endpoint and the
-# environment variables below) are planned and not yet in the repository. Creating a Blueprint from this file
-# before they land will fail the build. Nothing here deploys by itself: a Blueprint only takes effect when someone
-# creates it in the Render dashboard (New > Blueprint).
+# Status: ready to apply. ./Dockerfile builds the Portal and runs services/workflow-api/src/production.ts, which reads
+# exactly the variables below (a test keeps the two in sync) and serves /healthz. Nothing here deploys by itself: a
+# Blueprint only takes effect when someone creates it in the Render dashboard (New > Blueprint), and autoDeploy is off.
+# Setup steps: docs/deployment/render.md.
 #
 # Cost when applied: the Starter instance (about $7/month) plus the 1 GB disk (about $0.25/month). Persistent disks
 # are not available on Render's free instances. Check current prices on render.com/pricing before applying.

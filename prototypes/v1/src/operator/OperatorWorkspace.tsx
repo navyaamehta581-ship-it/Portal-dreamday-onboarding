@@ -34,7 +34,7 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
  const ws=useCustomerWorkspace(api);
  const work=useMilestoneWork(api),repos=useRepositoryEvidence(api);
  useEffect(()=>{if(api)void session.refresh();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
- useEffect(()=>{if(session.error==='PERSONA_CHANGED'||session.error==='SIGN_IN_REQUIRED')onPersonaChanged();},[session.error]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{if(session.error==='DEMO_GATE_REQUIRED')window.location.assign('/demo-gate');if(session.error==='PERSONA_CHANGED'||session.error==='SIGN_IN_REQUIRED')onPersonaChanged();},[session.error]); // eslint-disable-line react-hooks/exhaustive-deps
  // Once the customer is known to be unpublished, keep the draft mounted through later errors (e.g. conflicts).
  useEffect(()=>{if(session.error==='NOT_FOUND')setNeedsPublish(true);if(session.state)setNeedsPublish(false);},[session.error,session.state]);
  // Choosing the customer already open changes nothing; another customer starts from a clean draft and reloads.

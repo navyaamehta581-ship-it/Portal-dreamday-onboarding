@@ -30,7 +30,7 @@ export type BaselineCheck = { area: string; reason: string; status: EvidenceStat
 export type Discard = { stage: 'interpret' | 'plan'; item: string; reason: string };
 export type ModelStage = { name: string; ms: number; attempts: number; attemptErrors: string[]; promptTokens: number | null; outputTokens: number | null;
   promptEvalMs: number | null; evalMs: number | null; loadMs: number | null; tokensPerSecond: number | null; thinkingChars: number; numCtx: number; truncated: boolean };
-export type ModelRun = { provider: 'ollama' | 'openai_compatible'; model: string; ok: boolean; error: string | null; durationMs: number; chunks: number; discarded: number;
+export type ModelRun = { provider: 'ollama' | 'gemini' | 'openai_compatible'; model: string; ok: boolean; error: string | null; durationMs: number; chunks: number; discarded: number;
   errorDetail?: string | null; discards?: Discard[]; stages?: ModelStage[] };
 
 export type Understanding = {

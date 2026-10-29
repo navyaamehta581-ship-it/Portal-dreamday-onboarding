@@ -5,7 +5,10 @@ export type PersonaCustomer={id:string;label:string;customerId:string};
 export type Persona={id:string;name:string;role:PersonaRole;title:string;customers:PersonaCustomer[]};
 
 async function call(path:string,body?:unknown){
- return fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ const r=await fetch(path,{method:body===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ // Hosted demo: outside a demo room (or after it ended) the gate comes first.
+ if(r.status===401&&(await r.clone().json().catch(()=>null))?.error?.code==='DEMO_GATE_REQUIRED')window.location.assign('/demo-gate');
+ return r;
 }
 const code=async(r:Response)=>((await r.json().catch(()=>null)) as {error?:{code?:string}}|null)?.error?.code??`HTTP_${r.status}`;
 

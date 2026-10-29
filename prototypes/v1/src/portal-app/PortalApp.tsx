@@ -25,7 +25,7 @@ export function PortalApp({persona,user,onSignedOut,onPersonaChanged,notice}:{pe
  const session=useActivation(api,`${persona.id}:${account.customerId}`);
  const work=useMilestoneWork(api),repos=useRepositoryEvidence(api);
  useEffect(()=>{void session.refresh();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
- useEffect(()=>{if(session.error==='SIGN_IN_REQUIRED')onSignedOut();if(session.error==='PERSONA_CHANGED')onPersonaChanged();},[session.error]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{if(session.error==='DEMO_GATE_REQUIRED')window.location.assign('/demo-gate');if(session.error==='SIGN_IN_REQUIRED')onSignedOut();if(session.error==='PERSONA_CHANGED')onPersonaChanged();},[session.error]); // eslint-disable-line react-hooks/exhaustive-deps
 
  const champion=persona.role==='champion';
  const onboarding=/^\/activation(?:\/([a-z]+))?\/?$/.exec(path);
