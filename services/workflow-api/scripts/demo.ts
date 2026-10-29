@@ -55,6 +55,11 @@ privatePath(tokenPath);privatePath(admissionPath);
 if(!existsSync(operatorTokenPath))writeFileSync(operatorTokenPath,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});
 privatePath(operatorTokenPath);
 process.env.ACTIVATION_OPERATOR_TOKEN=readFileSync(operatorTokenPath,'utf8');
+// Dream Day: the customer's Champion has a separate credential, held by the Portal session layer.
+const championTokenPath=join(directory,'champion-token');
+if(!existsSync(championTokenPath))writeFileSync(championTokenPath,randomBytes(32).toString('hex'),{mode:0o600,flag:'wx'});
+privatePath(championTokenPath);
+process.env.ACTIVATION_CHAMPION_TOKEN=readFileSync(championTokenPath,'utf8');
 if(command==='operator-token'){process.stdout.write(process.env.ACTIVATION_OPERATOR_TOKEN+'\n');process.exit(0);}
 const token=readFileSync(tokenPath,'utf8');
 if(command==='token'){process.stdout.write(token+'\n');process.exit(0);}

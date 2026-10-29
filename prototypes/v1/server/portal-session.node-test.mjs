@@ -7,10 +7,10 @@ import {join} from 'node:path';
 import {DEFAULT_PERSONAS, createPortalSession, loadDirectory} from './portal-session.mjs';
 
 const dir = mkdtempSync(join(tmpdir(), 'portal-session-'));
-const devA = 'a'.repeat(64), opA = 'c'.repeat(64), devB = 'b'.repeat(64), opB = 'd'.repeat(64);
-for (const [name, value] of [['a', devA], ['a-op', opA], ['b', devB], ['b-op', opB]]) writeFileSync(join(dir, name), value);
+const devA = 'a'.repeat(64), opA = 'c'.repeat(64), champA = 'e'.repeat(64), devB = 'b'.repeat(64), opB = 'd'.repeat(64);
+for (const [name, value] of [['a', devA], ['a-op', opA], ['a-champ', champA], ['b', devB], ['b-op', opB]]) writeFileSync(join(dir, name), value);
 const customers = [
-  {id: 'north', label: 'Northstar', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a'), operatorTokenFile: join(dir, 'a-op')},
+  {id: 'north', label: 'Northstar', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a'), operatorTokenFile: join(dir, 'a-op'), championTokenFile: join(dir, 'a-champ')},
   {id: 'other', label: 'Other', customerId: 'fictional-other', apiOrigin: 'http://127.0.0.1:7002', tokenFile: join(dir, 'b'), operatorTokenFile: join(dir, 'b-op')},
   {id: 'missing', label: 'Missing', customerId: 'fictional-missing', apiOrigin: 'http://127.0.0.1:7003', tokenFile: join(dir, 'none'), operatorTokenFile: join(dir, 'none')},
 ];
@@ -69,15 +69,19 @@ test('sign-in is same-origin, sets an HttpOnly cookie and survives a reload as t
   } finally {await h.close();}
 });
 
-test('customer personas use their customer developer credential; a forged header or customer ID changes nothing', async () => {
+test('developers use the developer credential, the Champion the Champion credential; forged headers or customer IDs change nothing', async () => {
   const h = await harness();
   try {
-    for (const id of ['alex', 'maya']) {
+    for (const [id, token, name] of [['alex', devA, 'Alex Rivera'], ['maya', champA, 'Maya Chen']]) {
       const jar = await h.signIn(id);
-      const read = await h.call('/portal-api' + STATE, {headers: {...jar, Authorization: 'Bearer forged', 'X-Portal-Persona': id}});
+      const read = await h.call('/portal-api' + STATE, {headers: {...jar, Authorization: 'Bearer forged', 'X-Portal-Persona': id, 'X-Portal-Actor': 'Someone Else'}});
       assert.equal(read.status, 200); assert.equal(read.headers.get('etag'), '"activation-1"');
       assert.equal(h.calls.at(-1).url, 'http://127.0.0.1:7001/api' + STATE);
-      assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${devA}`, 'the Champion has developer access only');
+      assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${token}`);
+      assert.equal(h.calls.at(-1).init.headers['X-Portal-Actor'], name, 'the actor comes from the signed-in persona, never the browser');
+      // Dream Day routes pass through; the API decides who may use them by the credential.
+      assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-north/champion-review', {headers: jar})).status, 200);
+      assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${token}`);
       const before = h.calls.length;
       assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-other/state', {headers: jar})).status, 403);
       assert.equal((await h.call('/operator-api/north' + STATE, {headers: jar})).status, 403, 'no operator credential for customer personas');
@@ -139,7 +143,7 @@ test('configuration: personas validated, legacy account arrays still work, demo 
   assert.deepEqual(legacy.personas, [{id: 'north', name: 'Dev A', role: 'developer', title: 'Developer', customers: ['north']}]);
   const demo = loadDirectory({ACTIVATION_DEMO_DIR: dir});
   assert.deepEqual(demo.personas.map(p => [p.name, p.role]), DEFAULT_PERSONAS.map(p => [p.name, p.role]));
-  assert.deepEqual(demo.customers.map(c => [c.customerId, c.tokenFile, c.operatorTokenFile]), [['fictional-recommendation-demo', join(dir, 'token'), join(dir, 'operator-token')]]);
+  assert.deepEqual(demo.customers.map(c => [c.customerId, c.tokenFile, c.operatorTokenFile, c.championTokenFile]), [['fictional-recommendation-demo', join(dir, 'token'), join(dir, 'operator-token'), join(dir, 'champion-token')]]);
   assert.deepEqual(loadDirectory({}), {customers: [], personas: []});
 });
 

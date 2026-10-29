@@ -1,7 +1,7 @@
 /** Chris's editable review of one analysis. Built from the analysis once, then edited by Chris and stored with the
  * operator-only record. Every item keeps where it came from (customer sources, analysis suggestion, Chris). Before
  * submission for Champion review the review must be complete and contain nothing the Champion may not see. */
-import type {Finding,HandoffRecord,MilestoneDraft,ReviewDraft,ReviewItem,ReviewMilestone,ReviewOrigin,ReviewStakeholder,SourceRef,Understanding} from '../../../../../contracts/activation/v1/handoff.ts';
+import type {ChampionPlan,Finding,HandoffRecord,MilestoneDraft,ReviewDraft,ReviewItem,ReviewMilestone,ReviewOrigin,ReviewStakeholder,SourceRef,SourceType,Understanding} from '../../../../../contracts/activation/v1/handoff.ts';
 import {ActivationError} from '../store.ts';
 import {technicalRole,unsafeReason} from './intelligence.ts';
 
@@ -44,7 +44,7 @@ const invalid=():never=>{throw new ActivationError('INVALID_REQUEST');};
 const ID=/^[A-Za-z0-9_-]{1,60}$/;
 const text=(v:unknown,max:number,min=0)=>typeof v==='string'&&v.trim().length>=min&&v.length<=max?v.trim():invalid();
 const list=<T,>(v:unknown,max:number,each:(x:unknown)=>T):T[]=>Array.isArray(v)&&v.length<=max?v.map(each):invalid();
-const origin=(v:unknown)=>v==='customer'||v==='ai'||v==='chris'?v:invalid();
+const origin=(v:unknown)=>v==='customer'||v==='ai'||v==='chris'||v==='champion'?v:invalid();
 function reviewItem(v:unknown):ReviewItem{
  const x=v as Record<string,unknown>;if(!x||typeof x!=='object')invalid();
  return {id:ID.test(String(x.id))?String(x.id):invalid(),text:text(x.text,600),origin:origin(x.origin),
@@ -122,4 +122,41 @@ export function toMilestoneDrafts(r:ReviewDraft,record:Pick<HandoffRecord,'propo
    completionCriteria:done,dependencies:m.dependsOn.map(d=>title.get(d)).filter((x):x is string=>!!x),developerUnknowns:base?.developerUnknowns??[],
    recommendedRole:m.role,proposedAssignee:m.assignee,assignmentStatus:'proposed'};
  });
+}
+
+// ---- Dream Day: the Champion's view and edits.
+const CATEGORY:Record<SourceType,string>={conversation:'Conversational Transcript',crm:'CRM Record',chris_notes:'My Notes',account_prep:'Account Preparation',
+ technical_requirements:'Technical Requirements',repository:'Repository Observation',integration_tools:'Integration Tools'};
+const SPOTIFY_SIDE:SourceType[]=['crm','chris_notes','account_prep'];
+/** Source attribution for the Champion: the kind of source, never Chris's own names for it. Spotify-side sources
+ * (CRM, Chris's notes, account preparation) are attributed to the account team as a whole. */
+function championSources(labels:string[]|undefined,sources:HandoffRecord['sources']){
+ const out=new Set<string>();
+ for(const l of labels??[]){const src=sources.find(x=>(x.label||x.type)===l||x.label===l);if(src)out.add(SPOTIFY_SIDE.includes(src.type)?'Spotify account team':CATEGORY[src.type]);}
+ return [...out];
+}
+/** The plan as the Champion may see it. Built on the server from the operator record: technical stakeholders only,
+ * every text screened again (anything unsafe is left out and counted), source names replaced by categories. */
+export function championPlan(record:Pick<HandoffRecord,'review'|'understanding'|'proposal'|'sources'>):ChampionPlan{
+ const r=record.review??reviewFromAnalysis(record),u=record.understanding;
+ let withheld=0;
+ const safe=(t:string)=>{if(!t.trim()||!unsafeReason(t,u))return true;withheld++;return false;};
+ const items=(xs:ReviewItem[])=>xs.filter(x=>safe(x.text)).map(x=>({id:x.id,text:x.text,origin:x.origin,...(x.edited?{edited:true}:{}),...(x.status?{status:x.status}:{}),...(x.sources?{sources:championSources(x.sources,record.sources)}:{})}));
+ const milestones=r.milestones.filter(m=>[m.title,m.description,m.system,...m.actions,...m.completionCriteria].every(safe));
+ const ids=new Set(milestones.map(m=>m.id));
+ return {problem:{summary:safe(r.problem.summary)?r.problem.summary:'',challenges:items(r.problem.challenges),systems:items(r.problem.systems),contradictions:items(r.problem.contradictions),unknowns:items(r.problem.unknowns)},
+  facts:items(r.facts),goals:items(r.goals),questions:items(r.questions),
+  milestones:milestones.map(m=>({...m,dependsOn:m.dependsOn.filter(d=>ids.has(d))})),
+  stakeholders:r.stakeholders.filter(s=>s.technical&&[s.name,s.role,s.responsibilities].every(safe)).map(s=>({id:s.id,name:s.name,role:s.role,responsibilities:s.responsibilities,basis:s.basis,sources:championSources(s.sources,record.sources)})),
+  withheld};
+}
+/** Apply the Champion's edits (goals, milestones, questions) to the record's review; everything else is kept. */
+export function applyChampionEdits(review:ReviewDraft,input:unknown):ReviewDraft{
+ const x=input as {goals?:unknown;milestones?:unknown;questions?:unknown};
+ if(!x||typeof x!=='object')invalid();
+ return validateReview({...review,goals:x.goals,milestones:x.milestones,questions:x.questions});
+}
+/** Approval needs an explicit assignee on every milestone, in addition to the submission checks. */
+export function approvalIssues(r:ReviewDraft,u:Pick<Understanding,'findings'|'stakeholders'|'privateStems'>):ReviewIssue[]{
+ return [...reviewIssues(r,u),...r.milestones.flatMap((m,i)=>m.assignee?[]:[{path:`milestones[${i}].assignee`,label:`Milestone ${i+1} · assignee`,reason:'unassigned'}])];
 }

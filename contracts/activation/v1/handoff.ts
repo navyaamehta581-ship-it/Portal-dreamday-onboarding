@@ -71,6 +71,8 @@ export type DeveloperHandoff = {
   milestones: MilestoneDraft[];
   /** Technical stakeholders named in the sources (Champion, developers, platform/service owners) and their roles. */
   team?: { name: string; role: string; status: 'reported' | 'inferred' }[];
+  /** The Champion's Dream Day approval of this plan. Absent for plans published before Dream Day. */
+  approval?: { by: string; at: string };
 };
 
 /** Operator-only record. Drafts are numbered; publishing freezes one draft as a published version. */
@@ -79,16 +81,21 @@ export type Approval = { status: 'pending' | 'approved'; by: string | null; at: 
 export type Approvals = { chris: Approval; champion: Approval };
 export type Assignment = { milestoneId: string; role: string; proposedAssignee: string | null; status: 'proposed' | 'approved' };
 
-/** Record status. 'draft' = analysis ready for Chris's review; 'submitted' = Chris marked it ready for Champion
- * review (nothing is shared with the Champion or developers by submitting); 'published' = developers can see it. */
-export type HandoffStatus = 'draft' | 'submitted' | 'published';
+/** Record status (Dream Day review workflow):
+ * 'draft' = Chris is reviewing or revising; 'submitted' / 'resubmitted' = waiting for the Champion's review;
+ * 'changes_requested' = the Champion sent it back with a comment; 'approved' = the Champion approved it but this
+ * server doesn't publish; 'published' = developers can see it. Only a Champion approval publishes new plans;
+ * a 'published' record without a recorded Champion approval predates Dream Day. */
+export type HandoffStatus = 'draft' | 'submitted' | 'changes_requested' | 'resubmitted' | 'approved' | 'published';
+/** One step of the Dream Day review, kept on the record. `by` is the display name of who acted. */
+export type ReviewEvent = { action: 'submitted' | 'resubmitted' | 'withdrawn' | 'changes_requested' | 'approved' | 'published'; at: string; by: string; comment?: string };
 export type HandoffRecord = {
   approvals?: Approvals; assignments?: Assignment[];
   draft: number; status: HandoffStatus; createdAt: string; publishedVersion: number | null; publishedAt: string | null;
   sources: SourceInput[]; understanding: Understanding; proposal: MilestoneProposal; developer: DeveloperHandoff | null;
   /** Chris's edited review of this analysis (operator-only), its revision and the saved information it was built from. */
   review?: ReviewDraft; reviewRevision?: number; reviewUpdatedAt?: string; basedOnWorkspaceRevision?: number;
-  submittedAt?: string | null;
+  submittedAt?: string | null; history?: ReviewEvent[];
 };
 
 /** Chris's saved, not-yet-analyzed customer information for one customer. Operator-only. */
@@ -106,7 +113,7 @@ export type AnalysisJob = {
 
 /** Where a reviewed item came from. 'customer' = stated in the customer's sources; 'ai' = suggested by analysis;
  * 'chris' = added by Chris. `edited` marks an item Chris changed. */
-export type ReviewOrigin = 'customer' | 'ai' | 'chris';
+export type ReviewOrigin = 'customer' | 'ai' | 'chris' | 'champion';
 export type ReviewItem = { id: string; text: string; origin: ReviewOrigin; edited?: boolean; status?: 'verified' | 'reported' | 'unconfirmed'; sources?: string[] };
 export type ReviewStakeholder = { id: string; name: string; role: string; responsibilities: string; basis: 'stated' | 'role_default' | 'inferred' | 'chris'; sources: string[]; technical: boolean };
 export type ReviewMilestone = { id: string; title: string; description: string; system: string; actions: string[]; completionCriteria: string[];
@@ -118,6 +125,22 @@ export type ReviewDraft = {
   goals: ReviewItem[];
   milestones: ReviewMilestone[];
   questions: ReviewItem[];
+};
+
+/** The Champion's server-built view of the plan under review. Only technical, customer-safe content: no internal
+ * notes, commercial details, non-technical people or Chris's source names. `plan` is null while Chris is drafting
+ * or revising, so work in progress is never shown. */
+export type ChampionReviewStatus = 'not_submitted' | 'revising' | 'submitted' | 'resubmitted' | 'changes_requested' | 'approved' | 'published' | 'published_before_dream_day';
+export type ChampionPlan = {
+  problem: ReviewDraft['problem']; facts: ReviewItem[]; goals: ReviewItem[]; milestones: ReviewMilestone[]; questions: ReviewItem[];
+  stakeholders: Omit<ReviewStakeholder, 'technical'>[];
+  /** Items left out because they failed the privacy screen (expected 0: submission is screened too). */
+  withheld: number;
+};
+export type ChampionReview = {
+  draft: number | null; status: ChampionReviewStatus; reviewRevision: number; submittedAt: string | null;
+  analysis: 'model' | 'rule_based' | 'rule_based_fallback' | null;
+  history: ReviewEvent[]; approval: { by: string; at: string } | null; plan: ChampionPlan | null;
 };
 
 /** Everything Chris's workspace loads in one request. */

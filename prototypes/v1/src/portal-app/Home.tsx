@@ -10,7 +10,7 @@ export function Home({session,persona}:{session:ActivationSession;persona:Person
  const {state,busy,error}=session;
  return <div className="pt-home">
   <h1>Welcome to Portal</h1>
-  {state&&(persona.role==='champion'?<ChampionCard session={session}/>:<AssignedWork session={session} persona={persona}/>)}
+  {persona.role==='champion'?<ChampionCard session={session}/>:state&&<AssignedWork session={session} persona={persona}/>}
   {!state?<section className="pt-guide" aria-label="Your onboarding">
    <div className="pt-guide-head"><span className="icon"><BookOpenText size={20} aria-hidden="true"/></span><h2>Get started with your onboarding</h2></div>
    <div className="pt-step" role={error?'alert':'status'}><h3>{busy||!error?'Loading your onboarding…':loadProblem(error).title}</h3>{error&&!busy&&<p>{loadProblem(error).detail}</p>}{error&&!busy&&<button className="pt-btn" onClick={()=>void session.refresh()}>Try again</button>}</div>
@@ -47,21 +47,33 @@ function HomeGuide({session}:{session:ActivationSession}){
  </>;
 }
 
-/** Work assigned to this developer. Only approved assignments name anyone; nothing is approved until the
- * Champion approval step exists, so this says so instead of guessing from proposals. */
+/** Work approved for this developer in Dream Day. The server sends each developer only their own approved
+ * milestones, so everything here is theirs; before approval nothing is assigned. */
 function AssignedWork({session,persona}:{session:ActivationSession;persona:Persona}){
- const mine=(session.state?.handoff?.milestones??[]).filter(m=>m.assignmentStatus==='approved'&&m.proposedAssignee===persona.name);
+ const h=session.state?.handoff;
+ const mine=(h?.milestones??[]).filter(m=>m.assignmentStatus==='approved'&&m.proposedAssignee===persona.name);
  return <section className="pt-guide" aria-label="Your assigned work">
   <div className="pt-guide-head"><span className="icon"><ClipboardList size={20} aria-hidden="true"/></span><h2>Your assigned work</h2></div>
-  {mine.length?<div className="pt-rows">{mine.map(m=><div key={m.id} className="pt-row"><span className="label">{m.objective}<small>{m.completionCriteria[0]??''}</small></span><Link className="pt-btn" to="/activation">Open</Link></div>)}</div>
-   :<div className="pt-step"><h3>Nothing is assigned to you yet</h3><p>Proposed assignments are shown to you once your Champion approves them. That approval step isn’t available in this demo yet, so your team’s shared onboarding is below.</p></div>}
+  {mine.length?<>
+   {h?.approval&&<p className="pt-note" style={{margin:'14px 0 0'}}>Approved by {h.approval.by} in Dream Day on {new Date(h.approval.at).toLocaleDateString()}.</p>}
+   {mine.map(m=><div key={m.id} className="pt-step assigned" aria-label={`Assigned: ${m.objective}`}>
+    <h3>{m.objective}</h3>
+    {m.why&&m.why!==m.objective&&<p>{m.why}</p>}
+    <p className="pt-label" style={{marginTop:16}}>Actions</p><ol className="pt-plain-list">{m.actions.map(a=><li key={a}>{a}</li>)}</ol>
+    <p className="pt-label" style={{marginTop:14}}>Done when</p><ul className="pt-plain-list">{m.completionCriteria.map(c=><li key={c}>{c}</li>)}</ul>
+    {m.dependencies.length>0&&<p className="pt-note">Starts after: {m.dependencies.join(', ')}</p>}
+    <Link className="pt-btn" to="/activation">Open your onboarding</Link>
+   </div>)}</>
+   :<div className="pt-step"><h3>Nothing is assigned to you yet</h3><p>{h?.approval?'Your Champion approved the team’s plan, but none of its milestones are assigned to you. Ask your Champion if you expected work.':'Work is assigned when your Champion approves the team’s onboarding plan in Dream Day.'}</p></div>}
  </section>;
 }
 
 function ChampionCard({session}:{session:ActivationSession}){
- const milestones=session.state?.handoff?.milestones.length??0;
+ const h=session.state?.handoff;
  return <section className="pt-guide" aria-label="Team coordination">
   <div className="pt-guide-head"><span className="icon"><Users size={20} aria-hidden="true"/></span><h2>Coordinate your team</h2></div>
-  <div className="pt-step"><h3>{milestones?`${milestones} proposed milestone${milestones>1?'s':''} from Chris`:'Nothing published by Chris yet'}</h3><p>Review your technical team and the proposed work. Approving it isn’t available yet.</p><button className="pt-btn" onClick={()=>navigate('/champion')}>Open Team Coordination</button></div>
+  <div className="pt-step"><h3>{h?.approval?`Plan approved · ${h.milestones.length} milestone${h.milestones.length===1?'':'s'} assigned`:'Review your team’s onboarding plan in Dream Day'}</h3>
+   <p>{h?.approval?'See who is doing what in Team Coordination.':'When Chris submits the plan, you review it, assign the work and approve it in Dream Day.'}</p>
+   <button className="pt-btn" onClick={()=>navigate(h?.approval?'/champion/team':'/champion')}>{h?.approval?'Open Team overview':'Open Dream Day'}</button></div>
  </section>;
 }

@@ -198,7 +198,7 @@ test('developer-safe screen and AiKA context boundary',()=>{
  assert.equal(planInput({...ruleBasedAnalysis(NORTHSTAR).understanding}).problems.length>=0,true);
 });
 
-test('HTTP: model draft is a proposal; publishing records Chris approval, keeps Champion pending and hides assignees from developers',async()=>{
+test('HTTP Dream Day: model draft → Chris submits → Champion approves; each developer receives only their approved work',async()=>{
  const {createApp}=await import('../src/app.ts');const {openGoalStore}=await import('../src/store.ts');
  const {openActivationStore}=await import('../src/activation/store.ts');const {createIntake}=await import('../src/activation/intake.ts');
  const {openHandoffStore}=await import('../src/activation/handoff/store.ts');const {createHandoffService}=await import('../src/activation/handoff/service.ts');
@@ -206,24 +206,34 @@ test('HTTP: model draft is a proposal; publishing records Chris approval, keeps 
  const p={tenantId:'t',customerId:'northstar',sessionId:'s'};const intake=createIntake({admit:()=>false});
  const store=openActivationStore(':memory:',intake.policy),handoffs=openHandoffStore(':memory:'),goals=openGoalStore(':memory:');
  const handoff=createHandoffService({handoffs,store:()=>store,analyze:src=>analyzeWithModel(model(s.url),src),stage:intake.stage,release:intake.release});
- const server=createApp(goals,undefined,{store,handoff,authorize:(r,c)=>['Bearer dev','Bearer op'].includes(r.headers.authorization??'')&&c===p.customerId?p:null,isOperator:r=>r.headers.authorization==='Bearer op'});
+ const server=createApp(goals,undefined,{store,handoff,championApproval:true,authorize:(r,c)=>['Bearer dev','Bearer op','Bearer champ'].includes(r.headers.authorization??'')&&c===p.customerId?p:null,isOperator:r=>r.headers.authorization==='Bearer op',isChampion:r=>r.headers.authorization==='Bearer champ'});
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const root=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/activation/v1/customers/northstar/`;
- const call=(path:string,token:string,body?:unknown)=>fetch(root+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ const call=(path:string,token:string,body?:unknown,actor?:string)=>fetch(root+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(actor?{'X-Portal-Actor':actor}:{})},body:body===undefined?undefined:JSON.stringify(body)});
  try{
   const sources=NORTHSTAR.map(({type,label,text})=>({type,label,text}));
   assert.equal((await call('handoff-drafts','dev',{sources})).status,403);
   const draft=await (await call('handoff-drafts','op',{sources})).json();
-  assert.equal(draft.status,'draft');assert.equal(draft.approvals.chris.status,'pending');assert.equal(draft.approvals.champion.status,'pending');
+  assert.equal(draft.status,'draft');assert.equal(draft.approvals.champion.status,'pending');
   assert.deepEqual(draft.assignments.map((a:{proposedAssignee:string;status:string})=>[a.proposedAssignee,a.status]),[['Alex Rivera','proposed'],['Jordan Lee','proposed']]);
-  assert.equal((await call('state','dev')).status,404,'nothing reaches developers before publication');
-  const pub=await call('handoff-publications','op',{draft:1,milestones:draft.proposal.milestones,outcome:'Assess payments-api service readiness',agreedBy:'Maya Chen, call 28 Oct',agreementConfirmed:true});
-  assert.equal(pub.status,201,JSON.stringify(await pub.clone().json()));
-  const overview=await (await call('handoff','op')).json();assert.equal(overview.drafts[0].approvals.chris.status,'approved');assert.equal(overview.drafts[0].approvals.champion.status,'pending');
-  const raw=await (await call('state','dev')).text();
-  for(const x of [...PRIVATE,'Call with Maya','My notes'])assert.ok(!raw.includes(x),'developer state leaked '+x);
-  const dev=JSON.parse(raw);assert.equal(dev.handoff.milestones.length,2);
-  assert.deepEqual(dev.handoff.milestones.map((x:{proposedAssignee:string|null})=>x.proposedAssignee),[null,null],'unapproved assignees are hidden from developers');
-  assert.deepEqual(dev.handoff.team.map((x:{name:string})=>x.name),['Maya Chen','Alex Rivera','Jordan Lee'],'technical stakeholders stay visible');
+  // The stub model also extracted a commercial "fact"; submission would refuse it, so Chris removes it first.
+  assert.equal((await call('handoff-reviews','op',{draft:1,expectedRevision:0,review:{...draft.review,facts:draft.review.facts.filter((f:{text:string})=>!/ARR/.test(f.text))}})).status,200);
+  const sub=await call('handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true},'Chris');assert.equal(sub.status,200,JSON.stringify(await sub.clone().json()));
+  assert.equal((await call('state','dev')).status,404,'nothing reaches developers before approval');
+  assert.equal((await call('champion-review','dev')).status,403,'developers cannot review');
+  assert.equal((await call('champion-decisions','op',{draft:1,reviewRevision:2,decision:'approve',confirmed:true})).status,403,'Chris cannot approve his own plan');
+  const view=await (await call('champion-review','champ')).json();
+  assert.equal(view.status,'submitted');
+  for(const x of [...PRIVATE,'Call with Maya','My notes','Jamie'])assert.ok(!JSON.stringify(view).includes(x),'champion view leaked '+x);
+  assert.deepEqual(view.plan.stakeholders.map((x:{name:string})=>x.name),['Maya Chen','Alex Rivera','Jordan Lee'],'technical stakeholders only');
+  const ok=await (await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen')).json();
+  assert.equal(ok.status,'published');assert.deepEqual(ok.approval.by,'Maya Chen');
+  const as=async(actor:string|null,token='dev')=>{const raw=await (await call('state',token,undefined,actor??undefined)).text();for(const x of [...PRIVATE,'Call with Maya','My notes'])assert.ok(!raw.includes(x),'state leaked '+x);return JSON.parse(raw);};
+  const alex=await as('Alex Rivera'),jordan=await as('Jordan Lee'),maya=await as('Maya Chen','champ');
+  assert.deepEqual(alex.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Alex Rivera']);
+  assert.deepEqual(jordan.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Jordan Lee']);
+  assert.notEqual(alex.plan.selectedMilestone.outcome,jordan.plan.selectedMilestone.outcome,'different work for different people');
+  assert.deepEqual(maya.handoff.milestones.map((m:{proposedAssignee:string;assignmentStatus:string})=>[m.proposedAssignee,m.assignmentStatus]),[['Alex Rivera','approved'],['Jordan Lee','approved']]);
+  assert.deepEqual(maya.handoff.team.map((x:{name:string})=>x.name),['Maya Chen','Alex Rivera','Jordan Lee']);
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();await s.close();}
 });
 

@@ -91,7 +91,7 @@ test('hosted interpretation is validated; invented quotes fall back to the rule-
  assert.equal((await hostedInterpreter({},reply(good) as typeof fetch).interpret(sources)).interpreter,'rule_based','no model configured');
 });
 
-test('HTTP: Chris drafts and publishes; developers get only the projected view on every route',async()=>{
+test('HTTP: Chris drafts and submits, the Champion approves (Dream Day); developers get only the projected view on every route',async()=>{
  const {createApp}=await import('../src/app.ts');const {openGoalStore}=await import('../src/store.ts');
  const {openActivationStore}=await import('../src/activation/store.ts');const {createIntake}=await import('../src/activation/intake.ts');
  const {createBlockerReports}=await import('../src/activation/reports.ts');
@@ -101,9 +101,9 @@ test('HTTP: Chris drafts and publishes; developers get only the projected view o
  const reports=createBlockerReports(intake.policy,()=>store);store=openActivationStore(':memory:',reports.policy);
  const handoffs=openHandoffStore(':memory:'),goals=openGoalStore(':memory:');
  const handoff=createHandoffService({handoffs,store:()=>store,stage:intake.stage,release:intake.release});
- const server=createApp(goals,undefined,{store,handoff,reportProgress:reports.progress,reportBlocker:reports.submit,authorize:(r,c)=>['Bearer dev','Bearer op'].includes(r.headers.authorization??'')&&c===p.customerId?p:null,isOperator:r=>r.headers.authorization==='Bearer op'});
+ const server=createApp(goals,undefined,{store,handoff,championApproval:true,reportProgress:reports.progress,reportBlocker:reports.submit,authorize:(r,c)=>['Bearer dev','Bearer op','Bearer champ'].includes(r.headers.authorization??'')&&c===p.customerId?p:null,isOperator:r=>r.headers.authorization==='Bearer op',isChampion:r=>r.headers.authorization==='Bearer champ'});
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));const root=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/activation/v1/customers/northstar/`;
- const call=(path:string,token:string,body?:unknown)=>fetch(root+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
+ const call=(path:string,token:string,body?:unknown)=>fetch(root+path,{method:body===undefined?'GET':'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json','X-Portal-Actor':token==='champ'?'Riley Champion':token==='op'?'Chris':'Alex Rivera'},body:body===undefined?undefined:JSON.stringify(body)});
  const clean=async(r:Response,where:string)=>{const raw=await r.text();for(const x of [...PRIVATE,'Discovery call','CRM account record'])assert.ok(!raw.includes(x),`${where} leaked: ${x}`);return JSON.parse(raw);};
  try{
   assert.equal((await call('handoff-drafts','dev',fixture)).status,403);
@@ -111,16 +111,31 @@ test('HTTP: Chris drafts and publishes; developers get only the projected view o
   const draftRes=await call('handoff-drafts','op',fixture);assert.equal(draftRes.status,201);const draft=await draftRes.json();
   assert.equal(draft.draft,1);assert.equal(draft.status,'draft');assert.ok(draft.sources.length===4,'Chris keeps the private sources');
   const m=draft.proposal.milestones[0];
-  assert.equal((await call('handoff-publications','op',{draft:1,milestones:[{...m,why:'Prove value before the $480K renewal.'}],outcome:'x',agreedBy:'Maya',agreementConfirmed:true})).status,400,'confidential edits are rejected');
-  const pub=await call('handoff-publications','op',{draft:1,milestones:[m],outcome:'Prepare payments-api for Catalog registration with a confirmed owner',agreedBy:'Maya Patel, discovery call 27 Oct',agreementConfirmed:true});
-  assert.equal(pub.status,201);const opState=await pub.json();assert.equal(opState.context.agreedGoal.agreedBy,'Maya Patel, discovery call 27 Oct','Chris keeps attribution');
-  assert.equal((await call('handoff-publications','op',{draft:1,milestones:[m],outcome:'again',agreedBy:'x',agreementConfirmed:true})).status,409,'a published plan is never overwritten');
+  // The pre-Dream Day direct publication is closed on the server, whatever the body says.
+  assert.equal((await call('handoff-publications','op',{draft:1,milestones:[m],outcome:'Prepare payments-api',agreedBy:'Maya',agreementConfirmed:true})).status,403);
+  // Chris names the developer who will do the work, then submits.
+  const review={...draft.review,stakeholders:[...draft.review.stakeholders,{id:'p-alex',name:'Alex Rivera',role:'Developer',responsibilities:'Repository readiness',basis:'chris',sources:[],technical:true}],
+   milestones:[{...draft.review.milestones[0],assignee:'Alex Rivera'}]};
+  assert.equal((await call('handoff-reviews','op',{draft:1,expectedRevision:0,review})).status,200);
+  assert.equal((await call('handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true})).status,200);
+  // The Champion's edits are screened at approval: a commercial remark blocks it, with a field label.
+  const view=await clean(await call('champion-review','champ'),'champion review');
+  const leaky=await call('champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan:{goals:view.plan.goals,questions:view.plan.questions,milestones:[{...view.plan.milestones[0],description:'Prove value before the $480K renewal.'}]}});
+  assert.equal(leaky.status,200);
+  const refused=await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+1,decision:'approve',confirmed:true});
+  assert.equal(refused.status,400);assert.equal((await refused.json()).error.code,'CONFIDENTIAL_CONTENT');
+  await call('champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision+1,plan:{goals:view.plan.goals,questions:view.plan.questions,milestones:[view.plan.milestones[0]]}});
+  const approved=await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+2,decision:'approve',confirmed:true});
+  assert.equal(approved.status,200);assert.equal((await approved.json()).status,'published');
+  assert.equal((await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+3,decision:'approve',confirmed:true})).status,409,'no second approval');
+  const opState=await (await call('state','op')).json();assert.equal(opState.context.agreedGoal.agreedBy,'Riley Champion (Champion), Dream Day approval');
   const dev=await clean(await call('state','dev'),'GET state');
-  assert.equal(dev.plan.selectedMilestone.outcome,'Review payments-api repository readiness and prepare it for Catalog registration');
-  assert.equal(dev.handoff.milestones[0].system.repository,'northstar/payments-api');
+  assert.equal(dev.plan.selectedMilestone.outcome,m.objective);
+  assert.equal(dev.handoff.milestones[0].system.repository,'northstar/payments-api');assert.equal(dev.handoff.milestones[0].proposedAssignee,'Alex Rivera');
+  assert.deepEqual(dev.handoff.approval.by,'Riley Champion');
   const progress=await call('progress-reports','dev',{id:'progress:1',expectedRevision:dev.revision,planRevision:0,message:'Checked the repository root.',needsChris:false});
   const afterProgress=await clean(progress,'progress report');
   await clean(await call('blocker-reports','dev',{id:'developer:b1',expectedRevision:afterProgress.revision,planRevision:0,message:'No read access to northstar/payments-api.'}),'blocker report');
-  const overview=await (await call('handoff','op')).json();assert.equal(overview.drafts[0].status,'published');assert.equal(overview.drafts[0].publishedVersion,1);
+  const overview=await (await call('handoff','op')).json();assert.equal(overview.drafts[0].status,'published');assert.equal(overview.drafts[0].approvals.champion.by,'Riley Champion');
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();}
 });

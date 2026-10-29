@@ -1,6 +1,6 @@
 import type { ActivationState } from '../../../../contracts/activation/v1/state';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types';
-import type { AnalysisJob, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
+import type { AnalysisJob, ChampionReview, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
 
 export class ActivationRequestError extends Error {
   /** Server details such as which review fields failed a check (labels and reason codes, never content). */
@@ -38,7 +38,11 @@ export function activationClient(customerId:string,token:string,base='',apiPrefi
     saveReview:(draft:number,expectedRevision:number,review:ReviewDraft)=>call<HandoffRecord>('/handoff-reviews',{draft,expectedRevision,review}),
     submitReview:(draft:number,reviewRevision:number)=>call<HandoffRecord>('/handoff-submissions',{draft,reviewRevision,action:'submit',confirmed:true}),
     withdrawReview:(draft:number)=>call<HandoffRecord>('/handoff-submissions',{draft,action:'withdraw'}),
-    publishReviewed:(draft:number,outcome:string,agreedBy:string)=>request('/handoff-publications',{draft,fromReview:true,outcome,agreedBy,agreementConfirmed:true}),
+    // Dream Day: the Champion's review. The server builds the view and decides who may act.
+    championReview:()=>call<ChampionReview>('/champion-review'),
+    saveChampionReview:(draft:number,expectedRevision:number,plan:{goals:ReviewItem[];milestones:ReviewMilestone[];questions:ReviewItem[]})=>call<ChampionReview>('/champion-reviews',{draft,expectedRevision,plan}),
+    requestChanges:(draft:number,reviewRevision:number,comment:string)=>call<ChampionReview>('/champion-decisions',{draft,reviewRevision,decision:'request_changes',comment}),
+    approvePlan:(draft:number,reviewRevision:number)=>call<ChampionReview>('/champion-decisions',{draft,reviewRevision,decision:'approve',confirmed:true}),
     draftHandoff:(sources:{type:SourceType;label:string;text:string}[])=>call<HandoffRecord>('/handoff-drafts',{sources},300000),
     publishHandoff:(body:{draft:number;milestones:MilestoneDraft[];outcome:string;agreedBy:string;agreementConfirmed:true})=>request('/handoff-publications',body),
     intake:(briefing:string,outcome:string,agreedBy:string,agreementConfirmed:boolean)=>request('/intake',{briefing,outcome,agreedBy,agreementConfirmed}),

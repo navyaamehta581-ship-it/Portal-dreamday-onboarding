@@ -6,7 +6,7 @@ import {ActivationRequestError,type activationClient} from '../activation/client
 export const CATEGORIES:[SourceType,string][]=[['conversation','Conversational Transcript'],['crm','CRM Record'],['chris_notes','My Notes'],['account_prep','Account Preparation'],
  ['technical_requirements','Technical Requirements'],['repository','Repository Observation'],['integration_tools','Integration Tools']];
 export type ReviewIssue={path:string;label:string;reason:string};
-export type WorkspaceError={scope:'load'|'sources'|'analysis'|'review'|'submit'|'publish';code:string;issues?:ReviewIssue[]};
+export type WorkspaceError={scope:'load'|'sources'|'analysis'|'review'|'submit';code:string;issues?:ReviewIssue[]};
 const newId=(prefix:string)=>`${prefix}-${Math.random().toString(36).slice(2,10)}`;
 const blank=():SourceInput=>({id:newId('info'),type:'conversation',label:'',text:''});
 const codeOf=(e:unknown)=>e instanceof Error?e.message:'ACTIVATION_UNAVAILABLE';
@@ -28,7 +28,7 @@ export function useCustomerWorkspace(api:ReturnType<typeof activationClient>|nul
  const [overview,setOverview]=useState<HandoffOverview|null>(null);
  const [sources,setSourcesState]=useState<SourceInput[]>([]),[sourcesDirty,setSourcesDirty]=useState(false);
  const [review,setReviewState]=useState<ReviewDraft|null>(null),[reviewDirty,setReviewDirty]=useState(false);
- const [busy,setBusy]=useState<''|'load'|'sources'|'analysis'|'review'|'submit'|'publish'>('load');
+ const [busy,setBusy]=useState<''|'load'|'sources'|'analysis'|'review'|'submit'>('load');
  const [error,setError]=useState<WorkspaceError|null>(null);
  const [analysis,setAnalysis]=useState<AnalysisJob|null>(null);
  // Elapsed time comes from the server at each poll and ticks locally in between.
@@ -115,23 +115,21 @@ export function useCustomerWorkspace(api:ReturnType<typeof activationClient>|nul
   saveReview,
   submit:()=>latest&&!reviewDirty?transition(()=>api!.submitReview(latest.draft,latest.reviewRevision??0)):Promise.resolve(),
   withdraw:()=>latest?transition(()=>api!.withdrawReview(latest.draft)):Promise.resolve(),
-  async publishReviewed(outcome:string,agreedBy:string){
-   if(!api||!latest)return false;setBusy('publish');setError(null);
-   try{await api.publishReviewed(latest.draft,outcome,agreedBy);await load();return true;}
-   catch(e){setError({scope:'publish',code:codeOf(e)});return false;}
-   finally{setBusy('');}
-  },
   reload:load,
   clearError:()=>setError(null)};
 }
 export type CustomerWorkspace=ReturnType<typeof useCustomerWorkspace>;
 
-/** Honest account status. "Needs revision" needs the Champion review step, which doesn't exist yet. */
+/** Account status through the Dream Day review. A plan published before Dream Day is labelled as such, never as approved. */
 export function accountStatus(w:CustomerWorkspace,published:boolean):{label:string;tone:string}{
- if(published)return {label:'Published to developers',tone:'green'};
+ const r=w.latest,approved=r?.approvals?.champion.status==='approved';
+ if(published)return approved?{label:'Approved · Published to developers',tone:'green'}:{label:'Published before Dream Day',tone:''};
  if(w.running)return {label:'Analyzing',tone:'blue'};
- if(w.latest?.status==='submitted')return {label:'Submitted for Champion review',tone:'blue'};
- if(w.latest)return {label:'Analysis ready',tone:'amber'};
+ if(r?.status==='approved')return {label:'Approved',tone:'green'};
+ if(r?.status==='submitted')return {label:'Submitted for Champion review',tone:'blue'};
+ if(r?.status==='resubmitted')return {label:'Resubmitted for Champion review',tone:'blue'};
+ if(r?.status==='changes_requested')return {label:'Changes requested',tone:'amber'};
+ if(r)return {label:'Analysis ready',tone:'amber'};
  if(w.overview?.workspace.revision)return {label:'Draft',tone:''};
  return {label:'Not started',tone:''};
 }

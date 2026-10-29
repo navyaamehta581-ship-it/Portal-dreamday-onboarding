@@ -79,8 +79,14 @@ export function legacyHandoff(state:ActivationState):DeveloperHandoff{
 }
 
 /** Field-level projection for developer principals. Applied server-side to every state response. */
-export function developerState(state:ActivationState,stored:DeveloperHandoff|null):ActivationState&{handoff:DeveloperHandoff}{
- const h=stored??legacyHandoff(state),m=h.milestones[0]??null;
+/** Who is reading: the Champion sees the whole approved plan; a developer sees the approved milestones assigned to
+ * them (identified by the session layer). Plans published before Dream Day keep the earlier shared view. */
+export type Viewer={role:'developer'|'champion';actor:string|null};
+export function developerState(state:ActivationState,stored:DeveloperHandoff|null,viewer:Viewer={role:'developer',actor:null}):ActivationState&{handoff:DeveloperHandoff}{
+ let h=stored??legacyHandoff(state);
+ const personal=!!stored?.approval&&viewer.role==='developer'&&!!viewer.actor;
+ if(personal)h={...h,milestones:h.milestones.filter(x=>x.assignmentStatus==='approved'&&x.proposedAssignee===viewer.actor)};
+ const m=h.milestones[0]??null;
  const s=structuredClone(state) as ActivationState&{handoff:DeveloperHandoff};
  s.context.briefing=h.summary;
  s.context.constraints=h.context.map(n=>`${n.topic}: ${n.text}`);
@@ -92,7 +98,13 @@ export function developerState(state:ActivationState,stored:DeveloperHandoff|nul
  s.plan.evidence=s.plan.evidence.map(e=>safeEvidence(e,h));
  // Plan text comes from the approved milestone only. Replacement plans after a blocker keep the
  // developer's own blocker wording, which they wrote.
- if(m){
+ if(personal&&!m){
+  // An approved plan with nothing for this developer: say so rather than show someone else's work.
+  s.plan.selectedMilestone={...s.plan.selectedMilestone,outcome:'No approved work is assigned to you yet',successCriteria:[]};
+  s.plan.prerequisites=[];s.plan.rationale='Your Champion assigns approved work to developers.';
+  s.plan.suggestedNextAction={...s.plan.suggestedNextAction,description:'Ask your Champion which milestone you should pick up.'};
+  s.context.agreedGoal={...s.context.agreedGoal,text:'No approved work is assigned to you yet'};
+ } else if(m){
   s.plan.selectedMilestone={...s.plan.selectedMilestone,outcome:m.objective,successCriteria:m.completionCriteria};
   const added=state.plan.prerequisites.filter(p=>p.description.startsWith('Confirm the attributed blocker'));
   s.plan.prerequisites=[...m.prerequisites.map(p=>({description:p.text,state:p.state,evidenceIds:[]})),...added];

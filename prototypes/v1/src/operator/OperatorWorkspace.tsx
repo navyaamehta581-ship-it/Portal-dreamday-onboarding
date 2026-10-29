@@ -76,7 +76,8 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
       {tab==='context'&&<InformationTab ws={ws} locked={!!state}/>}
       {tab==='draft'&&<ReviewTab ws={ws} state={state}/>}
       {tab==='progress'&&<ProgressTab state={state}/>}
-      {(tab==='progress'&&state||tab==='draft'&&!state)&&<IntegrationTools session={session} ws={state?null:ws}/>}
+      {/* Integrator tools only for a published customer: nothing here can publish around Dream Day. */}
+      {tab==='progress'&&state&&<IntegrationTools session={session}/>}
      </div>
     </>}
    </div>

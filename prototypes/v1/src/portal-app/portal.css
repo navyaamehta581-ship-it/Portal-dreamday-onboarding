@@ -362,3 +362,9 @@ select.pt-input{appearance:auto;height:46px}
 .pt-depends{border:0;margin:18px 0 0;padding:0}
 .pt-depends legend{font-size:11px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:#bdbdbd}
 @media (max-width:760px){.pt-person,.pt-form-row.two{grid-template-columns:1fr}.pt-savebar{position:static}}
+.pt-step.assigned{text-align:left;padding:28px 32px 30px}
+.pt-step.assigned h3,.pt-step.assigned p,.pt-step.assigned .pt-label{text-align:left;margin-left:0;margin-right:0;max-width:none}
+.pt-step.assigned .pt-btn{margin-top:20px}
+.pt-plain-list{margin:8px 0 0;padding-left:20px;display:grid;gap:6px;color:#e6e6e6;font-size:14.5px}
+.pt-decisions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px;margin-top:20px}
+@media (max-width:760px){.pt-decisions{grid-template-columns:1fr}}

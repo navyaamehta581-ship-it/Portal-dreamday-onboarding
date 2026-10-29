@@ -1,7 +1,7 @@
 /** Handoff pipeline: sources → understanding → proposed milestones (draft) → Chris's reviewed
  * publication → developer-safe context/plan admitted through the existing activation store. */
 import {randomUUID} from 'node:crypto';
-import type {AnalysisJob,AnalysisStage,HandoffRecord,MilestoneDraft,SourceInput,SourceType,Understanding,Workspace} from '../../../../../contracts/activation/v1/handoff.ts';
+import type {AnalysisJob,AnalysisStage,ChampionReview,HandoffRecord,MilestoneDraft,ReviewEvent,SourceInput,SourceType,Understanding,Workspace} from '../../../../../contracts/activation/v1/handoff.ts';
 import type {ActivationPlan,CustomerContext,EvidenceRecord} from '../../../../../contracts/activation/v1/types.ts';
 import {validateContract} from '../../../../../contracts/activation/v1/validate.mjs';
 import capabilities from '../capabilities.json' with {type:'json'};
@@ -9,12 +9,16 @@ import {ActivationError,type ActivationStore,type Principal} from '../store.ts';
 import {interpretRuleBased} from './interpret.ts';
 import {proposeMilestones,validMilestone} from './milestones.ts';
 import {unsafeReason,type Analysis,type StageListener} from './intelligence.ts';
-import {reviewFromAnalysis,reviewIssues,toMilestoneDrafts,validateReview} from './review.ts';
+import {applyChampionEdits,approvalIssues,championPlan,reviewFromAnalysis,reviewIssues,toMilestoneDrafts,validateReview} from './review.ts';
 import {developerHandoff} from './project.ts';
 import type {HandoffStore} from './store.ts';
 
 const TYPES:SourceType[]=['crm','conversation','chris_notes','account_prep','technical_requirements','repository','integration_tools'];
 const fail=(code:string,details?:unknown):never=>{throw new ActivationError(code,details);};
+const underReview=(s:HandoffRecord['status'])=>s==='submitted'||s==='resubmitted';
+const chrisEditable=(s:HandoffRecord['status'])=>s==='draft'||s==='changes_requested';
+// Review issues that mean "incomplete" rather than "not shareable".
+const STRUCTURAL=['missing','no_milestone','not_a_technical_stakeholder','unknown_milestone','circular_dependencies','unassigned'];
 const CAPABILITY:Record<string,string>={service_readiness:'onboard',techdocs:'docs',scaffolder:'docs',ci_investigation:'ci'};
 
 export function parseSources(input:unknown):SourceInput[]{
@@ -96,7 +100,8 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   const b=input as {workspaceRevision?:unknown};
   if(!b||typeof b!=='object'||!Number.isSafeInteger(b.workspaceRevision))fail('INVALID_REQUEST');
   if(published(p))fail('ALREADY_PUBLISHED');
-  if(latest(p)?.status==='submitted')fail('AWAITING_CHAMPION_REVIEW');
+  const current=latest(p);
+  if(current&&!chrisEditable(current.status))fail(blockedFor(current.status));
   const saved=deps.handoffs.workspace(p);
   if(b.workspaceRevision!==saved.revision)fail('REVISION_CONFLICT');
   // Only saved information is analysed, so the result always matches a revision Chris can see.
@@ -109,7 +114,8 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
    try{
     const analysis=await analyze(sources,set);
     set('preparing_review',null);
-    const record=addRecord(p,sources,analysis,{basedOnWorkspaceRevision:saved.revision});
+    // A new analysis while revising keeps the review history (the Champion's feedback) with the new draft.
+    const record=addRecord(p,sources,analysis,{basedOnWorkspaceRevision:saved.revision,...(current?.history?.length?{history:current.history}:{})});
     const model=analysis.understanding.model;
     Object.assign(entry.job,{status:'succeeded',draft:record.draft,interpreter:analysis.understanding.interpreter,modelOk:model?model.ok:null,modelError:model&&!model.ok?model.error:null});
    }catch(error){
@@ -127,57 +133,111 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   if(record.draft!==latest(p)!.draft)fail('NOT_LATEST_DRAFT');
   return record;
  }
+ const stamp=()=>new Date(now()).toISOString();
+ const blockedFor=(status:HandoffRecord['status'])=>underReview(status)?'AWAITING_CHAMPION_REVIEW':status==='approved'||status==='published'?'ALREADY_APPROVED':'INVALID_TRANSITION';
+ const bump=(r:HandoffRecord)=>(r.reviewRevision??0)+1;
+ const event=(r:HandoffRecord,e:ReviewEvent)=>[...(r.history??[]),e];
+ const refuse=(issues:{reason:string}[])=>fail(issues.some(i=>!STRUCTURAL.includes(i.reason))?'CONFIDENTIAL_CONTENT':'REVIEW_INCOMPLETE',{issues});
+
+ // ---- Chris: edit while drafting or after changes were requested; submit, withdraw, resubmit.
  function saveReview(p:Principal,input:unknown){
   const b=input as {draft?:unknown;expectedRevision?:unknown;review?:unknown};
   if(!b||typeof b!=='object'||!Number.isSafeInteger(b.expectedRevision))fail('INVALID_REQUEST');
   const record=editable(p,b.draft);
-  if(record.status!=='draft')fail(record.status==='submitted'?'AWAITING_CHAMPION_REVIEW':'ALREADY_PUBLISHED');
+  if(!chrisEditable(record.status))fail(blockedFor(record.status));
   if((record.reviewRevision??0)!==b.expectedRevision)fail('REVISION_CONFLICT');
-  const saved:HandoffRecord={...record,review:validateReview(b.review),reviewRevision:(record.reviewRevision??0)+1,reviewUpdatedAt:new Date(now()).toISOString()};
+  const saved:HandoffRecord={...record,review:validateReview(b.review),reviewRevision:bump(record),reviewUpdatedAt:stamp()};
   deps.handoffs.save(p,saved);return saved;
  }
- function submission(p:Principal,input:unknown){
+ function submission(p:Principal,input:unknown,actor='Account operator'){
   const b=input as {draft?:unknown;reviewRevision?:unknown;action?:unknown;confirmed?:unknown};
   if(!b||typeof b!=='object'||!['submit','withdraw'].includes(b.action as string))fail('INVALID_REQUEST');
-  const record=editable(p,b.draft),at=new Date(now()).toISOString();
-  if(record.status==='published')fail('ALREADY_PUBLISHED');
+  const record=editable(p,b.draft),at=stamp();
   if(b.action==='withdraw'){
-   if(record.status!=='submitted')fail('INVALID_TRANSITION');
-   const saved:HandoffRecord={...record,status:'draft',submittedAt:null,approvals:{chris:pending,champion:pending}};
+   if(!underReview(record.status))fail('INVALID_TRANSITION');
+   // Withdrawing moves the revision on, so the Champion can no longer act on the withdrawn version.
+   const saved:HandoffRecord={...record,status:'draft',submittedAt:null,reviewRevision:bump(record),approvals:{chris:pending,champion:pending},history:event(record,{action:'withdrawn',at,by:actor})};
    deps.handoffs.save(p,saved);return saved;
   }
-  if(record.status!=='draft')fail('INVALID_TRANSITION');
+  if(!chrisEditable(record.status))fail(blockedFor(record.status));
   if(b.confirmed!==true||!Number.isSafeInteger(b.reviewRevision))fail('INVALID_REQUEST');
   if((record.reviewRevision??0)!==b.reviewRevision)fail('REVISION_CONFLICT');
   const review=record.review??reviewFromAnalysis(record);
   const issues=reviewIssues(review,record.understanding);
-  if(issues.length)fail(issues.some(i=>!['missing','no_milestone','not_a_technical_stakeholder','unknown_milestone','circular_dependencies'].includes(i.reason))?'CONFIDENTIAL_CONTENT':'REVIEW_INCOMPLETE',{issues});
-  // Submitting records Chris's approval of this draft for Champion review. Nothing is shared or published.
-  const saved:HandoffRecord={...record,review,status:'submitted',submittedAt:at,approvals:{chris:{status:'approved',by:'Account operator',at},champion:pending},
-   assignments:review.milestones.map(m=>({milestoneId:m.id,role:m.role,proposedAssignee:m.assignee,status:'proposed' as const}))};
+  if(issues.length)refuse(issues);
+  // Submitting records Chris's approval for Champion review. Nothing is shared with developers.
+  const again=(record.history??[]).some(e=>e.action==='submitted'||e.action==='resubmitted');
+  const status=again?'resubmitted' as const:'submitted' as const;
+  const saved:HandoffRecord={...record,review,status,submittedAt:at,reviewRevision:bump(record),approvals:{chris:{status:'approved',by:actor,at},champion:pending},
+   assignments:review.milestones.map(m=>({milestoneId:m.id,role:m.role,proposedAssignee:m.assignee,status:'proposed' as const})),history:event(record,{action:status,at,by:actor})};
   deps.handoffs.save(p,saved);return saved;
  }
 
- function publish(p:Principal,input:unknown){
-  if(deps.publishEnabled===false)fail('ADAPTER_UNAVAILABLE');
-  const b=input as {draft?:unknown;milestones?:unknown;fromReview?:unknown;outcome?:unknown;agreedBy?:unknown;agreementConfirmed?:unknown};
-  // Milestones come from the request, or with fromReview from Chris's saved review of this draft (first three, in order).
-  const fromReview=b?.fromReview===true;
-  if(!b||typeof b!=='object'||!Number.isSafeInteger(b.draft)||(!fromReview&&(!Array.isArray(b.milestones)||b.milestones.length<1||b.milestones.length>3||!b.milestones.every(validMilestone)))||b.agreementConfirmed!==true
-   ||typeof b.outcome!=='string'||!b.outcome.trim()||b.outcome.length>300||typeof b.agreedBy!=='string'||!b.agreedBy.trim()||b.agreedBy.length>200)fail('INVALID_REQUEST');
-  const record=deps.handoffs.get(p,b.draft as number)??fail('NOT_FOUND');
+ // ---- Dream Day: the Champion reviews, edits, requests changes or approves. The view is built here.
+ function championView(p:Principal):ChampionReview{
+  const r=latest(p);
+  if(!r)return {draft:null,status:'not_submitted',reviewRevision:0,submittedAt:null,analysis:null,history:[],approval:null,plan:null};
+  const championApproved=r.approvals?.champion.status==='approved';
+  const status:ChampionReview['status']=r.status==='draft'?((r.history??[]).length?'revising':'not_submitted'):r.status==='published'&&!championApproved?'published_before_dream_day':r.status;
+  const visible=underReview(r.status)||(championApproved&&(r.status==='approved'||r.status==='published'));
+  const m=r.understanding.model;
+  return {draft:r.draft,status,reviewRevision:r.reviewRevision??0,submittedAt:r.submittedAt??null,
+   analysis:m?(m.ok?'model':'rule_based_fallback'):r.understanding.interpreter==='hosted_model'?'model':'rule_based',
+   // Only review steps and the Champion's own comments; never operator content.
+   history:(r.history??[]).map(e=>({action:e.action,at:e.at,by:e.by,...(e.comment?{comment:e.comment}:{})})),
+   approval:championApproved?{by:r.approvals!.champion.by!,at:r.approvals!.champion.at!}:null,
+   plan:visible?championPlan(r):null};
+ }
+ function saveChampionReview(p:Principal,input:unknown){
+  const b=input as {draft?:unknown;expectedRevision?:unknown;plan?:unknown};
+  if(!b||typeof b!=='object'||!Number.isSafeInteger(b.expectedRevision))fail('INVALID_REQUEST');
+  const record=editable(p,b.draft);
+  if(!underReview(record.status))fail('NOT_UNDER_REVIEW');
+  if((record.reviewRevision??0)!==b.expectedRevision)fail('REVISION_CONFLICT');
+  const review=applyChampionEdits(record.review??reviewFromAnalysis(record),b.plan);
+  deps.handoffs.save(p,{...record,review,reviewRevision:bump(record),reviewUpdatedAt:stamp()});
+  return championView(p);
+ }
+ function championDecision(p:Principal,input:unknown,actor='Customer Champion'){
+  const b=input as {draft?:unknown;reviewRevision?:unknown;decision?:unknown;comment?:unknown;confirmed?:unknown};
+  if(!b||typeof b!=='object'||!['approve','request_changes'].includes(b.decision as string)||!Number.isSafeInteger(b.reviewRevision))fail('INVALID_REQUEST');
+  const record=editable(p,b.draft),at=stamp();
+  // One decision per submission: a second approval, or a decision on a withdrawn or outdated version, is refused.
+  if(!underReview(record.status))fail(record.status==='approved'||record.status==='published'?'ALREADY_APPROVED':'NOT_UNDER_REVIEW');
+  if((record.reviewRevision??0)!==b.reviewRevision)fail('REVISION_CONFLICT');
+  if(b.decision==='request_changes'){
+   const comment=typeof b.comment==='string'?b.comment.trim():'';
+   if(comment.length<3||comment.length>2000)fail('COMMENT_REQUIRED');
+   const saved:HandoffRecord={...record,status:'changes_requested',reviewRevision:bump(record),approvals:{chris:pending,champion:pending},history:event(record,{action:'changes_requested',at,by:actor,comment})};
+   deps.handoffs.save(p,saved);return championView(p);
+  }
+  if(b.confirmed!==true)fail('INVALID_REQUEST');
+  const review=record.review??reviewFromAnalysis(record);
+  const issues=approvalIssues(review,record.understanding);
+  if(issues.length)refuse(issues);
+  const approval={status:'approved' as const,by:actor,at};
+  const approved:HandoffRecord={...record,review,reviewRevision:bump(record),approvals:{chris:record.approvals?.chris??pending,champion:approval},
+   assignments:review.milestones.map(m=>({milestoneId:m.id,role:m.role,proposedAssignee:m.assignee,status:'approved' as const})),history:event(record,{action:'approved',at,by:actor})};
+  if(deps.publishEnabled===false){deps.handoffs.save(p,{...approved,status:'approved'});return championView(p);}
+  // Approval is what publishes: only the approved, developer-safe milestones with their approved assignments.
+  const milestones=toMilestoneDrafts(review,record).map(m=>({...m,assignmentStatus:'approved' as const}));
+  const outcome=(review.goals[0]?.text||milestones[0].objective).slice(0,300);
+  publishRecord(p,{...approved,history:event(approved,{action:'published',at,by:actor})},milestones,outcome,`${actor} (Champion), Dream Day approval`,{by:actor,at});
+  return championView(p);
+ }
+
+ /** The pre-Dream Day direct publication. Refused: new developer plans are published only by a Champion approval. */
+ function publish(_p:Principal,_input:unknown):never{return fail('CHAMPION_APPROVAL_REQUIRED');}
+ function publishRecord(p:Principal,record:HandoffRecord,milestones:MilestoneDraft[],outcome:string,agreedBy:string,approval:{by:string;at:string}){
   if(deps.handoffs.all(p).some(r=>r.status==='published'))fail('REVISION_CONFLICT');
-  // A draft awaiting Champion review is not published around that review; withdraw it first.
-  if(record.status==='submitted')fail('AWAITING_CHAMPION_REVIEW');
-  if(fromReview){const reviewed=record.review?toMilestoneDrafts(record.review,record).slice(0,3):[];if(!reviewed.length||!reviewed.every(validMilestone))fail('INVALID_REQUEST');b.milestones=reviewed;}
-  const milestones=b.milestones as MilestoneDraft[],outcome=(b.outcome as string).trim(),agreedBy=(b.agreedBy as string).trim();
+  if(!milestones.length||!milestones.every(validMilestone))fail('INVALID_REQUEST');
   if(milestones.some(m=>confidentialHits(m,outcome,record.understanding).length))fail('CONFIDENTIAL_CONTENT');
-  const at=new Date().toISOString(),id=randomUUID(),developer=developerHandoff(1,at,record.understanding,milestones),m=milestones[0];
+  const at=approval.at,id=randomUUID(),developer={...developerHandoff(1,at,record.understanding,milestones),approval},m=milestones[0];
   const proof={type:'none' as const,actionId:'none',actionRevision:0,reference:'none',verifier:'none',result:'not_checked' as const};
   const ev=(suffix:string,kind:EvidenceRecord['kind'],claim:string,basisIds:string[]=[]):EvidenceRecord=>({id:`${id}-${suffix}`,kind,claim,source:'Chris activation intake',observedAt:at,sourceRevision:id,scope:m.objective,producer:'authenticated local intake operator',basisIds,proof});
   const kinds=[...new Set(record.sources.map(s=>s.type))].join(', ');
-  const brief=ev('brief','customer_report',`Customer context from ${record.sources.length} source(s) (${kinds}) reviewed by Chris.`),agreement=ev('agreement','customer_report',`Chris reports agreement by ${agreedBy}: ${outcome}`);
-  const inference=ev('reason','ai_inference',`${record.understanding.interpreter==='hosted_model'?'Model-assisted':'Rule-based'} interpretation proposed the ${record.understanding.goals[0]?.playbook??'first'} milestone; reviewed by Chris.`,[brief.id,agreement.id]);
+  const brief=ev('brief','customer_report',`Customer context from ${record.sources.length} source(s) (${kinds}) reviewed by Chris.`),agreement=ev('agreement','customer_report',`Approved by ${agreedBy}: ${outcome}`);
+  const inference=ev('reason','ai_inference',`${record.understanding.interpreter==='hosted_model'?'Model-assisted':'Rule-based'} interpretation proposed the plan; reviewed by Chris and approved by the Champion.`,[brief.id,agreement.id]);
   const capability=capabilities.find(c=>c.id===CAPABILITY[record.understanding.goals[0]?.playbook??'service_readiness'])??capabilities[0];
   const context:CustomerContext={contractVersion:'1.0.0',customerId:p.customerId,revision:0,evidence:[brief,agreement],briefing:developer.summary,briefingEvidenceIds:[brief.id],
    agreedGoal:{text:outcome,agreedBy,agreedAt:at,evidenceIds:[agreement.id]},unknowns:developer.unknowns.map(u=>u.question),constraints:developer.context.map(n=>`${n.topic}: ${n.text}`)};
@@ -189,11 +249,11 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   validateContract('CustomerContext',context);validateContract('ActivationPlan',plan);
   deps.stage(p,context,plan);
   try{const state=deps.store().initialize(p,context,plan);
-   deps.handoffs.save(p,{...record,status:'published',publishedVersion:1,publishedAt:at,proposal:{...record.proposal,milestones},developer,approvals:{chris:{status:'approved',by:agreedBy,at},champion:record.approvals?.champion??{status:'pending',by:null,at:null}}});
+   deps.handoffs.save(p,{...record,status:'published',publishedVersion:1,publishedAt:at,proposal:{...record.proposal,milestones},developer});
    return state;}
   finally{deps.release(p);}
  }
- return {draft,publish,saveWorkspace,startAnalysis,analysisStatus,saveReview,submission,
+ return {draft,publish,saveWorkspace,startAnalysis,analysisStatus,saveReview,submission,championView,saveChampionReview,championDecision,
   overview:(p:Principal)=>({drafts:deps.handoffs.all(p),workspace:workspace(p),analysis:analysisStatus(p)}),published:(p:Principal)=>deps.handoffs.published(p)};
 }
 export type HandoffService=ReturnType<typeof createHandoffService>;

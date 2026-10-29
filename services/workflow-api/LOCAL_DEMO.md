@@ -31,9 +31,13 @@ Then:
 2. In **Customer Context**, add the scenario A information from `services/workflow-api/test/fixtures/scenarios.json` as separate entries, choose each entry's category, and select **Save information**.
 3. Select **Analyze customer**. The page shows the running stage and elapsed time; with a local model this takes one to three minutes, and you can keep working.
 4. Open **Onboarding Draft**, edit the problem, stakeholders, goals, milestones and questions, and select **Save draft**.
-5. Confirm and select **Mark ready for Champion review**. Nothing becomes visible to Maya or developers: Maya's review step is Phase 4.
-6. Optional, to show the developer Portals: select **Withdraw to make changes**, open **Integration tools**, and use **Publish without Champion review**. This is a labelled demo path, not an approval.
-7. Sign out and choose **Maya**, **Alex** or **Jordan**.
+5. Add the technical team under **Stakeholders** if the analysis didn't name them (e.g. Maya Chen as Champion, Alex Rivera and Jordan Lee as developers). Then confirm and select **Mark ready for Champion review**. Nothing becomes visible to developers.
+6. Sign out and choose **Maya**. Open **Team Coordination → Dream Day**:
+   - review the plan;
+   - assign each milestone (for Northstar: Alex the repository readiness assessment, Jordan the independent discoverability check);
+   - select **Save draft**;
+   - then either **Request changes** (Chris sees your reason and resubmits) or confirm and **Approve onboarding plan**.
+7. Sign out and choose **Alex** or **Jordan**: each sees only the work assigned to them. **Chris** sees that Champion approval is complete.
 
 No tokens are copied or pasted: the Portal's local session layer reads them from `ACTIVATION_DEMO_DIR` on the server side.
 

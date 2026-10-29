@@ -5,8 +5,11 @@
  * authentication: anyone who can open this local page can choose any persona. What a persona can do is decided
  * on the server, never by the browser:
  *   - the session cookie names a persona; the browser never holds a token;
- *   - each persona maps to one server-held credential: customer personas (champion, developer) use their
- *     customer's developer token, the operator persona uses each listed customer's operator token;
+ *   - each persona maps to one server-held credential: developers use their customer's developer token, the
+ *     Champion uses the customer's Champion token (Dream Day review and approval), the operator persona uses each
+ *     listed customer's operator token;
+ *   - forwarded requests name the signed-in persona (X-Portal-Actor) so the API can record who approved and show
+ *     each developer their own assigned work; the browser cannot set it;
  *   - the workflow API still authorizes every request by that token, binds it to one customer, rejects
  *     developer tokens on operator-only routes and applies the developer-safe projection.
  * Requests carry the persona the page believes is signed in; if another tab signed in as someone else, the
@@ -18,7 +21,7 @@ import {join} from 'node:path';
 
 const COOKIE = 'portal_demo_session';
 const SESSION_MS = 8 * 3600_000;
-const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions)$/;
+const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions)$/;
 const LOOPBACK = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;
 const ROLES = ['operator', 'champion', 'developer'];
 // Model-assisted drafting can take minutes on a laptop; every other route keeps the short limit.
@@ -38,9 +41,9 @@ function validCustomer(c, ids) {
   if (!/^[A-Za-z0-9_-]{1,200}$/.test(c.customerId)) throw Error(`Customer ${c.id} has an invalid customerId`);
   if (!LOOPBACK.test(c.apiOrigin)) throw Error(`Customer ${c.id} apiOrigin must be an explicit loopback origin`);
   if (typeof c.tokenFile !== 'string' || !c.tokenFile) throw Error(`Customer ${c.id} needs tokenFile`);
-  if (c.operatorTokenFile !== undefined && (typeof c.operatorTokenFile !== 'string' || !c.operatorTokenFile)) throw Error(`Customer ${c.id} has an invalid operatorTokenFile`);
+  for (const key of ['operatorTokenFile', 'championTokenFile']) if (c[key] !== undefined && (typeof c[key] !== 'string' || !c[key])) throw Error(`Customer ${c.id} has an invalid ${key}`);
   ids.add(c.id);
-  return {id: c.id, label: c.label, customerId: c.customerId, apiOrigin: c.apiOrigin, tokenFile: c.tokenFile, operatorTokenFile: c.operatorTokenFile ?? join(c.tokenFile, '..', 'operator-token')};
+  return {id: c.id, label: c.label, customerId: c.customerId, apiOrigin: c.apiOrigin, tokenFile: c.tokenFile, operatorTokenFile: c.operatorTokenFile ?? join(c.tokenFile, '..', 'operator-token'), championTokenFile: c.championTokenFile ?? join(c.tokenFile, '..', 'champion-token')};
 }
 
 /**
@@ -59,6 +62,7 @@ export function loadDirectory(env = process.env) {
       apiOrigin: env.ACTIVATION_API_ORIGIN ?? 'http://127.0.0.1:7007',
       tokenFile: join(env.ACTIVATION_DEMO_DIR, 'token'),
       operatorTokenFile: join(env.ACTIVATION_DEMO_DIR, 'operator-token'),
+      championTokenFile: join(env.ACTIVATION_DEMO_DIR, 'champion-token'),
     }],
     personas: DEFAULT_PERSONAS.map(p => ({...p, customers: ['demo']})),
   };
@@ -95,7 +99,7 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
   // The credential a persona uses for one customer, or null when it has none for that surface.
   const credential = (p, c, surface) => surface === 'operator'
     ? (p.role === 'operator' ? readToken(c.operatorTokenFile) : null)
-    : (p.role !== 'operator' ? readToken(c.tokenFile) : null);
+    : p.role === 'champion' ? readToken(c.championTokenFile) : p.role === 'developer' ? readToken(c.tokenFile) : null;
   const available = p => p.customers.some(id => credential(p, customer(id), p.role === 'operator' ? 'operator' : 'portal'));
 
   const sessions = new Map();
@@ -120,13 +124,13 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
     for await (const chunk of req) {size += chunk.length; if (size > 1_000_000) throw Object.assign(Error('too large'), {code: 'PAYLOAD_TOO_LARGE'}); chunks.push(chunk);}
     return Buffer.concat(chunks).toString('utf8');
   }
-  async function forward(req, res, c, route, token) {
+  async function forward(req, res, c, route, token, persona) {
     const payload = req.method === 'POST' ? await body(req) : undefined;
     let upstream;
     try {
       upstream = await fetchImpl(`${c.apiOrigin}/api${route}`, {
         method: req.method,
-        headers: {Authorization: `Bearer ${token}`, ...(payload === undefined ? {} : {'Content-Type': 'application/json'})},
+        headers: {Authorization: `Bearer ${token}`, 'X-Portal-Actor': persona.name, ...(payload === undefined ? {} : {'Content-Type': 'application/json'})},
         body: payload,
         signal: AbortSignal.timeout(timeoutFor(route)),
       });
@@ -176,7 +180,7 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
         if (s) sessions.delete(s.sid);
         return send(res, 200, {}, {'Set-Cookie': `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`});
       }
-      // Customer personas: their single customer, developer credential.
+      // Customer personas: their single customer; developer or Champion credential.
       if (path.startsWith('/portal-api/')) {
         const route = path.slice('/portal-api'.length), match = ROUTES.exec(route);
         if (!match || !['GET', 'POST'].includes(req.method)) return fail(res, 404, 'NOT_FOUND');
@@ -188,7 +192,7 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
         if (match[1] !== c.customerId) return fail(res, 403, 'FORBIDDEN');
         const token = credential(persona, c, 'portal');
         if (!token) return fail(res, 503, 'PERSONA_UNAVAILABLE');
-        return await forward(req, res, c, route, token);
+        return await forward(req, res, c, route, token, persona);
       }
       // Operator persona: one of its listed customers, operator credential.
       const operator = /^\/operator-api\/([a-z0-9-]{1,40})(\/.*)$/.exec(path);
@@ -201,7 +205,7 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
         if (match[1] !== c.customerId) return fail(res, 403, 'FORBIDDEN');
         const token = credential(persona, c, 'operator');
         if (!token) return fail(res, 503, 'PERSONA_UNAVAILABLE');
-        return await forward(req, res, c, operator[2], token);
+        return await forward(req, res, c, operator[2], token, persona);
       }
     } catch (error) {
       return fail(res, error?.code === 'PAYLOAD_TOO_LARGE' ? 413 : 500, error?.code === 'PAYLOAD_TOO_LARGE' ? 'PAYLOAD_TOO_LARGE' : 'INTERNAL_ERROR');
