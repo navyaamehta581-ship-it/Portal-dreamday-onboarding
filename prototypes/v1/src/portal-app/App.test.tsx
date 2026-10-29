@@ -108,6 +108,12 @@ function backend(signedIn:string|null=null,review:ChampionReview|undefined=undef
    }
    return json(repoView(me));
   }
+  if(url.endsWith('/aika-capabilities')){
+   // Same rules as the server: nothing before approval; /my-work for developers; /docs never (no documentation source).
+   const approved=server.review?.status==='published';
+   const cap=(id:string,ok:boolean,reason:string)=>({id,label:'/'+id,description:id,available:ok,reason:ok?null:reason});
+   return json({modelConfigured:true,capabilities:[cap('onboarding',approved,'not approved'),cap('my-work',approved&&me.role==='developer','developers only'),cap('repository',approved&&!!server.repos,'no repository'),cap('team',approved,'not approved'),cap('docs',false,'No documentation source is connected to this Portal yet.')]});
+  }
   if(/\/(milestone-work|milestone-updates|milestone-coordination|aika-questions)$/.test(url)){
    if(server.review?.status!=='published')return json({error:{code:'NO_APPROVED_PLAN'}},404);
    if(url.endsWith('/aika-questions'))return me.role==='operator'?json({error:{code:'FORBIDDEN'}},403):json({job:null});
@@ -393,7 +399,7 @@ it('Phase 5: before approval there is no My work tab, and AiKA is in the Portal 
  expect(m.host.querySelector('[role=tab]#tab-work')).toBeNull();
  expect(m.host.querySelector('a[href="/aika"]')).not.toBeNull();
  await m.unmount();await render('/aika');
- expect(text()).toContain('Ask about your approved onboarding work');
+ expect(text()).toContain('What can I help you with?');expect(text()).toContain('Hello Alex,');
  expect(calls.some(c=>/11434|ollama/i.test(c.url))).toBe(false);
 });
 

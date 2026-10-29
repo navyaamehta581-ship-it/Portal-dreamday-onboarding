@@ -54,6 +54,7 @@ export function createActivationServices(c:ServiceConfig){
  const repositories=createRepositoryService({config:c.repositories,store:repositoryStore,published:p=>handoffs.published(p),github:c.github,maxAgeHours:c.evidenceMaxAgeHours,cooldownMs:c.inspectionCooldownMs});
  const aika=createAika({model:c.aikaModel,work,publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,
   // Repository observations carry ids AiKA must cite; older inspection-packet evidence is live GitHub evidence too.
+  repositoryCount:(p,viewer)=>{try{return repositories.view(p,viewer).repositories.length;}catch{return 0;}},
   repositoryEvidence:(p,viewer)=>{const r=repositories.forAika(p,viewer);let legacy:string[]=[];try{legacy=repositoryEvidence(p);}catch{legacy=[];}
    return {lines:[...r.lines,...legacy.map((claim,i)=>({id:`obs-packet-${i+1}`,mode:'live' as const,status:'observed' as const,line:`[obs-packet-${i+1}] OBSERVED (live, read-only inspection packet): ${claim}`}))],inspected:r.inspected||legacy.length>0};}});
  const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??c.bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);

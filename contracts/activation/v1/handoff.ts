@@ -127,7 +127,10 @@ export type TeamProgress = { viewer: { role: 'developer' | 'champion' | 'operato
 /** `verified` is a repository observation the backend recorded live and the answer cites; `sample` cites fixture
  * (sample) repository data. Both carry the cited observation ids; uncited repository claims are removed. */
 export type AikaSection = { kind: 'known' | 'verified' | 'sample' | 'reported' | 'suggestion' | 'unknown'; text: string; citations?: string[] };
-export type AikaJob = { id: string; status: 'running' | 'succeeded' | 'failed'; question: string; milestoneId: string | null; startedAt: string; elapsedMs: number;
+/** Phase 8: contextual capabilities chosen with a slash command; each retrieves different server-side records. */
+export type AikaCapabilityId = 'onboarding' | 'my-work' | 'repository' | 'team' | 'docs';
+export type AikaCapability = { id: AikaCapabilityId; label: string; description: string; available: boolean; reason: string | null };
+export type AikaJob = { id: string; status: 'running' | 'succeeded' | 'failed'; question: string; milestoneId: string | null; capabilities?: AikaCapabilityId[]; startedAt: string; elapsedMs: number;
   answer: { sections: AikaSection[]; nextStep: string | null; removed: number } | null; error: string | null; model: string | null };
 
 /** Operator-only record. Drafts are numbered; publishing freezes one draft as a published version. */

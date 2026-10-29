@@ -38,7 +38,7 @@ export async function harness({file=':memory:',modelUrl=null as string|null,time
  const work=createWorkService({published:p=>handoffs.published(p),work:workStore,verifiedEvidence:p=>p.customerId==='aperture'?evidence:[]});
  const repos=createRepositoryService({config:repositories,store:repoStore,published:p=>handoffs.published(p),github:{fetchImpl:github,token:githubToken},...(now?{now}:{})});
  const aika=createAika({model:modelUrl?createOllama({endpoint:modelUrl,model:'qwen3:1.7b',timeoutMs,retries:0,numCtx:8192}):null,work,
-  publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,repositoryEvidence:(p,v)=>repos.forAika(p,v)});
+  publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,repositoryEvidence:(p,v)=>repos.forAika(p,v),repositoryCount:(p,v)=>{try{return repos.view(p,v).repositories.length;}catch{return 0;}}});
  const north={tenantId:'t',customerId:'aperture',sessionId:'s'},lumen={...north,customerId:'lumen'};
  // One credential per developer (identity), plus the shared developer credential, the Champion and Chris.
  const tokens:Record<string,{p:typeof north;role:'dev'|'op'|'champ';name?:string}>={dev:{p:north,role:'dev'},op:{p:north,role:'op'},champ:{p:north,role:'champ'},
