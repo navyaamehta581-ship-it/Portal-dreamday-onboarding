@@ -33,7 +33,7 @@ export const homeFor=(p:Persona)=>p.role==='operator'?'/operator':'/portal';
 export function surfaceOf(path:string):'entry'|'operator'|'portal'|null{
  if(path==='/'||path==='/login')return 'entry';
  if(path==='/operator'||path.startsWith('/operator/'))return 'operator';
- if(path==='/portal'||path.startsWith('/portal/')||path==='/onboarding'||path==='/activation'||path.startsWith('/activation/')||path==='/champion')return 'portal';
+ if(path==='/portal'||path.startsWith('/portal/')||path==='/onboarding'||path==='/activation'||path.startsWith('/activation/')||path==='/champion'||path==='/champion/team')return 'portal';
  return null;
 }
 export const roleLabel:Record<PersonaRole,string>={operator:'Account operator',champion:'Champion',developer:'Developer'};

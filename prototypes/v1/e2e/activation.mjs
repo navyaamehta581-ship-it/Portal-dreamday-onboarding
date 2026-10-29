@@ -27,17 +27,18 @@ try{
  const uiPort=await port(),url=`http://127.0.0.1:${uiPort}`;
  const customers=[{id:'northstar',label:'Northstar Engineering',customerId:'fictional-northstar-engineering'},{id:'lumen',label:'Lumen Retail',customerId:'fictional-lumen-retail'}];
  for(const c of customers){
-  c.dir=join(directory,c.id);mkdirSync(c.dir,{mode:0o700});c.apiOrigin=`http://127.0.0.1:${await port()}`;c.tokenFile=join(c.dir,'token');c.operatorTokenFile=join(c.dir,'operator-token');
+  c.dir=join(directory,c.id);mkdirSync(c.dir,{mode:0o700});c.apiOrigin=`http://127.0.0.1:${await port()}`;c.tokenFile=join(c.dir,'token');c.operatorTokenFile=join(c.dir,'operator-token');c.championTokenFile=join(c.dir,'champion-token');
   await start(['scripts/demo.ts','handoff'],join(repo,'services/workflow-api'),{PORT:c.apiOrigin.split(':')[2],ACTIVATION_DEMO_DIR:c.dir,ACTIVATION_DEMO_CUSTOMER_ID:c.customerId,ACTIVATION_DEMO_FRONTEND_ORIGIN:url},out=>out.includes('FICTIONAL DEMO API:'));
  }
  const accounts=join(directory,'accounts.json');
- // One entry, five fictional personas: Chris across both customers; Maya, Alex and Jordan at Northstar; Sam at Lumen.
- writeFileSync(accounts,JSON.stringify({customers:customers.map(({id,label,customerId,apiOrigin,tokenFile,operatorTokenFile})=>({id,label,customerId,apiOrigin,tokenFile,operatorTokenFile})),
+ // One entry, six fictional personas: Chris across both customers; Maya (Champion), Alex and Jordan at Northstar; Sam and Priya (Champion) at Lumen.
+ writeFileSync(accounts,JSON.stringify({customers:customers.map(({id,label,customerId,apiOrigin,tokenFile,operatorTokenFile,championTokenFile})=>({id,label,customerId,apiOrigin,tokenFile,operatorTokenFile,championTokenFile})),
   personas:[{id:'chris',name:'Chris',role:'operator',title:'Spotify account operator',customers:['northstar','lumen']},{id:'maya',name:'Maya Chen',role:'champion',title:'Platform Champion',customers:['northstar']},
-   {id:'alex',name:'Alex Rivera',role:'developer',title:'Developer',customers:['northstar']},{id:'jordan',name:'Jordan Lee',role:'developer',title:'Developer',customers:['northstar']},{id:'sam',name:'Sam Okafor',role:'developer',title:'Developer',customers:['lumen']}]}),{mode:0o600});
+   {id:'alex',name:'Alex Rivera',role:'developer',title:'Developer',customers:['northstar']},{id:'jordan',name:'Jordan Lee',role:'developer',title:'Developer',customers:['northstar']},{id:'sam',name:'Sam Okafor',role:'developer',title:'Developer',customers:['lumen']},{id:'priya',name:'Priya Nair',role:'champion',title:'Platform Champion',customers:['lumen']}]}),{mode:0o600});
  await start(['node_modules/vite/bin/vite.js','--port',String(uiPort),'--strictPort'],frontend,{PORTAL_DEMO_ACCOUNTS:accounts,ACTIVATION_API_ORIGIN:customers[0].apiOrigin},out=>out.includes('Local:'));
  const [north,lumen]=customers;
- const devToken=readFileSync(north.tokenFile,'utf8'),opToken=readFileSync(north.operatorTokenFile,'utf8');
+ const devToken=readFileSync(north.tokenFile,'utf8'),opToken=readFileSync(north.operatorTokenFile,'utf8'),champToken=readFileSync(north.championTokenFile,'utf8');
+ const api=(c,path,token,body)=>fetch(`${c.apiOrigin}/api/activation/v1/customers/${c.customerId}/${path}`,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
  browser=await chromium.launch({headless:true,...(process.env.BROWSER_CHANNEL?{channel:process.env.BROWSER_CHANNEL}:{})});
  const errors=[];const watch=page=>page.on('pageerror',e=>errors.push(e.message));
  console.log('Browser ready');
@@ -69,44 +70,98 @@ try{
   await op.getByRole('button',{name:'Review the onboarding draft'}).click();
   await op.getByLabel('Onboarding milestones').waitFor();
  }
- async function publishDirectly(outcome,by){
-  await op.getByText('Integration tools').click();
-  await op.getByLabel('Agreed activation outcome').fill(outcome);await op.getByLabel('Agreement attribution').fill(by);
-  await op.getByRole('checkbox',{name:/publishes to developers without Champion review/}).check();
-  const sent=op.waitForRequest(r=>r.url().endsWith('/handoff-publications')&&r.method()==='POST');
-  await op.getByRole('button',{name:'Publish without Champion review'}).click();
-  const body=(await sent).postData();await op.getByRole('heading',{name:'Agreed activation outcome'}).waitFor();return body;
+ async function addPeople(people){
+  for(const [name,role] of people){
+   const n=await op.locator('[aria-label^="Stakeholder "][aria-label$=" name"]').count();
+   await op.getByRole('button',{name:'Add stakeholder'}).click();
+   await op.getByLabel(`Stakeholder ${n+1} name`).fill(name);await op.getByLabel(`Stakeholder ${n+1} role`).fill(role);
+  }
+ }
+ async function submitDraft(label){
+  await op.getByRole('checkbox',{name:/I reviewed this draft/}).check();
+  await op.getByRole('button',{name:label}).click();
+ }
+ // Champion: open Dream Day, assign, save; then approve.
+ async function championAssigns(page,assignments){
+  await page.getByLabel('Your decision').waitFor();
+  for(const [i,name] of assignments)await page.getByLabel(`Milestone ${i} proposed assignee`).selectOption(name);
+  await page.getByRole('button',{name:'Save draft'}).click();await page.getByLabel('Review status').getByText(/^Saved$/).waitFor();
+ }
+ async function championApproves(page){
+  await page.getByRole('checkbox',{name:/I confirm the technical goals/}).check();
+  await page.getByRole('button',{name:'Approve onboarding plan'}).click();
+  await page.getByLabel('Approved responsibilities').waitFor();
  }
  await prepare('northstar',NORTHSTAR);
  assert.ok((await op.getByLabel('Kept internal').innerText()).includes('Kept internal'));
- // Edit the draft: retitle the first milestone, add a second one that depends on it, add a question; save.
+ // Edit the draft: retitle the first milestone, add a second one that depends on it, name the technical team; save.
  await op.getByLabel('Milestone 1 title').fill('Review checkout-api repository readiness and prepare it for Catalog registration');
  await op.getByRole('button',{name:'Add milestone'}).click();
  await op.getByLabel('Milestone 2 title').fill('Validate that checkout-api is discoverable in the Catalog');
  await op.getByLabel('Milestone 2 actions').fill('Search the Catalog for checkout-api\nOpen its docs link');
  await op.getByLabel('Milestone 2 completion criteria').fill('checkout-api is found from Catalog search with a working docs link');
  await op.getByLabel('Milestone 2').getByRole('checkbox').check();
+ await addPeople([['Maya Chen','Champion, Platform Engineering'],['Alex Rivera','Developer'],['Jordan Lee','Developer']]);
  await op.getByRole('button',{name:'Save draft'}).click();await op.getByLabel('Draft status').getByText(/^Saved/).waitFor();
  // Persisted on the server: a reload brings the edited draft back.
  await op.reload();await op.getByLabel('Milestone 2 title').waitFor();
  assert.equal(await op.getByLabel('Milestone 2 title').inputValue(),'Validate that checkout-api is discoverable in the Catalog');
- await op.getByRole('checkbox',{name:/I reviewed this draft/}).check();
- await op.getByRole('button',{name:'Mark ready for Champion review'}).click();
+ await submitDraft('Mark ready for Champion review');
  await op.getByRole('heading',{name:'Submitted for Champion review'}).waitFor();
  // Submission publishes nothing: the developer credential still has no onboarding, and no workspace route.
- const asDev=await fetch(`${north.apiOrigin}/api/activation/v1/customers/${north.customerId}/state`,{headers:{Authorization:`Bearer ${devToken}`}});
- assert.equal(asDev.status,404,'developers see nothing after submission');
- assert.equal((await fetch(`${north.apiOrigin}/api/activation/v1/customers/${north.customerId}/handoff`,{headers:{Authorization:`Bearer ${devToken}`}})).status,403);
+ assert.equal((await api(north,'state',devToken)).status,404,'developers see nothing after submission');
+ assert.equal((await api(north,'handoff',devToken)).status,403);
  const early=await (await browser.newContext()).newPage();watch(early);await signInAs(early,'Alex Rivera');
  await early.getByText('Your onboarding hasn’t been published yet').waitFor();
  assert.ok(!(await early.locator('body').innerText()).includes('Validate that checkout-api'),'Alex does not see the submitted draft');
  await early.close();
- await op.getByRole('button',{name:'Withdraw to make changes'}).click();await op.getByRole('button',{name:'Mark ready for Champion review'}).waitFor();
- const posted=await publishDirectly('Register checkout-api in the Software Catalog with an owner','Fictional platform lead, local test call');
- assert.ok(!posted.includes('PRIVATE CONTRACT NOTE')&&!posted.includes('Discovery call')&&!JSON.parse(posted).milestones&&JSON.parse(posted).fromReview===true,'publication sends no source text; the server uses the saved draft');
+
+ // --- Dream Day: Maya reviews, assigns Alex and Jordan, and asks for a change.
+ const maya=await (await browser.newContext({viewport:{width:1440,height:1000}})).newPage();watch(maya);
+ const mayaLeaks=[];maya.on('response',async r=>{if(!r.url().includes('/portal-api/'))return;const body=await r.text().catch(()=>'');for(const x of ['PRIVATE CONTRACT NOTE','renewal discount','Discovery call','Kept internal'])if(body.includes(x))mayaLeaks.push(x);});
+ await signInAs(maya,'Maya Chen');
+ await maya.getByRole('button',{name:'Open Dream Day'}).click();await maya.getByLabel('Dream Day',{exact:true}).waitFor();
+ assert.ok((await maya.getByLabel('Dream Day review').innerText()).includes('Waiting for your review'));
+ await championAssigns(maya,[[1,'Alex Rivera'],[2,'Jordan Lee']]);
+ await maya.getByLabel('Milestone 2 title').fill('Independently validate that checkout-api and its docs are discoverable');
+ await maya.getByRole('button',{name:'Save draft'}).click();await maya.getByLabel('Review status').getByText(/^Saved$/).waitFor();
+ assert.equal((await api(north,'state',devToken)).status,404,'saving is not approving');
+ await maya.getByLabel('What should Chris change?').fill('Please confirm which CI system deploys checkout-api before Alex starts.');
+ await maya.getByRole('button',{name:'Request changes'}).click();
+ await maya.getByLabel('Dream Day review').getByText('Changes requested',{exact:true}).waitFor();
+ assert.equal((await api(north,'state',devToken)).status,404,'returned plans never reach developers');
+ // Chris sees the feedback, revises and resubmits.
+ await op.reload();await op.getByLabel('Champion feedback').waitFor();
+ assert.ok((await op.getByLabel('Champion feedback').innerText()).includes('Please confirm which CI system deploys checkout-api'));
+ assert.equal(await op.getByLabel('Milestone 2 proposed assignee').inputValue(),'Jordan Lee','Maya’s assignments carry back to Chris');
+ await op.getByRole('button',{name:'Add unknown'}).click();
+ await op.getByRole('textbox',{name:/^Unknown \d+$/}).last().fill('CI runs in GitHub Actions; confirmed with Maya');
+ await op.getByRole('button',{name:'Save draft'}).click();await op.getByLabel('Draft status').getByText(/^Saved/).waitFor();
+ await submitDraft('Resubmit for Champion review');
+ await op.getByRole('heading',{name:'Resubmitted for Champion review'}).waitFor();
+ // Chris and developers cannot approve; nobody can publish around Dream Day.
+ assert.equal((await api(north,'champion-decisions',opToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,403);
+ assert.equal((await api(north,'champion-decisions',devToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,403);
+ const bypass=await op.evaluate(async c=>{const r=await fetch(`/operator-api/northstar/activation/v1/customers/${c}/handoff-publications`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({draft:1,fromReview:true,outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})});return [r.status,(await r.json()).error.code];},north.customerId);
+ assert.deepEqual(bypass,[403,'CHAMPION_APPROVAL_REQUIRED'],'the removed publishing bypass is refused on the server');
+ assert.equal((await api(north,'champion-review',devToken)).status,403,'developers cannot open Dream Day');
+ // Maya approves the resubmitted plan.
+ await maya.reload();await maya.getByLabel('Dream Day review').getByText('Resubmitted · waiting for your review').waitFor();
+ assert.equal(await maya.getByLabel('Milestone 1 proposed assignee').inputValue(),'Alex Rivera');
+ await championApproves(maya);
+ const responsibilities=await maya.getByLabel('Approved responsibilities').innerText();
+ assert.ok(responsibilities.includes('Alex Rivera')&&responsibilities.includes('Jordan Lee')&&responsibilities.includes('Independently validate'));
+ assert.deepEqual(mayaLeaks,[],'Dream Day responses carry no operator-only information');
+ assert.equal((await api(north,'champion-decisions',champToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,409,'no second approval');
+ await op.reload();await op.getByText('Champion approval complete: approved by Maya Chen in Dream Day').waitFor();
  await prepare('lumen',LUMEN);
- await publishDirectly('Generate a first recommendation service from an approved template','Fictional data lead, local test call');
- console.log('Both customers published');
+ await addPeople([['Sam Okafor','Developer']]);
+ await op.getByRole('button',{name:'Save draft'}).click();await op.getByLabel('Draft status').getByText(/^Saved/).waitFor();
+ await submitDraft('Mark ready for Champion review');await op.getByRole('heading',{name:'Submitted for Champion review'}).waitFor();
+ const priya=await (await browser.newContext()).newPage();watch(priya);await signInAs(priya,'Priya Nair');
+ await priya.getByRole('link',{name:'Team Coordination'}).click();
+ await championAssigns(priya,[[1,'Sam Okafor']]);await championApproves(priya);await priya.close();
+ console.log('Both customers approved in Dream Day');
  // Same Portal shell, separate navigation targets and access.
  assert.equal(await op.locator('.pt-shell .pt-side').count(),1);
  assert.equal(await op.getByRole('link',{name:'Customer Onboarding'}).getAttribute('href'),'/operator');
@@ -122,11 +177,13 @@ try{
  await dev.goto(url);await dev.getByRole('button',{name:'Get started'}).waitFor();await dev.keyboard.press('Tab');await dev.keyboard.press('Enter');
  await dev.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  const listed=await dev.locator('label.pt-account').allInnerTexts();
- assert.deepEqual(listed.map(t=>t.split('\n')[0].replace(/\s+/g,' ').trim()),['Chris Account operator','Maya Chen Champion','Alex Rivera Developer','Jordan Lee Developer','Sam Okafor Developer']);
+ assert.deepEqual(listed.map(t=>t.split('\n')[0].replace(/\s+/g,' ').trim()),['Chris Account operator','Maya Chen Champion','Alex Rivera Developer','Jordan Lee Developer','Sam Okafor Developer','Priya Nair Champion']);
  await signInAs(dev,'Alex Rivera','/login');
  await dev.getByRole('heading',{name:/First up/}).waitFor();
  assert.equal(new URL(dev.url()).pathname,'/portal');
- assert.ok((await dev.getByLabel('Your assigned work').innerText()).includes('Nothing is assigned to you yet'));
+ const alexWork=await dev.getByLabel('Your assigned work').innerText();
+ assert.ok(alexWork.includes('Review checkout-api repository readiness')&&alexWork.includes('Approved by Maya Chen in Dream Day'),alexWork);
+ assert.ok(!alexWork.includes('Independently validate'),'Alex sees only his own approved work');
  // A typed URL for Chris's workspace explains instead of switching persona, and no operator call is made.
  const opCalls=[];dev.on('request',r=>{if(r.url().includes('/operator-api/'))opCalls.push(r.url());});
  await dev.goto(url+'/operator');await dev.getByText('This workspace is for the Spotify account operator').waitFor();
@@ -184,19 +241,20 @@ try{
  assert.equal(await other.evaluate(async id=>(await fetch(`/portal-api/activation/v1/customers/${id}/state`)).status,north.customerId),403);
  assert.equal((await fetch(`${lumen.apiOrigin}/api/activation/v1/customers/${lumen.customerId}/state`,{headers:{Authorization:`Bearer ${devToken}`}})).status,403);
 
- // --- Maya: the same Portal plus Team Coordination, with proposals only; Jordan: honest assigned-work state.
- const maya=await (await browser.newContext({viewport:{width:1440,height:1000}})).newPage();watch(maya);
- await signInAs(maya,'Maya Chen');
- await maya.getByRole('link',{name:'Team Coordination'}).click();await maya.getByLabel('Proposed work').waitFor();
- const proposed=await maya.getByLabel('Proposed work').innerText();
- assert.ok(proposed.includes('checkout-api')&&proposed.includes('Proposed — not approved')&&proposed.includes('not shown until the assignment is approved'));
- assert.equal(await maya.getByRole('button',{name:/approve|reject/i}).count(),0,'no approval controls yet');
+ // --- Maya: the approved plan in Team overview, same as Dream Day; Jordan: only his approved work.
+ await maya.getByRole('tab',{name:'Team overview'}).click();await maya.getByLabel('Proposed work').waitFor();
+ const work=await maya.getByLabel('Proposed work').innerText();
+ assert.ok(work.includes('Approved work')&&work.includes('Alex Rivera')&&work.includes('Jordan Lee'),work);
  assert.ok(!(await maya.locator('body').innerText()).includes('renewal'));
- await maya.reload();await maya.getByLabel('Proposed work').waitFor();assert.equal(new URL(maya.url()).pathname,'/champion','reload keeps the persona and page');
+ await maya.reload();await maya.getByLabel('Proposed work').waitFor();assert.equal(new URL(maya.url()).pathname,'/champion/team','reload keeps the persona and page');
  assert.equal(await maya.evaluate(async c=>(await fetch(`/operator-api/northstar/activation/v1/customers/${c}/handoff`)).status,north.customerId),403,'the Champion has no operator access');
  const jordan=await (await browser.newContext({viewport:{width:1440,height:1000}})).newPage();watch(jordan);
  await signInAs(jordan,'Jordan Lee');await jordan.getByLabel('Your assigned work').waitFor();
+ const jordanWork=await jordan.getByLabel('Your assigned work').innerText();
+ assert.ok(jordanWork.includes('Independently validate that checkout-api and its docs are discoverable')&&jordanWork.includes('Starts after: Review checkout-api repository readiness'),jordanWork);
+ assert.equal(await jordan.locator('[aria-label^="Assigned: "]').count(),1,'Jordan sees only his own approved work');
  assert.equal(await jordan.getByRole('link',{name:'Team Coordination'}).count(),0);
+ assert.equal(await jordan.evaluate(async c=>(await fetch(`/portal-api/activation/v1/customers/${c}/champion-review`)).status,north.customerId),403,'developers cannot open Dream Day');
 
  // --- Sign-out ends the session; mobile layouts do not overflow.
  await dev.getByRole('button',{name:/Account:/}).click();await dev.getByRole('menuitem',{name:'Sign out'}).click();
@@ -205,7 +263,7 @@ try{
  const entry=await (await browser.newContext({viewport:{width:390,height:844}})).newPage();watch(entry);await entry.goto(url+'/login');await entry.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  for(const page of [op,other,maya,entry]){await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal overflow');}
  assert.deepEqual(errors,[]);
- console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam) → Chris: saved information in two categories, background analysis, edited multi-milestone draft (survives reload), submitted for Champion review with nothing visible to developers, withdrawn, then published without Champion review via the labelled path for both customers (private notes held back) → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: Team Coordination proposals only, reload keeps persona → Jordan: no Champion view; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
+ console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
 }catch(error){console.error(error);throw error;}finally{
  await browser?.close();for(const child of children.reverse()){if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(()=>{child.kill('SIGKILL');r();},3000))]);}}
  rmSync(directory,{recursive:true,force:true});

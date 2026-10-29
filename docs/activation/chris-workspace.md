@@ -14,7 +14,7 @@ Chris (operator persona) turns scattered customer information into a reviewed te
 
 Status labels:
 - **Not started**, **Draft** (information saved), **Analyzing**, **Analysis ready**, **Submitted for Champion review**, **Published to developers**.
-- **Needs revision** isn't shown because no Champion review step exists to request a revision.
+- Dream Day adds **Changes requested**, **Resubmitted for Champion review**, **Approved** and **Approved · Published to developers** (see [dream-day.md](dream-day.md)).
 
 ## Analysis progress
 
@@ -55,14 +55,14 @@ Milestones can be added, removed, reordered (up/down), and edited:
 
 ## Submission boundary and privacy
 
-- **Submitting publishes nothing.** It changes the analysis record's status to `submitted` and records Chris's approval (`approvals.chris`), with the Champion approval pending. Developer and Champion credentials still get `404` for onboarding state and `403` on every workspace route. Maya's review screen is not built (Phase 4).
+- **Submitting publishes nothing.** It changes the analysis record's status to `submitted` and records Chris's approval (`approvals.chris`), with the Champion approval pending. Developer and Champion credentials still get `404` for onboarding state and `403` on every workspace route. Maya reviews it in Dream Day.
 - **The server refuses submission** when the draft is incomplete (`REVIEW_INCOMPLETE`) or contains something the Champion may not receive (`CONFIDENTIAL_CONTENT`). Every Champion-bound text runs through the Phase 1 developer-safety screen (`unsafeReason`), which covers:
   - commercial terms and company figures;
   - executive or private comments and deal stage or evaluation timeline;
   - restatements of private notes and names of non-technical people.
 
   The error lists field labels and reason codes (for example "Milestone 1 · description: contains an executive or private comment"), never the text.
-- **The earlier direct publication** (`handoff-publications`) is still available for demos under **Integration tools → Publish without Champion review**. It is labelled as skipping the Champion review and not being an approval. It is refused while a draft awaits Champion review (`AWAITING_CHAMPION_REVIEW`). With `fromReview: true` it publishes the saved draft's first three milestones, converted on the server, and the existing publication privacy checks and developer projection apply unchanged.
+- **Champion review happens in [Dream Day](dream-day.md)** (Phase 4). The earlier direct publication ("Publish without Champion review") has been removed from the workspace and is refused on the server.
 - **Nothing in URLs, logs or browser storage.** Customer information never goes into URLs, logs or browser storage. Unsaved edits live only in the page's memory; leaving with unsaved edits asks first.
 
 ## Data model and API (additive)

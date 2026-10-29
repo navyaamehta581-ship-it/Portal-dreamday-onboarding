@@ -101,7 +101,7 @@ test('the review is built from the analysis with origins, keeps every milestone,
  assert.ok(drafts.every(validMilestone));assert.deepEqual(drafts[0].dependencies,[r.milestones[0].title]);
 });
 
-test('submission: incomplete or confidential reviews are refused with field labels; submitted drafts are locked, cannot be published around the Champion, and can be withdrawn',async()=>{
+test('submission: incomplete or confidential reviews are refused with field labels; submitted drafts are locked, the direct publication is closed, and they can be withdrawn',async()=>{
  const {service}=setup();
  service.saveWorkspace(p,{expectedRevision:0,sources});service.startAnalysis(p,{workspaceRevision:1});await done(service);
  const r=service.overview(p).drafts[0].review!;
@@ -122,7 +122,7 @@ test('submission: incomplete or confidential reviews are refused with field labe
  assert.equal(submitted.status,'submitted');assert.equal(submitted.approvals!.chris.status,'approved');assert.equal(submitted.approvals!.champion.status,'pending');
  assert.throws(()=>service.saveReview(p,{draft:1,expectedRevision:3,review:clean}),code('AWAITING_CHAMPION_REVIEW'));
  assert.throws(()=>service.saveWorkspace(p,{expectedRevision:1,sources}).revision===2&&service.startAnalysis(p,{workspaceRevision:2}),code('AWAITING_CHAMPION_REVIEW'));
- assert.throws(()=>service.publish(p,{draft:1,milestones:toMilestoneDrafts(clean,submitted),outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, call',agreementConfirmed:true}),code('AWAITING_CHAMPION_REVIEW'));
+ assert.throws(()=>service.publish(p,{draft:1,milestones:toMilestoneDrafts(clean,submitted),outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, call',agreementConfirmed:true}),code('CHAMPION_APPROVAL_REQUIRED'));
  const back=service.submission(p,{draft:1,action:'withdraw'});
  assert.equal(back.status,'draft');assert.equal(back.approvals!.chris.status,'pending');
 });
@@ -170,14 +170,11 @@ test('HTTP: workspace routes are operator-only; submission shows nothing to deve
   // Submission publishes nothing: developer and Champion credentials still see no onboarding at all.
   const dev=await call('northstar','state','Bearer dev');
   assert.equal(dev.status,404);assert.ok(!JSON.stringify(dev.json).match(/payments-api|readiness|Discovery/));
-  assert.equal((await call('northstar','handoff-publications','Bearer op',{draft:1,milestones:toMilestoneDrafts(review,overview.drafts[0]),outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})).json.error.code,'AWAITING_CHAMPION_REVIEW');
+  // The pre-Dream Day direct publication is refused, before and after withdrawal.
+  assert.equal((await call('northstar','handoff-publications','Bearer op',{draft:1,milestones:toMilestoneDrafts(review,overview.drafts[0]),outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})).json.error.code,'CHAMPION_APPROVAL_REQUIRED');
   assert.equal((await call('lumen','handoff','Bearer lumen-op')).json.drafts.length,0,'Lumen’s operator sees only Lumen');
-  // The existing direct publication path still works once withdrawn, and uses Chris's reviewed milestones.
   assert.equal((await call('northstar','handoff-submissions','Bearer op',{draft:1,action:'withdraw'})).json.status,'draft');
-  const pub=await call('northstar','handoff-publications','Bearer op',{draft:1,fromReview:true,outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, discovery call',agreementConfirmed:true});
-  assert.equal(pub.status,201,JSON.stringify(pub.json));
-  const devView=await call('northstar','state','Bearer dev');
-  assert.equal(devView.status,200);assert.deepEqual(devView.json.handoff.milestones.map((m:{objective:string})=>m.objective),['Assess payments-api readiness']);
-  for(const x of ['300K','nice-to-have','VP','Discovery call','My notes'])assert.ok(!JSON.stringify(devView.json).includes(x),'developer view leaked '+x);
+  assert.equal((await call('northstar','handoff-publications','Bearer op',{draft:1,fromReview:true,outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, discovery call',agreementConfirmed:true})).json.error.code,'CHAMPION_APPROVAL_REQUIRED');
+  assert.equal((await call('northstar','state','Bearer dev')).status,404,'still nothing for developers');
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();}
 });

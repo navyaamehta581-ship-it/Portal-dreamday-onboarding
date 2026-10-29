@@ -201,25 +201,52 @@ it('submission: needs saved changes and confirmation, shows the fields to fix, l
  api.submitReview.mockResolvedValueOnce({...rec,status:'submitted',submittedAt:'2026-10-29T12:00:00Z'});
  await click(host(),'Mark ready for Champion review');await flush();
  expect(api.submitReview).toHaveBeenLastCalledWith(1,0);
- expect(text()).toContain('Submitted for Champion review');expect(text()).toContain('Nothing is visible to developers');
+ expect(text()).toContain('Submitted for Champion review');expect(text()).toContain('Nothing is visible to developers until it is approved');
  expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(true);
- expect(button('Publish without Champion review')?.disabled??true).toBe(true);
  api.withdrawReview.mockResolvedValueOnce({...rec,status:'draft',submittedAt:null});
  await click(host(),'Withdraw to make changes');await flush();
  expect(api.withdrawReview).toHaveBeenCalledWith(1);expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(false);
 });
 
-it('the earlier direct publication path is labelled as skipping Champion review and uses the saved draft',async()=>{
+it('Dream Day: Chris has no way to publish around the Champion',async()=>{
  const rec=record();
  api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[rec]}));
  window.history.replaceState(null,'','/operator/draft');await open();
- const tools=host().querySelector('[aria-label="Publish without Champion review"]')!;
- expect(tools.textContent).toContain('This skips the Champion review and is not an approval.');
- await type(byLabel(host(),'Agreed activation outcome')!,'Assess checkout-api readiness');await type(byLabel(host(),'Agreement attribution')!,'Platform lead, call');
- await act(async()=>{tools.querySelector<HTMLInputElement>('.pt-check input')!.click();});
- api.publishReviewed.mockResolvedValue(fixtureState('orbit'));
- await click(host(),'Publish without Champion review');await flush();
- expect(api.publishReviewed).toHaveBeenCalledWith(1,'Assess checkout-api readiness','Platform lead, call');
+ expect(text()).not.toMatch(/Publish without Champion review|Publish to developers|Initialize reviewed session/);
+ expect(host().querySelector('[aria-label="Integration tools"],details.pt-details summary')?.textContent??'').not.toContain('Integration tools');
+});
+
+it('Dream Day: Chris sees the Champion’s requested changes, revises and resubmits',async()=>{
+ const rec=record({status:'changes_requested',reviewRevision:5,history:[{action:'submitted',at:'2026-10-29T09:00:00Z',by:'Chris'},{action:'changes_requested',at:'2026-10-29T10:00:00Z',by:'Maya Chen',comment:'Please confirm which CI system deploys checkout-api.'}]});
+ api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[rec]}));
+ window.history.replaceState(null,'','/operator/draft');await open();
+ expect(text()).toContain('Changes requested');
+ expect(host().querySelector('[aria-label="Champion feedback"]')!.textContent).toContain('Maya Chen requested changes in Dream Day');
+ expect(host().querySelector('[aria-label="Champion feedback"]')!.textContent).toContain('Please confirm which CI system deploys checkout-api.');
+ expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(false);
+ expect(host().querySelector('[aria-label="Dream Day review history"]')!.textContent).toMatch(/Changes requested.*Maya Chen/s);
+ await act(async()=>{host().querySelector<HTMLInputElement>('[aria-label="Submit for Champion review"] .pt-check input')!.click();});
+ api.submitReview.mockResolvedValueOnce({...rec,status:'resubmitted',submittedAt:'2026-10-29T11:00:00Z'});
+ await click(host(),'Resubmit for Champion review');await flush();
+ expect(api.submitReview).toHaveBeenCalledWith(1,5);
+ expect(text()).toContain('Resubmitted for Champion review');expect(host().querySelector<HTMLFieldSetElement>('fieldset.pt-fieldset')!.disabled).toBe(true);
+});
+
+it('Dream Day: after approval Chris sees who approved, when, and the approved responsibilities',async()=>{
+ const base=record(),approvedReview={...base.review!,milestones:base.review!.milestones.map((x,i)=>({...x,assignee:i===0?'Alex Rivera':'Jordan Lee'}))};
+ const rec=record({status:'published',review:approvedReview,approvals:{chris:{status:'approved',by:'Chris',at:'2026-10-29T09:00:00Z'},champion:{status:'approved',by:'Maya Chen',at:'2026-10-29T10:00:00Z'}},
+  history:[{action:'submitted',at:'2026-10-29T09:00:00Z',by:'Chris'},{action:'approved',at:'2026-10-29T10:00:00Z',by:'Maya Chen'},{action:'published',at:'2026-10-29T10:00:00Z',by:'Maya Chen'}]});
+ api.read.mockResolvedValue(fixtureState('orbit'));
+ api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[rec]}));
+ window.history.replaceState(null,'','/operator/draft');await open();
+ expect(text()).toContain('Approved · Published to developers');
+ expect(text()).toContain('Champion approval complete: approved by Maya Chen in Dream Day');
+ const resp=host().querySelector('[aria-label="Approved responsibilities"]')!.textContent!;
+ expect(resp).toContain('Alex Rivera');expect(resp).toContain('Jordan Lee');
+ // A plan published before Dream Day is never shown as approved.
+ await m!.unmount();
+ api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[record({status:'published'})]}));await open();
+ expect(text()).toContain('Published before Dream Day');expect(text()).not.toContain('Champion approval complete');
 });
 
 it('stops when the browser is signed in as someone else instead of acting for them',async()=>{
