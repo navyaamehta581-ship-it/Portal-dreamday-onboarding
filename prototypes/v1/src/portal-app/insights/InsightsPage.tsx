@@ -21,7 +21,7 @@ export function InsightsPage({api,customer,demo}:{api:ReturnType<typeof activati
   <div className="pt-entity">
    <div className="pt-entity-head"><div><p className="pt-crumb">Insights — {customer}</p><h2>Onboarding progress</h2>
     <p className="pt-note" style={{marginTop:6}}>Counted from what people recorded in this Portal{data?` · updated ${when(data.generatedAt)}`:''}. Developers report progress; the Portal doesn’t verify it.</p></div></div>
-   {demo&&<div className="pt-banner warn" role="status">Fictional demo data: every number comes from activity recorded for the fictional customer{error===null?'':''}. Repository evidence is sample data unless it’s marked live.</div>}
+   {demo&&<div className="pt-banner warn" role="status">Fictional demo data: every number comes from activity recorded for the fictional customer. Repository evidence is sample data unless it’s marked live.</div>}
    {error&&<div className="pt-banner error" role="alert">Insights couldn’t be loaded. Check that the demo API is running, then refresh.</div>}
    {!data?(!error&&<p className="pt-note" role="status">Loading insights…</p>):<div style={{display:'grid',gap:20,marginTop:22}}>
     <section className="pt-card" aria-label="Plan status">

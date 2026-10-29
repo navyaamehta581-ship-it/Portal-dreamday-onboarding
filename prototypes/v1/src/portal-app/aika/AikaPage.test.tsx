@@ -126,3 +126,14 @@ it('contextual AiKA (055): the corner mark opens “New AiKA Chat”, which asks
  expect(api.askAika).toHaveBeenCalledWith('What does my milestone depend on, and is it ready?',null,['my-work']);
  await click(m.host,'Minimize AiKA');expect(m.host.querySelector('[aria-label="Contextual AiKA"]')).toBeNull();
 });
+
+it('keeps what you typed when an earlier answer loads and the page switches to the conversation',async()=>{
+ window.history.replaceState(null,'','/aika');
+ let resolve:(v:unknown)=>void=()=>undefined;
+ api.aikaStatus.mockReturnValueOnce(new Promise(r=>{resolve=r;})).mockResolvedValue({job:null});
+ await m.render(<Harness/>);await flush();
+ await type(area(),'Who owns payments-api?');
+ await act(async()=>{resolve({job:job({status:'succeeded',question:'Earlier question',answer:{sections:[{kind:'unknown',text:'Not recorded.'}],nextStep:null,removed:0}})});});await flush();
+ expect(text()).toContain('Earlier question');
+ expect(area().value).toBe('Who owns payments-api?');
+});

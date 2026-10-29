@@ -444,3 +444,4 @@ select.pt-input{appearance:auto;height:46px}
 .pt-aika-suggest button{display:flex;gap:8px;align-items:center;text-align:left;padding:7px 0;font-size:13.5px;font-weight:700;color:#e6e6e6}
 .pt-aika-suggest button:hover:not(:disabled){color:#fff;text-decoration:underline}
 @media (max-width:640px){.pt-aika-grid{grid-template-columns:1fr}.pt-aika-hello{padding-top:6vh}.pt-aika-hello h2{font-size:24px}}
+.pt-aika-home-composer{width:min(674px,100%);display:flex;flex-direction:column;align-items:center}

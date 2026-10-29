@@ -27,21 +27,22 @@ export function AikaPage({aika,work,repos,persona}:{aika:AikaSession;work:Milest
   <option value="">About: all my approved work</option>{options.map(m=><option key={m.id} value={m.id}>About: {m.title}</option>)}</select>;
  const composer=<Composer aika={aika} onSend={send} disabled={busy} extra={about}/>;
  const footer=<p className="pt-note pt-aika-who">{persona.role==='developer'?'You’re asking AiKA, not a person. To ask Maya, record a question on your milestone in My work.':'You’re asking AiKA, not a person. Replies to your developers go through Team overview.'}</p>;
- const first=persona.name.split(' ')[0];
+ const first=persona.name.split(' ')[0],empty=aika.turns.length===0;
  return <div className="pt-page">
   <div className="pt-pagebar"><h1><span className="icon"><AikaMark size={16} filled/></span>AiKA</h1>
    <div className="tools"><button className="pt-tool" disabled title="Conversation history isn’t available in this demo"><History size={15} aria-hidden="true"/>History</button>
     {aika.turns.length>0&&<button className="pt-tool" disabled={busy} onClick={aika.reset}>New chat</button>}</div></div>
   {!aika.modelConfigured&&<div className="pt-banner warn" role="status" style={{margin:'16px 0 0'}}>{aikaProblem('AIKA_UNAVAILABLE')}</div>}
-  {aika.turns.length===0?<div className="pt-aika-home">
-   <div className="pt-aika-hello"><p><span style={{color:'#3fae49'}}><AikaMark size={22}/></span>Hello {first},</p><h2>What can I help you with?</h2></div>
-   {composer}{footer}
-   {aika.error&&<div className="pt-banner error" role="alert">{aikaProblem(aika.error)}</div>}
-   <div className="pt-aika-grid">{suggestionsFor(persona).map(s=>{const p=parseCommand(s,aika.capabilities);
-    return <button key={s} disabled={busy} onClick={()=>void send(p.question,p.capabilities)}>{p.capabilities.length?<span className="pt-aika-chip static">/{p.capabilities[0]}</span>:null}{p.question}</button>;})}</div>
-  </div>:<div className="pt-aika-chat">
-   <Conversation aika={aika} repos={repos}/>
-   <div className="pt-aika-dock-composer">{aika.error&&<div className="pt-banner error" role="alert" style={{width:'min(674px,100%)',marginBottom:10}}>{aikaProblem(aika.error)}</div>}{composer}{footer}</div>
-  </div>}
+  {/* One layout for both states, so the composer (and anything typed in it) survives the switch to the conversation. */}
+  <div className={empty?'pt-aika-home':'pt-aika-chat'}>
+   {empty?<div className="pt-aika-hello"><p><span style={{color:'#3fae49'}}><AikaMark size={22}/></span>Hello {first},</p><h2>What can I help you with?</h2></div>
+    :<Conversation aika={aika} repos={repos}/>}
+   <div className={empty?'pt-aika-home-composer':'pt-aika-dock-composer'}>
+    {aika.error&&<div className="pt-banner error" role="alert" style={{width:'min(674px,100%)',margin:empty?'0 0 10px':'0 0 10px'}}>{aikaProblem(aika.error)}</div>}
+    {composer}{footer}
+   </div>
+   {empty&&<div className="pt-aika-grid">{suggestionsFor(persona).map(s=>{const p=parseCommand(s,aika.capabilities);
+    return <button key={s} disabled={busy} onClick={()=>void send(p.question,p.capabilities)}>{p.capabilities.length?<span className="pt-aika-chip static">/{p.capabilities[0]}</span>:null}{p.question}</button>;})}</div>}
+  </div>
  </div>;
 }

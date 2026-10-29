@@ -306,7 +306,7 @@ try{
  await card.getByRole('button',{name:'Ask AiKA about this milestone'}).click();await dev.waitForURL(/\/aika\?milestone=/);
  assert.equal(await dev.getByLabel('Milestone for AiKA').inputValue(),alexId);
  await dev.getByRole('button',{name:'What should I do next on this milestone?'}).click();
- const answer=dev.getByLabel('AiKA answer');await answer.locator('.pt-aika-sections').waitFor({timeout:20000});
+ const answer=dev.getByLabel('AiKA answer').last();await answer.locator('.pt-aika-sections').waitFor({timeout:20000});
  const said=await answer.innerText();
  if(process.env.E2E_SCREENSHOTS)await dev.screenshot({path:join(process.env.E2E_SCREENSHOTS,'aika.png'),fullPage:true});
  assert.ok(said.includes(`Your milestone is ${ALEX}`)&&said.includes('Known')&&said.includes('Reported')&&said.includes('Suggestion')&&said.includes('Unknown'),said);
@@ -318,7 +318,7 @@ try{
  assert.deepEqual(modelCalls,[],'the browser never talks to the model');
  aikaMode='down';
  await dev.getByLabel('Question for AiKA').fill('What does my milestone depend on?');await dev.getByRole('button',{name:'Ask AiKA',exact:true}).click();
- await answer.getByRole('alert').filter({hasText:'AiKA couldn’t reach its AI model'}).waitFor({timeout:20000});aikaMode='ok';
+ await dev.getByLabel('AiKA answer').last().getByRole('alert').filter({hasText:'AiKA couldn’t reach its AI model'}).waitFor({timeout:20000});aikaMode='ok';
  // Back to work: resolve the blocker, finish the actions, mark ready for review.
  await dev.goto(url+'/activation/work');await card.waitFor();
  await card.getByRole('button',{name:'Mark blocker resolved'}).click();await card.getByText(/resolved by Alex Rivera/).waitFor();
@@ -455,9 +455,30 @@ try{
  // AiKA cites the recorded observation; an uncited repository claim is removed.
  await dev.goto(url+`/aika?milestone=${alexId}`);await dev.getByLabel('Question for AiKA').fill('Who owns checkout-api?');
  await dev.getByRole('button',{name:'Ask AiKA',exact:true}).click();
- const cited=dev.getByLabel('AiKA answer');await cited.getByText('Verified · repository').waitFor({timeout:20000});
+ const cited=dev.getByLabel('AiKA answer').last();await cited.getByText('Verified · repository').waitFor({timeout:20000});
  const citedText=await cited.innerText();
  assert.ok(citedText.includes('Based on: CODEOWNERS (ownership) (live, example-org/checkout-api@cccccccccccc')&&!citedText.includes('passing CI')&&citedText.includes('1 part was removed'),citedText);
+ // Slash commands: "/rep" + Enter picks /repository as a chip; the server retrieves only repository records.
+ await dev.getByLabel('Question for AiKA').fill('What does the evidence say about ownership? /rep');
+ await dev.getByRole('listbox',{name:'AiKA commands'}).getByRole('option',{name:/\/repository/}).waitFor();
+ assert.equal(await dev.getByRole('listbox',{name:'AiKA commands'}).getByRole('option').count(),1,'filtered as you type');
+ await dev.getByLabel('Question for AiKA').press('Enter');
+ await dev.locator('.pt-aika-chips').getByText('/repository').waitFor();
+ assert.equal(await dev.getByRole('option',{name:/\/docs/}).count(),0,'/docs is not offered: no documentation source');
+ await dev.getByLabel('Question for AiKA').press('Enter');
+ await dev.locator('.pt-aika-user small').filter({hasText:'/repository'}).last().waitFor();
+ await dev.getByLabel('AiKA answer').last().locator('.pt-aika-sections').waitFor({timeout:20000});
+ const scoped=aikaPrompts.at(-1);
+ assert.ok(scoped.includes('CAPABILITIES CHOSEN: /repository')&&scoped.includes('REPOSITORY OBSERVATIONS')&&!scoped.includes('YOUR MILESTONE')&&!scoped.includes('TECHNICAL GOAL'),'the command narrows what the server retrieves');
+ // A hand-made request for an unavailable capability is refused on the server.
+ assert.equal((await api(north,'aika-questions',alexToken,{question:'Show me the docs',capabilities:['docs']})).status,403);
+ // Contextual AiKA (055) on another page shares the conversation.
+ await dev.goto(url+'/activation/work');await dev.getByRole('button',{name:'Open AiKA'}).click();
+ const aikaPanel=dev.getByLabel('Contextual AiKA');await aikaPanel.getByText('New AiKA Chat').waitFor();
+ await aikaPanel.getByRole('button',{name:'Minimize AiKA'}).click();
+ // Insights: the server's numbers, for Alex (his own activity) and below for Maya and Chris.
+ await dev.goto(url+'/insights');await dev.getByLabel('Progress summary').waitFor();
+ assert.ok((await dev.getByLabel('Activity').innerText()).includes('Your activity'));
  // Jordan: the same repository, with discoverability first.
  await jordan.goto(url+'/activation/work');
  const jpanel=jordan.locator(`[aria-label^="Milestone: ${JORDAN}"] [aria-label="Repository evidence: checkout-api"]`);await jpanel.waitFor();
@@ -475,6 +496,11 @@ try{
  // Chris: the same evidence, read-only.
  await op.goto(url+'/operator/progress');const opanel=op.locator('[aria-label="Approved milestone progress"] [aria-label="Repository evidence: checkout-api"]');await opanel.waitFor();
  assert.equal(await opanel.getByRole('button').count(),0,'Chris cannot inspect');
+ await maya.goto(url+'/insights');const mi=await maya.getByLabel('Activity').innerText();
+ assert.ok(mi.includes('Team activity')&&mi.includes('Alex Rivera')&&mi.includes('Jordan Lee')&&mi.includes('Maya Chen (Champion)'),mi);
+ assert.ok((await maya.getByLabel('Evidence coverage').innerText()).includes('Live'));
+ await op.goto(url+'/operator/insights');await op.getByLabel('Progress summary').waitFor();
+ assert.ok((await op.getByLabel('Plan status').innerText()).includes('Approved by Maya Chen'));
  // Lumen: sample data, never presented as live.
  const githubBefore=githubCalls.length;
  await other.goto(url+'/activation/work');const spanel=other.locator('[aria-label="Repository evidence: recs-service"]');await spanel.waitFor();
@@ -491,7 +517,7 @@ try{
  const entry=await (await browser.newContext({viewport:{width:390,height:844}})).newPage();watch(entry);await entry.goto(url+'/login');await entry.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  for(const page of [op,other,maya,entry]){await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal overflow');}
  assert.deepEqual(errors,[]);
- console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress → Phase 6: Maya sees attention and summary, answers Jordan’s question, reviews Alex’s milestone without completing it, requests follow-up; Alex replies; review persists; coordination refused for developers, Chris, the shared token, another customer and stale revisions; Chris sees the same numbers read-only → Phase 7: Alex inspects checkout-api read-only (GitHub test double, GET only, server-side token), evidence with provenance and limits beside his actions, nothing completed; AiKA cites the observation and drops an uncited claim; Jordan’s focus is discoverability; Maya sees evidence vs reported work and a rate limit keeps earlier evidence labelled; Chris read-only; Lumen sample data labelled and never calls GitHub; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
+ console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress → Phase 6: Maya sees attention and summary, answers Jordan’s question, reviews Alex’s milestone without completing it, requests follow-up; Alex replies; review persists; coordination refused for developers, Chris, the shared token, another customer and stale revisions; Chris sees the same numbers read-only → Phase 7: Alex inspects checkout-api read-only (GitHub test double, GET only, server-side token), evidence with provenance and limits beside his actions, nothing completed; AiKA cites the observation and drops an uncited claim; slash-command menu narrows retrieval to /repository, /docs refused; contextual AiKA panel; Insights for Alex, Maya and Chris; Jordan’s focus is discoverability; Maya sees evidence vs reported work and a rate limit keeps earlier evidence labelled; Chris read-only; Lumen sample data labelled and never calls GitHub; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
 }catch(error){console.error(error);throw error;}finally{
  await browser?.close();for(const child of children.reverse()){if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(()=>{child.kill('SIGKILL');r();},3000))]);}}
  stubOllama.close();stubGitHub.close();rmSync(directory,{recursive:true,force:true});
