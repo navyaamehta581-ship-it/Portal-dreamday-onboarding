@@ -1,14 +1,16 @@
-import {BookOpenText,Check,Clock3,Lock,TriangleAlert,Users} from 'lucide-react';
+import {BookOpenText,Check,Clock3,ClipboardList,Lock,TriangleAlert,Users} from 'lucide-react';
 import type {ActivationSession} from '../activation/useActivation';
+import type {Persona} from './session';
 import {Link,navigate} from './router';
 import {loadProblem} from './onboarding/model';
 import {onboardingSteps} from './onboarding/steps';
 
 /** “Welcome to Portal” with the Setup Guide card (011, 036), filled from the developer's onboarding steps. */
-export function Home({session}:{session:ActivationSession}){
+export function Home({session,persona}:{session:ActivationSession;persona:Persona}){
  const {state,busy,error}=session;
  return <div className="pt-home">
   <h1>Welcome to Portal</h1>
+  {state&&(persona.role==='champion'?<ChampionCard session={session}/>:<AssignedWork session={session} persona={persona}/>)}
   {!state?<section className="pt-guide" aria-label="Your onboarding">
    <div className="pt-guide-head"><span className="icon"><BookOpenText size={20} aria-hidden="true"/></span><h2>Get started with your onboarding</h2></div>
    <div className="pt-step" role={error?'alert':'status'}><h3>{busy||!error?'Loading your onboarding…':loadProblem(error).title}</h3>{error&&!busy&&<p>{loadProblem(error).detail}</p>}{error&&!busy&&<button className="pt-btn" onClick={()=>void session.refresh()}>Try again</button>}</div>
@@ -43,4 +45,23 @@ function HomeGuide({session}:{session:ActivationSession}){
     </div>)}</div>
   </section>
  </>;
+}
+
+/** Work assigned to this developer. Only approved assignments name anyone; nothing is approved until the
+ * Champion approval step exists, so this says so instead of guessing from proposals. */
+function AssignedWork({session,persona}:{session:ActivationSession;persona:Persona}){
+ const mine=(session.state?.handoff?.milestones??[]).filter(m=>m.assignmentStatus==='approved'&&m.proposedAssignee===persona.name);
+ return <section className="pt-guide" aria-label="Your assigned work">
+  <div className="pt-guide-head"><span className="icon"><ClipboardList size={20} aria-hidden="true"/></span><h2>Your assigned work</h2></div>
+  {mine.length?<div className="pt-rows">{mine.map(m=><div key={m.id} className="pt-row"><span className="label">{m.objective}<small>{m.completionCriteria[0]??''}</small></span><Link className="pt-btn" to="/activation">Open</Link></div>)}</div>
+   :<div className="pt-step"><h3>Nothing is assigned to you yet</h3><p>Proposed assignments are shown to you once your Champion approves them. That approval step isn’t available in this demo yet, so your team’s shared onboarding is below.</p></div>}
+ </section>;
+}
+
+function ChampionCard({session}:{session:ActivationSession}){
+ const milestones=session.state?.handoff?.milestones.length??0;
+ return <section className="pt-guide" aria-label="Team coordination">
+  <div className="pt-guide-head"><span className="icon"><Users size={20} aria-hidden="true"/></span><h2>Coordinate your team</h2></div>
+  <div className="pt-step"><h3>{milestones?`${milestones} proposed milestone${milestones>1?'s':''} from Chris`:'Nothing published by Chris yet'}</h3><p>Review your technical team and the proposed work. Approving it isn’t available yet.</p><button className="pt-btn" onClick={()=>navigate('/champion')}>Open Team Coordination</button></div>
+ </section>;
 }

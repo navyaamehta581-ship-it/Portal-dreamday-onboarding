@@ -39,7 +39,8 @@ export function developmentActivation(goalFilename:string) {
   // PORTAL_LLM_PROVIDER=ollama uses the local model; otherwise an OpenAI-compatible endpoint if configured, else rules.
   const ollama=ollamaConfigFromEnv();
   const hosted=hostedInterpreter();
-  const analyze=ollama?(s:import('../../../../contracts/activation/v1/handoff.ts').SourceInput[])=>analyzeWithModel(createOllama(ollama),s):async(s:import('../../../../contracts/activation/v1/handoff.ts').SourceInput[])=>{const understanding=await hosted.interpret(s);return {understanding,proposal:proposeMilestones(understanding)};};
+  type Sources=import('../../../../contracts/activation/v1/handoff.ts').SourceInput[];type OnStage=import('./handoff/intelligence.ts').StageListener;
+  const analyze=ollama?(s:Sources,onStage?:OnStage)=>analyzeWithModel(createOllama(ollama),s,onStage):async(s:Sources,onStage?:OnStage)=>{onStage?.('interpreting',null);const understanding=await hosted.interpret(s);onStage?.('planning',null);return {understanding,proposal:proposeMilestones(understanding)};};
   const handoff=createHandoffService({handoffs,store:()=>store,analyze,stage:intake.stage,release:intake.release,publishEnabled:process.env.ACTIVATION_INTAKE==='1'});
   const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);
   const stop=worker.start();

@@ -1,12 +1,16 @@
 /**
  * Local demo session layer for the reconstructed Portal (Vite dev/preview only).
  *
- * The simulated Portal login selects one operator-configured demo account. The
- * account's developer token is read from a private file on the server side and
- * attached to proxied activation requests; it never reaches the browser.
- * Backend authorization is unchanged: the workflow API still requires the bearer
- * token, still binds it to one customer and still rejects developer tokens for
- * operator-only routes. This is not Spotify authentication.
+ * One entry page offers clearly labelled fictional personas. Choosing a persona is a simulated sign-in, not
+ * authentication: anyone who can open this local page can choose any persona. What a persona can do is decided
+ * on the server, never by the browser:
+ *   - the session cookie names a persona; the browser never holds a token;
+ *   - each persona maps to one server-held credential: customer personas (champion, developer) use their
+ *     customer's developer token, the operator persona uses each listed customer's operator token;
+ *   - the workflow API still authorizes every request by that token, binds it to one customer, rejects
+ *     developer tokens on operator-only routes and applies the developer-safe projection.
+ * Requests carry the persona the page believes is signed in; if another tab signed in as someone else, the
+ * request is refused instead of silently acting as the new persona.
  */
 import {randomBytes} from 'node:crypto';
 import {existsSync, readFileSync} from 'node:fs';
@@ -14,42 +18,86 @@ import {join} from 'node:path';
 
 const COOKIE = 'portal_demo_session';
 const SESSION_MS = 8 * 3600_000;
-const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications)$/;
+const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions)$/;
 const LOOPBACK = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;
+const ROLES = ['operator', 'champion', 'developer'];
+// Model-assisted drafting can take minutes on a laptop; every other route keeps the short limit.
+const timeoutFor = route => route.endsWith('/handoff-drafts') ? 300_000 : 30_000;
 
-export function loadAccounts(env = process.env) {
-  let list = [];
-  if (env.PORTAL_DEMO_ACCOUNTS) list = JSON.parse(readFileSync(env.PORTAL_DEMO_ACCOUNTS, 'utf8'));
-  else if (env.ACTIVATION_DEMO_DIR) list = [{
-    id: 'demo',
-    label: env.PORTAL_DEMO_LABEL ?? 'Demo customer',
-    user: env.PORTAL_DEMO_USER ?? 'Developer',
-    customerId: env.ACTIVATION_DEMO_CUSTOMER_ID ?? 'fictional-recommendation-demo',
-    apiOrigin: env.ACTIVATION_API_ORIGIN ?? 'http://127.0.0.1:7007',
-    tokenFile: join(env.ACTIVATION_DEMO_DIR, 'token'),
-  }];
-  if (!Array.isArray(list)) throw Error('PORTAL_DEMO_ACCOUNTS must be a JSON array');
-  const ids = new Set();
-  for (const a of list) {
-    if (!a || typeof a !== 'object' || !/^[a-z0-9-]{1,40}$/.test(a.id) || ids.has(a.id)) throw Error('Each demo account needs a unique lowercase id');
-    if (typeof a.label !== 'string' || !a.label.trim() || typeof a.user !== 'string' || !a.user.trim()) throw Error(`Account ${a.id} needs label and user`);
-    if (!/^[A-Za-z0-9_-]{1,200}$/.test(a.customerId)) throw Error(`Account ${a.id} has an invalid customerId`);
-    if (!LOOPBACK.test(a.apiOrigin)) throw Error(`Account ${a.id} apiOrigin must be an explicit loopback origin`);
-    if (typeof a.tokenFile !== 'string' || !a.tokenFile) throw Error(`Account ${a.id} needs tokenFile`);
-    ids.add(a.id);
-  }
-  return list;
+/** The challenge personas, used when the demo launcher's directory is configured. Fictional people. */
+export const DEFAULT_PERSONAS = [
+  {id: 'chris', name: 'Chris', role: 'operator', title: 'Spotify account operator'},
+  {id: 'maya', name: 'Maya Chen', role: 'champion', title: 'Platform Champion'},
+  {id: 'alex', name: 'Alex Rivera', role: 'developer', title: 'Developer'},
+  {id: 'jordan', name: 'Jordan Lee', role: 'developer', title: 'Developer'},
+];
+
+function validCustomer(c, ids) {
+  if (!c || typeof c !== 'object' || !/^[a-z0-9-]{1,40}$/.test(c.id) || ids.has(c.id)) throw Error('Each customer needs a unique lowercase id');
+  if (typeof c.label !== 'string' || !c.label.trim()) throw Error(`Customer ${c.id} needs a label`);
+  if (!/^[A-Za-z0-9_-]{1,200}$/.test(c.customerId)) throw Error(`Customer ${c.id} has an invalid customerId`);
+  if (!LOOPBACK.test(c.apiOrigin)) throw Error(`Customer ${c.id} apiOrigin must be an explicit loopback origin`);
+  if (typeof c.tokenFile !== 'string' || !c.tokenFile) throw Error(`Customer ${c.id} needs tokenFile`);
+  if (c.operatorTokenFile !== undefined && (typeof c.operatorTokenFile !== 'string' || !c.operatorTokenFile)) throw Error(`Customer ${c.id} has an invalid operatorTokenFile`);
+  ids.add(c.id);
+  return {id: c.id, label: c.label, customerId: c.customerId, apiOrigin: c.apiOrigin, tokenFile: c.tokenFile, operatorTokenFile: c.operatorTokenFile ?? join(c.tokenFile, '..', 'operator-token')};
 }
 
-function readToken(account) {
-  if (!existsSync(account.tokenFile)) return null;
-  const token = readFileSync(account.tokenFile, 'utf8').trim();
+/**
+ * Configuration: `PORTAL_DEMO_ACCOUNTS` names a JSON file with `{customers, personas}`. The older array form (one
+ * entry per customer with a `user`) still works and yields one developer persona per customer. Without a file,
+ * `ACTIVATION_DEMO_DIR` (the demo launcher's directory) yields one customer and the four challenge personas.
+ */
+export function loadDirectory(env = process.env) {
+  let raw = null;
+  if (env.PORTAL_DEMO_ACCOUNTS) raw = JSON.parse(readFileSync(env.PORTAL_DEMO_ACCOUNTS, 'utf8'));
+  else if (env.ACTIVATION_DEMO_DIR) raw = {
+    customers: [{
+      id: 'demo',
+      label: env.PORTAL_DEMO_LABEL ?? 'Fictional demo customer',
+      customerId: env.ACTIVATION_DEMO_CUSTOMER_ID ?? 'fictional-recommendation-demo',
+      apiOrigin: env.ACTIVATION_API_ORIGIN ?? 'http://127.0.0.1:7007',
+      tokenFile: join(env.ACTIVATION_DEMO_DIR, 'token'),
+      operatorTokenFile: join(env.ACTIVATION_DEMO_DIR, 'operator-token'),
+    }],
+    personas: DEFAULT_PERSONAS.map(p => ({...p, customers: ['demo']})),
+  };
+  if (raw === null) return {customers: [], personas: []};
+  if (Array.isArray(raw)) raw = {customers: raw, personas: raw.map(a => ({id: a.id, name: a.user, role: 'developer', title: 'Developer', customers: [a.id]}))};
+  if (!raw || !Array.isArray(raw.customers) || !Array.isArray(raw.personas)) throw Error('PORTAL_DEMO_ACCOUNTS must be an array or {customers, personas}');
+  const ids = new Set();
+  const customers = raw.customers.map(c => validCustomer(c, ids));
+  const personaIds = new Set();
+  const personas = raw.personas.map(p => {
+    if (!p || typeof p !== 'object' || !/^[a-z0-9-]{1,40}$/.test(p.id) || personaIds.has(p.id)) throw Error('Each persona needs a unique lowercase id');
+    if (typeof p.name !== 'string' || !p.name.trim() || typeof p.title !== 'string' || !p.title.trim()) throw Error(`Persona ${p.id} needs name and title`);
+    if (!ROLES.includes(p.role)) throw Error(`Persona ${p.id} role must be one of ${ROLES.join(', ')}`);
+    if (!Array.isArray(p.customers) || !p.customers.length || !p.customers.every(id => ids.has(id))) throw Error(`Persona ${p.id} must list configured customers`);
+    // A customer persona belongs to exactly one customer; only the operator works across customers.
+    if (p.role !== 'operator' && p.customers.length !== 1) throw Error(`Persona ${p.id} must belong to exactly one customer`);
+    personaIds.add(p.id);
+    return {id: p.id, name: p.name, role: p.role, title: p.title, customers: [...new Set(p.customers)]};
+  });
+  return {customers, personas};
+}
+
+function readToken(file) {
+  if (!file || !existsSync(file)) return null;
+  const token = readFileSync(file, 'utf8').trim();
   return token.length >= 32 ? token : null;
 }
 
-const publicAccount = a => ({id: a.id, label: a.label, user: a.user, customerId: a.customerId});
+export function createPortalSession({directory, now = () => Date.now(), fetchImpl = fetch} = {}) {
+  const {customers, personas} = directory;
+  const customer = id => customers.find(c => c.id === id);
+  const publicPersona = p => ({id: p.id, name: p.name, role: p.role, title: p.title,
+    customers: p.customers.map(id => {const c = customer(id); return {id: c.id, label: c.label, customerId: c.customerId};})});
+  // The credential a persona uses for one customer, or null when it has none for that surface.
+  const credential = (p, c, surface) => surface === 'operator'
+    ? (p.role === 'operator' ? readToken(c.operatorTokenFile) : null)
+    : (p.role !== 'operator' ? readToken(c.tokenFile) : null);
+  const available = p => p.customers.some(id => credential(p, customer(id), p.role === 'operator' ? 'operator' : 'portal'));
 
-export function createPortalSession({accounts, now = () => Date.now(), fetchImpl = fetch} = {}) {
   const sessions = new Map();
   const send = (res, status, value, headers = {}) => {
     res.writeHead(status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers});
@@ -61,7 +109,8 @@ export function createPortalSession({accounts, now = () => Date.now(), fetchImpl
     const entry = match && sessions.get(match[1]);
     if (!entry) return null;
     if (entry.expires <= now()) {sessions.delete(match[1]); return null;}
-    return {sid: match[1], account: accounts.find(a => a.id === entry.accountId)};
+    const persona = personas.find(p => p.id === entry.personaId);
+    return persona ? {sid: match[1], persona} : null;
   };
   // State-changing requests must come from this page's own origin.
   const sameOrigin = req => req.headers.origin === `http://${req.headers.host}`;
@@ -71,15 +120,15 @@ export function createPortalSession({accounts, now = () => Date.now(), fetchImpl
     for await (const chunk of req) {size += chunk.length; if (size > 1_000_000) throw Object.assign(Error('too large'), {code: 'PAYLOAD_TOO_LARGE'}); chunks.push(chunk);}
     return Buffer.concat(chunks).toString('utf8');
   }
-  async function forward(req, res, account, path, authorization) {
+  async function forward(req, res, c, route, token) {
     const payload = req.method === 'POST' ? await body(req) : undefined;
     let upstream;
     try {
-      upstream = await fetchImpl(`${account.apiOrigin}/api${path}`, {
+      upstream = await fetchImpl(`${c.apiOrigin}/api${route}`, {
         method: req.method,
-        headers: {Authorization: authorization, ...(payload === undefined ? {} : {'Content-Type': 'application/json'})},
+        headers: {Authorization: `Bearer ${token}`, ...(payload === undefined ? {} : {'Content-Type': 'application/json'})},
         body: payload,
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(timeoutFor(route)),
       });
     } catch {
       return fail(res, 502, 'ACTIVATION_API_UNREACHABLE');
@@ -88,26 +137,38 @@ export function createPortalSession({accounts, now = () => Date.now(), fetchImpl
     res.writeHead(upstream.status, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...(upstream.headers.get('etag') ? {ETag: upstream.headers.get('etag')} : {})});
     res.end(text);
   }
+  // Every API request needs the signed-in persona, and the persona the page expects when it says so.
+  function personaFor(req, res) {
+    const s = cookieSession(req);
+    if (!s) {fail(res, 401, 'SIGN_IN_REQUIRED'); return null;}
+    const expected = req.headers['x-portal-persona'];
+    if (expected !== undefined && expected !== s.persona.id) {fail(res, 409, 'PERSONA_CHANGED'); return null;}
+    if (req.method === 'POST' && !sameOrigin(req)) {fail(res, 403, 'ORIGIN_NOT_ALLOWED'); return null;}
+    return s.persona;
+  }
 
   return async function handle(req, res, next) {
     const url = new URL(req.url ?? '/', 'http://local');
     const path = url.pathname;
     try {
-      if (path === '/portal-auth/accounts' && req.method === 'GET') return send(res, 200, {accounts: accounts.map(publicAccount)});
+      if (path === '/portal-auth/personas' && req.method === 'GET') return send(res, 200, {personas: personas.map(publicPersona)});
       if (path === '/portal-auth/session' && req.method === 'GET') {
         const s = cookieSession(req);
-        return s ? send(res, 200, {account: publicAccount(s.account)}) : fail(res, 401, 'SIGN_IN_REQUIRED');
+        return s ? send(res, 200, {persona: publicPersona(s.persona)}) : fail(res, 401, 'SIGN_IN_REQUIRED');
       }
       if (path === '/portal-auth/login' && req.method === 'POST') {
         if (!sameOrigin(req)) return fail(res, 403, 'ORIGIN_NOT_ALLOWED');
         let input;
         try {input = JSON.parse(await body(req));} catch {return fail(res, 400, 'INVALID_REQUEST');}
-        const account = accounts.find(a => a.id === input?.accountId);
-        if (!account) return fail(res, 404, 'UNKNOWN_ACCOUNT');
-        if (!readToken(account)) return fail(res, 503, 'ACCOUNT_UNAVAILABLE');
+        const persona = personas.find(p => p.id === input?.personaId);
+        if (!persona) return fail(res, 404, 'UNKNOWN_PERSONA');
+        if (!available(persona)) return fail(res, 503, 'PERSONA_UNAVAILABLE');
+        // Signing in replaces any earlier session in this browser.
+        const previous = cookieSession(req);
+        if (previous) sessions.delete(previous.sid);
         const sid = randomBytes(32).toString('hex');
-        sessions.set(sid, {accountId: account.id, expires: now() + SESSION_MS});
-        return send(res, 200, {account: publicAccount(account)}, {'Set-Cookie': `${COOKIE}=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MS / 1000}`});
+        sessions.set(sid, {personaId: persona.id, expires: now() + SESSION_MS});
+        return send(res, 200, {persona: publicPersona(persona)}, {'Set-Cookie': `${COOKIE}=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MS / 1000}`});
       }
       if (path === '/portal-auth/logout' && req.method === 'POST') {
         if (!sameOrigin(req)) return fail(res, 403, 'ORIGIN_NOT_ALLOWED');
@@ -115,27 +176,32 @@ export function createPortalSession({accounts, now = () => Date.now(), fetchImpl
         if (s) sessions.delete(s.sid);
         return send(res, 200, {}, {'Set-Cookie': `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`});
       }
+      // Customer personas: their single customer, developer credential.
       if (path.startsWith('/portal-api/')) {
         const route = path.slice('/portal-api'.length), match = ROUTES.exec(route);
         if (!match || !['GET', 'POST'].includes(req.method)) return fail(res, 404, 'NOT_FOUND');
-        const s = cookieSession(req);
-        if (!s) return fail(res, 401, 'SIGN_IN_REQUIRED');
-        if (req.method === 'POST' && !sameOrigin(req)) return fail(res, 403, 'ORIGIN_NOT_ALLOWED');
-        // The signed-in account fixes the customer; another ID is never forwarded.
-        if (match[1] !== s.account.customerId) return fail(res, 403, 'FORBIDDEN');
-        const token = readToken(s.account);
-        if (!token) return fail(res, 503, 'ACCOUNT_UNAVAILABLE');
-        return await forward(req, res, s.account, route, `Bearer ${token}`);
+        const persona = personaFor(req, res);
+        if (!persona) return;
+        if (persona.role === 'operator') return fail(res, 403, 'WRONG_SURFACE');
+        const c = customer(persona.customers[0]);
+        // The persona fixes the customer; another ID is never forwarded.
+        if (match[1] !== c.customerId) return fail(res, 403, 'FORBIDDEN');
+        const token = credential(persona, c, 'portal');
+        if (!token) return fail(res, 503, 'PERSONA_UNAVAILABLE');
+        return await forward(req, res, c, route, token);
       }
+      // Operator persona: one of its listed customers, operator credential.
       const operator = /^\/operator-api\/([a-z0-9-]{1,40})(\/.*)$/.exec(path);
       if (operator) {
-        const account = accounts.find(a => a.id === operator[1]);
-        if (!account || !ROUTES.test(operator[2]) || !['GET', 'POST'].includes(req.method)) return fail(res, 404, 'NOT_FOUND');
-        if (req.method === 'POST' && !sameOrigin(req)) return fail(res, 403, 'ORIGIN_NOT_ALLOWED');
-        // Operator access is never injected: the workspace user supplies the operator token.
-        const authorization = req.headers.authorization;
-        if (!authorization?.startsWith('Bearer ')) return fail(res, 401, 'TOKEN_REQUIRED');
-        return await forward(req, res, account, operator[2], authorization);
+        const c = customer(operator[1]), match = ROUTES.exec(operator[2]);
+        if (!c || !match || !['GET', 'POST'].includes(req.method)) return fail(res, 404, 'NOT_FOUND');
+        const persona = personaFor(req, res);
+        if (!persona) return;
+        if (persona.role !== 'operator' || !persona.customers.includes(c.id)) return fail(res, 403, 'FORBIDDEN');
+        if (match[1] !== c.customerId) return fail(res, 403, 'FORBIDDEN');
+        const token = credential(persona, c, 'operator');
+        if (!token) return fail(res, 503, 'PERSONA_UNAVAILABLE');
+        return await forward(req, res, c, operator[2], token);
       }
     } catch (error) {
       return fail(res, error?.code === 'PAYLOAD_TOO_LARGE' ? 413 : 500, error?.code === 'PAYLOAD_TOO_LARGE' ? 'PAYLOAD_TOO_LARGE' : 'INTERNAL_ERROR');
@@ -148,7 +214,7 @@ export function createPortalSession({accounts, now = () => Date.now(), fetchImpl
 export function portalSessionPlugin() {
   let handler;
   const install = server => {
-    handler ??= createPortalSession({accounts: loadAccounts()});
+    handler ??= createPortalSession({directory: loadDirectory()});
     server.middlewares.use((req, res, next) => {void handler(req, res, next);});
   };
   return {name: 'portal-demo-session', configureServer: install, configurePreviewServer: install};

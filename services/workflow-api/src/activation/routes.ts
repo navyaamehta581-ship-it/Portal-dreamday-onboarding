@@ -5,7 +5,7 @@ import type {HandoffService} from './handoff/service.ts';
 import {developerState} from './handoff/project.ts';
 export type ActivationOptions={handoff?:HandoffService;isOperator?:(request:IncomingMessage,principal:Principal)=>boolean;prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
 export async function activationRoute(request:IncomingMessage,response:ServerResponse,path:string,options:ActivationOptions,readJson:(r:IncomingMessage)=>Promise<unknown>) {
-  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals|handoff|handoff-drafts|handoff-publications)$/.exec(path);
+  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions)$/.exec(path);
   if(!match)return false;
   response.setHeader('Access-Control-Expose-Headers','ETag');
   const send=(status:number,value:unknown)=>{response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});response.end(JSON.stringify(value));};
@@ -15,11 +15,19 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
     const operator=!!options.isOperator?.(request,p);
     const operatorOnly=match[2]==='intake'||match[2].startsWith('handoff')||(match[2]==='state'&&request.method==='POST');
     if(operatorOnly&&!operator){send(403,{error:{code:'OPERATOR_REQUIRED'}});return true;}
-    if(match[2]==='handoff'||match[2]==='handoff-drafts'){
-      if(!options.handoff){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}
-      if(match[2]==='handoff'&&request.method==='GET'){send(200,options.handoff.overview(p));return true;}
-      if(match[2]==='handoff-drafts'&&request.method==='POST'){send(201,await options.handoff.draft(p,await readJson(request)));return true;}
-      response.setHeader('Allow',match[2]==='handoff'?'GET':'POST');send(405,{error:{code:'METHOD_NOT_ALLOWED'}});return true;
+    // Operator-only workspace routes: they return operator records, never activation state.
+    if(match[2]!=='handoff-publications'&&match[2].startsWith('handoff')){
+      const h=options.handoff;
+      if(!h){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}
+      const route=`${request.method} ${match[2]}`;
+      if(route==='GET handoff'){send(200,h.overview(p));return true;}
+      if(route==='POST handoff-drafts'){send(201,await h.draft(p,await readJson(request)));return true;}
+      if(route==='POST handoff-workspace'){send(200,h.saveWorkspace(p,await readJson(request)));return true;}
+      if(route==='GET handoff-analyses'){send(200,{job:h.analysisStatus(p)});return true;}
+      if(route==='POST handoff-analyses'){const r=h.startAnalysis(p,await readJson(request));send(r.duplicate?200:202,r);return true;}
+      if(route==='POST handoff-reviews'){send(200,h.saveReview(p,await readJson(request)));return true;}
+      if(route==='POST handoff-submissions'){send(200,h.submission(p,await readJson(request)));return true;}
+      response.setHeader('Allow',match[2]==='handoff'?'GET':match[2]==='handoff-analyses'?'GET, POST':'POST');send(405,{error:{code:'METHOD_NOT_ALLOWED'}});return true;
     }
     let state;
     if(match[2]==='state'&&request.method==='GET')state=options.store.get(p);
@@ -57,8 +65,9 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
     send(request.method==='POST'&&(match[2]==='state'||match[2]==='handoff-publications')?201:200,operator?{...state,...(published?{handoff:published}:{})}:developerState(state,published));
   } catch(error) {
     const code=error&&typeof error==='object'&&'code' in error?String(error.code):'INTERNAL_ERROR';
-    const statuses:Record<string,number>={CONFIDENTIAL_CONTENT:400,FORBIDDEN:403,NOT_FOUND:404,REVISION_CONFLICT:409,IDEMPOTENCY_CONFLICT:409,INVALID_TRANSITION:409,REPLAN_PENDING:409,ADAPTER_UNAVAILABLE:503,INVALID_REQUEST:400,INVALID_EVIDENCE:400,CAPABILITY_UNAVAILABLE:400,UNSUPPORTED_VERSION:400,UNSUPPORTED_MEDIA_TYPE:415,PAYLOAD_TOO_LARGE:413,INVALID_JSON:400};
-    send(statuses[code]??500,{error:{code:statuses[code]?code:'INTERNAL_ERROR'}});
+    const statuses:Record<string,number>={ALREADY_PUBLISHED:409,AWAITING_CHAMPION_REVIEW:409,NOT_LATEST_DRAFT:409,REVIEW_INCOMPLETE:400,CONFIDENTIAL_CONTENT:400,FORBIDDEN:403,NOT_FOUND:404,REVISION_CONFLICT:409,IDEMPOTENCY_CONFLICT:409,INVALID_TRANSITION:409,REPLAN_PENDING:409,ADAPTER_UNAVAILABLE:503,INVALID_REQUEST:400,INVALID_EVIDENCE:400,CAPABILITY_UNAVAILABLE:400,UNSUPPORTED_VERSION:400,UNSUPPORTED_MEDIA_TYPE:415,PAYLOAD_TOO_LARGE:413,INVALID_JSON:400};
+    const details=statuses[code]&&error&&typeof error==='object'&&'details' in error?{details:(error as {details:unknown}).details}:{};
+    send(statuses[code]??500,{error:{code:statuses[code]?code:'INTERNAL_ERROR',...details}});
   }
   return true;
 }

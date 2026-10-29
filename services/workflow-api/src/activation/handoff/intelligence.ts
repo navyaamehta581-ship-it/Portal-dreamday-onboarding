@@ -415,13 +415,16 @@ export function contextFor(model:JsonModel,chunkChars:number){
  return Math.min(model.maxCtx,Math.max(4096,Math.ceil(need/1024)*1024));
 }
 
-export async function analyzeWithModel(model:JsonModel,sources:SourceInput[]):Promise<Analysis>{
+/** Called as each real stage starts, so a caller can report progress without guessing. */
+export type StageListener=(stage:'interpreting'|'planning',detail:string|null)=>void;
+export async function analyzeWithModel(model:JsonModel,sources:SourceInput[],onStage:StageListener=()=>undefined):Promise<Analysis>{
  const started=Date.now();const stages:ModelStage[]=[];const discards:Discard[]=[];
  try{
   const lines=numberLines(sources),all=norm(sources.map(s=>s.text).join('\n'));
   const chunks=chunk(lines);const numCtx=contextFor(model,Math.max(...chunks.map(c=>renderLines(c).length)));
   const parts:Extraction[]=[];
-  for(const c of chunks){
+  for(const [i,c] of chunks.entries()){
+   onStage('interpreting',chunks.length>1?`part ${i+1} of ${chunks.length}`:null);
    const r=await model.run({name:'interpret',system:INTERPRET_SYSTEM,schema:interpretSchema,user:renderLines(c),numCtx,numPredict:INTERPRET_PREDICT,validate:x=>validateInterpretation(x,c,all,discards)});
    parts.push(r.value);stages.push(r.stats);
   }
@@ -430,6 +433,7 @@ export async function analyzeWithModel(model:JsonModel,sources:SourceInput[]):Pr
   if(extraction.kept===0&&discards.length)throw new ModelError('INVALID_MODEL_OUTPUT','nothing_supported');
   recallPeople(extraction,lines);
   const understanding=toUnderstanding(extraction,sources,lines);
+  onStage('planning',null);
   const r=await model.run({name:'plan',system:PLAN_SYSTEM,schema:planSchema,user:renderPlanInput(planInput(understanding)),numCtx,numPredict:PLAN_PREDICT,validate:x=>validatePlan(x,understanding,discards)});
   const plan=r.value;stages.push(r.stats);
   understanding.baseline=plan.baseline;understanding.clarifications=plan.clarifications;

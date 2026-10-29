@@ -1,42 +1,40 @@
-import {useEffect,useMemo,useState} from 'react';
-import './theme';
+import {useEffect,useMemo,type ReactNode} from 'react';
+import {Users} from 'lucide-react';
 import {activationClient} from '../activation/client';
 import {useActivation} from '../activation/useActivation';
-import {currentSession,signOut,type PortalAccount} from './session';
-import {navigate,usePath} from './router';
-import {Welcome} from './Welcome';
-import {Login} from './Login';
-import {ALL_NAV,Shell} from './Shell';
+import {portalAccount,type Persona} from './session';
+import {usePath} from './router';
+import {ALL_NAV,PRIMARY_NAV,Shell,type NavItem,type ShellUser} from './Shell';
 import {Home} from './Home';
+import {ChampionPage} from './ChampionPage';
 import {OnboardingPage,TABS,type Tab} from './onboarding/OnboardingPage';
 
-/** Developer surface: reconstructed Spotify Portal with customer-specific onboarding inside it. */
-export function PortalApp(){
- const path=usePath();
- const [account,setAccount]=useState<PortalAccount|null|undefined>(undefined);
- useEffect(()=>{document.title='Spotify Portal';currentSession().then(setAccount).catch(()=>setAccount(null));},[]);
- useEffect(()=>{if(path==='/onboarding')navigate('/activation',true);},[path]);
- // Requests go through the local session layer, which holds the developer credential server-side.
- const api=useMemo(()=>account?activationClient(account.customerId,'','','/portal-api'):null,[account]);
- const session=useActivation(api,account?`${account.id}:${account.customerId}`:'signed-out');
- useEffect(()=>{if(api)void session.refresh();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
- useEffect(()=>{if(session.error==='SIGN_IN_REQUIRED')setAccount(null);},[session.error]);
+// The Champion gets one extra entry beside Onboarding; everything else is the same Portal navigation.
+const CHAMPION_NAV:NavItem[]=PRIMARY_NAV.flatMap(item=>item.slug==='onboarding'?[item,{slug:'champion',label:'Team Coordination',icon:Users,to:'/champion'}]:[item]);
 
- async function leave(){await signOut().catch(()=>undefined);setAccount(null);navigate('/');}
- if(path==='/')return <div className="pt"><Welcome onStart={()=>navigate(account?'/portal':'/login')}/></div>;
- if(account===undefined)return <div className="pt" style={{minHeight:'100vh'}} aria-busy="true"/>;
- if(path==='/login'||!account){
-  if(account&&path==='/login'){navigate('/portal',true);return null;}
-  return <div className="pt"><Login onSignedIn={a=>{setAccount(a);if(path==='/login')navigate('/portal');}} onBack={()=>navigate('/')}/></div>;
- }
+/** Customer Portal for Maya, Alex and Jordan: the reconstructed Spotify Portal with their onboarding inside it.
+ * Requests go through the local session layer, which holds the customer's developer credential server-side. */
+export function PortalApp({persona,user,onSignedOut,onPersonaChanged,notice}:{persona:Persona;user:ShellUser;onSignedOut:()=>void;onPersonaChanged:()=>void;notice:ReactNode}){
+ const path=usePath();
+ const account=portalAccount(persona);
+ const api=useMemo(()=>activationClient(account.customerId,'','','/portal-api',persona.id),[account.customerId,persona.id]);
+ const session=useActivation(api,`${persona.id}:${account.customerId}`);
+ useEffect(()=>{void session.refresh();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{if(session.error==='SIGN_IN_REQUIRED')onSignedOut();if(session.error==='PERSONA_CHANGED')onPersonaChanged();},[session.error]); // eslint-disable-line react-hooks/exhaustive-deps
+
+ const champion=persona.role==='champion';
  const onboarding=/^\/activation(?:\/([a-z]+))?\/?$/.exec(path);
  const feature=/^\/portal\/x\/([a-z-]+)$/.exec(path);
- const active=onboarding?'onboarding':feature?feature[1]:'home';
+ const coordination=path==='/champion'&&champion;
+ const active=onboarding?'onboarding':feature?feature[1]:coordination?'champion':'home';
  const tab=(TABS.some(([id])=>id===onboarding?.[1])?onboarding![1]:'overview') as Tab;
  const item=feature?ALL_NAV.find(n=>n.slug===feature[1]):null;
- return <div className="pt"><Shell active={active} user={{name:account.user,detail:account.label,actionLabel:'Sign out',onAction:()=>void leave()}}>
+ return <div className="pt"><Shell active={active} user={user} primaryNav={champion?CHAMPION_NAV:PRIMARY_NAV}>
+  {notice}
   {onboarding?<OnboardingPage session={session} tab={tab} account={account}/>:
+   coordination?<ChampionPage session={session} account={account}/>:
+   path==='/champion'?<div className="pt-page"><div className="pt-pagebar"><h1>Team Coordination</h1></div><div className="pt-empty"><div><h2>Team Coordination is for your team’s Champion</h2><p>You’re signed in as {persona.name}. Your onboarding is under Onboarding.</p></div></div></div>:
    feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2></div></div></div>:
-   <Home session={session}/>}
+   <Home session={session} persona={persona}/>}
  </Shell></div>;
 }

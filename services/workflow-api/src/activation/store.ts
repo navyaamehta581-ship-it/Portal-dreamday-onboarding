@@ -8,7 +8,9 @@ import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate, Ev
 export type Principal = { tenantId: string; customerId: string; sessionId: string };
 export class ActivationError extends Error {
   code: string;
-  constructor(code: string) { super(code); this.code = code; }
+  /** Optional machine-readable details (for example which fields failed a check); never customer content. */
+  details?: unknown;
+  constructor(code: string, details?: unknown) { super(code); this.code = code; if (details !== undefined) this.details = details; }
 }
 const fail = (code: string): never => { throw new ActivationError(code); };
 export type Policy = {

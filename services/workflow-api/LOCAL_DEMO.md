@@ -1,3 +1,44 @@
+# Persona demo: one entry for Chris, Maya, Alex and Jordan
+
+Use Node >=24.12.0 <25. From the repository root, once:
+
+```sh
+npm ci --ignore-scripts --prefix services/workflow-api
+npm ci --prefix prototypes/v1
+```
+
+Terminal 1, the fictional customer API (handoff mode starts empty, so Chris publishes first):
+
+```sh
+export ACTIVATION_DEMO_DIR="$HOME/.spotify-portal-demo-northstar"   # must not exist yet, or be a previous run of this demo
+export ACTIVATION_DEMO_CUSTOMER_ID=fictional-northstar-commerce
+PORTAL_LLM_PROVIDER=ollama OLLAMA_MODEL=qwen3:1.7b npm run demo:handoff --prefix services/workflow-api
+```
+
+Leave out `PORTAL_LLM_PROVIDER` and `OLLAMA_MODEL` to use rule-based analysis without a model.
+
+Terminal 2, the Portal (same `ACTIVATION_DEMO_DIR` and customer ID):
+
+```sh
+export ACTIVATION_DEMO_DIR="$HOME/.spotify-portal-demo-northstar"
+export ACTIVATION_DEMO_CUSTOMER_ID=fictional-northstar-commerce
+PORTAL_DEMO_LABEL="Northstar Commerce (fictional)" npm run dev --prefix prototypes/v1
+```
+
+Then:
+
+1. Open http://127.0.0.1:5173/, select **Get started** and choose **Chris**.
+2. In **Customer Context**, add the scenario A information from `services/workflow-api/test/fixtures/scenarios.json` as separate entries, choose each entry's category, and select **Save information**.
+3. Select **Analyze customer**. The page shows the running stage and elapsed time; with a local model this takes one to three minutes, and you can keep working.
+4. Open **Onboarding Draft**, edit the problem, stakeholders, goals, milestones and questions, and select **Save draft**.
+5. Confirm and select **Mark ready for Champion review**. Nothing becomes visible to Maya or developers: Maya's review step is Phase 4.
+6. Optional, to show the developer Portals: select **Withdraw to make changes**, open **Integration tools**, and use **Publish without Champion review**. This is a labelled demo path, not an approval.
+7. Sign out and choose **Maya**, **Alex** or **Jordan**.
+
+No tokens are copied or pasted: the Portal's local session layer reads them from `ACTIVATION_DEMO_DIR` on the server side.
+
+See [docs/activation/personas.md](../../docs/activation/personas.md) for routing, the access model and what is still a placeholder.
+
 # Unblock the local activation screen
 
 Use Node >=24.12.0 <25. From the repository root:

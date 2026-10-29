@@ -79,8 +79,46 @@ export type Approval = { status: 'pending' | 'approved'; by: string | null; at: 
 export type Approvals = { chris: Approval; champion: Approval };
 export type Assignment = { milestoneId: string; role: string; proposedAssignee: string | null; status: 'proposed' | 'approved' };
 
+/** Record status. 'draft' = analysis ready for Chris's review; 'submitted' = Chris marked it ready for Champion
+ * review (nothing is shared with the Champion or developers by submitting); 'published' = developers can see it. */
+export type HandoffStatus = 'draft' | 'submitted' | 'published';
 export type HandoffRecord = {
   approvals?: Approvals; assignments?: Assignment[];
-  draft: number; status: 'draft' | 'published'; createdAt: string; publishedVersion: number | null; publishedAt: string | null;
+  draft: number; status: HandoffStatus; createdAt: string; publishedVersion: number | null; publishedAt: string | null;
   sources: SourceInput[]; understanding: Understanding; proposal: MilestoneProposal; developer: DeveloperHandoff | null;
+  /** Chris's edited review of this analysis (operator-only), its revision and the saved information it was built from. */
+  review?: ReviewDraft; reviewRevision?: number; reviewUpdatedAt?: string; basedOnWorkspaceRevision?: number;
+  submittedAt?: string | null;
 };
+
+/** Chris's saved, not-yet-analyzed customer information for one customer. Operator-only. */
+export type Workspace = { revision: number; updatedAt: string | null; sources: SourceInput[] };
+
+/** Real stages of one analysis run, reported by the server as they start. */
+export type AnalysisStage = 'preparing' | 'interpreting' | 'planning' | 'preparing_review';
+export type AnalysisJob = {
+  id: string; status: 'running' | 'succeeded' | 'failed'; stage: AnalysisStage; stageDetail: string | null;
+  startedAt: string; finishedAt: string | null; elapsedMs: number; workspaceRevision: number;
+  /** The analysis record created on success, and how it was produced (model or rule-based fallback). */
+  draft: number | null; interpreter: Understanding['interpreter'] | null; modelOk: boolean | null; modelError: string | null;
+  error: string | null;
+};
+
+/** Where a reviewed item came from. 'customer' = stated in the customer's sources; 'ai' = suggested by analysis;
+ * 'chris' = added by Chris. `edited` marks an item Chris changed. */
+export type ReviewOrigin = 'customer' | 'ai' | 'chris';
+export type ReviewItem = { id: string; text: string; origin: ReviewOrigin; edited?: boolean; status?: 'verified' | 'reported' | 'unconfirmed'; sources?: string[] };
+export type ReviewStakeholder = { id: string; name: string; role: string; responsibilities: string; basis: 'stated' | 'role_default' | 'inferred' | 'chris'; sources: string[]; technical: boolean };
+export type ReviewMilestone = { id: string; title: string; description: string; system: string; actions: string[]; completionCriteria: string[];
+  assignee: string | null; role: string; dependsOn: string[]; origin: ReviewOrigin; edited?: boolean };
+export type ReviewDraft = {
+  problem: { summary: string; challenges: ReviewItem[]; systems: ReviewItem[]; contradictions: ReviewItem[]; unknowns: ReviewItem[] };
+  facts: ReviewItem[];
+  stakeholders: ReviewStakeholder[];
+  goals: ReviewItem[];
+  milestones: ReviewMilestone[];
+  questions: ReviewItem[];
+};
+
+/** Everything Chris's workspace loads in one request. */
+export type HandoffOverview = { drafts: HandoffRecord[]; workspace: Workspace; analysis: AnalysisJob | null };

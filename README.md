@@ -33,9 +33,10 @@ Vite proxies activation requests to port 7007 and inspector/conversation request
 
 ## Run locally
 
-For the blocked **Customer ID / Development access token** screen, use the
-[private fictional demo bootstrap](services/workflow-api/LOCAL_DEMO.md). It creates
-a token and saved fictional session locally with `npm run demo --prefix services/workflow-api`.
+For the persona demo (one entry for Chris, Maya, Alex and Jordan), follow the
+[private fictional demo bootstrap](services/workflow-api/LOCAL_DEMO.md). The local
+Portal session layer holds the generated tokens server-side; nothing is pasted in
+the browser. Routing and access rules: [personas](docs/activation/personas.md).
 
 Use **Node 24.12 or later in the Node 24 line** and npm. There is no root npm workspace. From a fresh clone, install each independently:
 
