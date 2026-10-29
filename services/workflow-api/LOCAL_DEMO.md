@@ -10,8 +10,8 @@ npm ci --prefix prototypes/v1
 Terminal 1, the fictional customer API (handoff mode starts empty, so Chris publishes first):
 
 ```sh
-export ACTIVATION_DEMO_DIR="$HOME/.spotify-portal-demo-northstar"   # must not exist yet, or be a previous run of this demo
-export ACTIVATION_DEMO_CUSTOMER_ID=fictional-northstar-commerce
+export ACTIVATION_DEMO_DIR="$HOME/.spotify-portal-demo-aperture"   # must not exist yet, or be a previous run of this demo
+export ACTIVATION_DEMO_CUSTOMER_ID=fictional-aperture-commerce
 PORTAL_LLM_PROVIDER=ollama OLLAMA_MODEL=qwen3:1.7b npm run demo:handoff --prefix services/workflow-api
 ```
 
@@ -20,9 +20,9 @@ Leave out `PORTAL_LLM_PROVIDER` and `OLLAMA_MODEL` to use rule-based analysis wi
 Terminal 2, the Portal (same `ACTIVATION_DEMO_DIR` and customer ID):
 
 ```sh
-export ACTIVATION_DEMO_DIR="$HOME/.spotify-portal-demo-northstar"
-export ACTIVATION_DEMO_CUSTOMER_ID=fictional-northstar-commerce
-PORTAL_DEMO_LABEL="Northstar Commerce (fictional)" npm run dev --prefix prototypes/v1
+export ACTIVATION_DEMO_DIR="$HOME/.spotify-portal-demo-aperture"
+export ACTIVATION_DEMO_CUSTOMER_ID=fictional-aperture-commerce
+PORTAL_DEMO_LABEL="Aperture Commerce (fictional)" npm run dev --prefix prototypes/v1
 ```
 
 Then:
@@ -34,13 +34,15 @@ Then:
 5. Add the technical team under **Stakeholders** if the analysis didn't name them (e.g. Maya Chen as Champion, Alex Rivera and Jordan Lee as developers). Then confirm and select **Mark ready for Champion review**. Nothing becomes visible to developers.
 6. Sign out and choose **Maya**. Open **Team Coordination → Dream Day**:
    - review the plan;
-   - assign each milestone (for Northstar: Alex the repository readiness assessment, Jordan the independent discoverability check);
+   - assign each milestone (for Aperture: Alex the repository readiness assessment, Jordan the independent discoverability check);
    - select **Save draft**;
    - then either **Request changes** (Chris sees your reason and resubmits) or confirm and **Approve onboarding plan**.
 7. Sign out and choose **Alex** or **Jordan**: each sees only the work assigned to them. **Chris** sees that Champion approval is complete.
 8. As **Alex**, select **Open my work**: set action statuses, record an update or blocker (with an optional reference), and mark the milestone ready for review once every action is completed and no blocker is open. Select **Ask AiKA about this milestone** to ask AiKA. As **Jordan**, work on the dependent milestone: it can't be marked completed until Alex's is. **Maya** (Team overview) and **Chris** (Developer Progress) see the consolidated progress.
 9. As **Maya**, open **Team Coordination → Team overview**: check **Needs your attention**, **Respond** to a question or blocker (optionally marking the blocker resolved), add a coordination note or **Request follow-up**, and **Mark reviewed** once a developer marks their milestone ready for review. Reviewing doesn't complete the milestone. Alex or Jordan reply from **My work**; Chris sees it all read-only.
-10. In **My work**, select **Inspect repository (read-only)** on a milestone. The demo uses labelled **sample data** for the fictional `payments-api` (it doesn't exist on GitHub), so the panel says so and AiKA labels claims from it "Sample data". To inspect a real repository read-only instead, start Terminal 1 with `ACTIVATION_REPOSITORIES_PATH` pointing to a file like `[{"customerId":"fictional-northstar-commerce","id":"payments-api","label":"payments-api","repository":"<owner>/<repo>","mode":"live","services":["payments-api"]}]` and, for a private repository, `ACTIVATION_GITHUB_REPOSITORY_TOKEN` (a fine-grained token with read-only Contents and Metadata). See [docs/activation/repository-evidence.md](../../docs/activation/repository-evidence.md).
+10. In **My work**, select **Inspect repository (read-only)** on a milestone. The demo uses labelled **sample data** for the fictional `payments-api` (it doesn't exist on GitHub), so the panel says so and AiKA labels claims from it "Sample data". To inspect a real repository read-only instead, start Terminal 1 with `ACTIVATION_REPOSITORIES_PATH` pointing to a file like `[{"customerId":"fictional-aperture-commerce","id":"payments-api","label":"payments-api","repository":"<owner>/<repo>","mode":"live","services":["payments-api"]}]` and, for a private repository, `ACTIVATION_GITHUB_REPOSITORY_TOKEN` (a fine-grained token with read-only Contents and Metadata). See [docs/activation/repository-evidence.md](../../docs/activation/repository-evidence.md).
+11. Open **AiKA**: the full page from the left navigation, or the **Open AiKA** panel at the bottom right of any page. Type `/` in the question box for the commands you can use: `/onboarding`, `/my-work` (developers), `/repository` and `/team`. Each chosen command becomes a removable chip and limits what AiKA reads to those records; with no command, AiKA reads everything you may see. `/docs` is listed but unavailable because no documentation source is connected. AiKA answers from records, says where it has no evidence, and points to Maya for decisions.
+12. Open **Insights** in the left navigation (`/insights`; for Chris `/operator/insights`). Maya and Chris see plan status, progress, milestones, everyone's recorded activity and repository evidence coverage; a developer sees the team's totals and only their own activity. Every number counts stored records.
 
 No tokens are copied or pasted: the Portal's local session layer reads them from `ACTIVATION_DEMO_DIR` on the server side.
 

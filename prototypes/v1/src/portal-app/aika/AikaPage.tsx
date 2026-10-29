@@ -1,56 +1,48 @@
 import {useState} from 'react';
-import {Triangle} from 'lucide-react';
-import type {AikaSection} from '../../../../../contracts/activation/v1/handoff';
-import type {activationClient} from '../../activation/client';
+import {History} from 'lucide-react';
+import type {Persona} from '../session';
 import type {MilestoneWorkSession} from '../work/useMilestoneWork';
-import {aikaProblem,useAika} from './useAika';
-import {SIGNAL_LABEL,type RepositoryEvidenceSession} from '../work/useRepositoryEvidence';
+import type {RepositoryEvidenceSession} from '../work/useRepositoryEvidence';
+import {AikaMark,Composer,Conversation,parseCommand} from './AikaChat';
+import {aikaProblem,type AikaSession} from './useAika';
 
-const KIND:Record<AikaSection['kind'],[string,string]>={known:['Known','green'],verified:['Verified · repository','green'],sample:['Sample data','amber'],reported:['Reported','blue'],suggestion:['Suggestion','amber'],unknown:['Unknown','']};
-const SUGGESTIONS=['What should I do next on this milestone?','What does this milestone depend on, and is it ready?','What is still unknown, and who could answer it?'];
+/** Suggestion cards (053), by role. A leading command picks that capability. */
+export function suggestionsFor(persona:Persona){
+ return persona.role==='champion'
+  ?['/team What needs my attention today?','/team Which milestones are blocked, and why?','/onboarding What is the team’s engineering goal?','/repository What does the repository evidence show?']
+  :['What should I do next on this milestone?','/my-work What does my milestone depend on, and is it ready?','/repository What does the recorded repository evidence show?','/team How is the team progressing?'];
+}
 
-/** AiKA inside the Portal. The server builds its context from the approved, developer-safe plan and this
- * person's own progress, runs the configured model, and checks the answer; the browser never talks to the model. */
-export function AikaPage({api,work,repos}:{api:ReturnType<typeof activationClient>;work:MilestoneWorkSession;repos?:RepositoryEvidenceSession}){
- const aika=useAika(api);
- const options=(work.progress?.milestones??[]).filter(m=>m.detail);
+/** AiKA (053, 057, 058, 061): greeting, composer and suggestions; then the conversation with the composer below.
+ * The server builds each answer's context from approved records only (narrowed by any slash command), runs the
+ * configured model and checks the answer; the browser never talks to the model. */
+export function AikaPage({aika,work,repos,persona}:{aika:AikaSession;work:MilestoneWorkSession;repos?:RepositoryEvidenceSession;persona:Persona}){
+ const options=(work.progress?.milestones??[]).filter(m=>m.detail&&(m.mine||persona.role!=='developer'));
  const initial=new URLSearchParams(window.location.search).get('milestone');
  const [milestone,setMilestone]=useState<string>(initial??'');
- const [question,setQuestion]=useState('');
- const job=aika.job,valid=question.trim().length>=3&&question.trim().length<=500;
  const chosen=options.some(m=>m.id===milestone)?milestone:'';
- async function send(q=question){if(await aika.ask(q.trim(),chosen||null))setQuestion('');}
+ const busy=aika.running||aika.sending;
+ const send=(question:string,caps:Parameters<typeof aika.ask>[2]=[])=>aika.ask(question,chosen||null,caps);
+ const about=options.length>0&&<select className="pt-aika-about" aria-label="Milestone for AiKA" value={chosen} onChange={e=>setMilestone(e.target.value)}>
+  <option value="">About: all my approved work</option>{options.map(m=><option key={m.id} value={m.id}>About: {m.title}</option>)}</select>;
+ const composer=<Composer aika={aika} onSend={send} disabled={busy} extra={about}/>;
+ const footer=<p className="pt-note pt-aika-who">{persona.role==='developer'?'You’re asking AiKA, not a person. To ask Maya, record a question on your milestone in My work.':'You’re asking AiKA, not a person. Replies to your developers go through Team overview.'}</p>;
+ const first=persona.name.split(' ')[0],empty=aika.turns.length===0;
  return <div className="pt-page">
-  <div className="pt-pagebar"><h1><span className="icon"><Triangle size={16} aria-hidden="true"/></span>AiKA</h1></div>
-  <div className="pt-entity">
-   <div className="pt-entity-head"><div><p className="pt-crumb">AiKA — your onboarding assistant</p><h2>Ask about your approved onboarding work</h2>
-    <p className="pt-note" style={{marginTop:6}}>AiKA answers from your team’s approved plan and your own progress only. It can’t open repositories or systems, and it labels what is known, reported, a suggestion or unknown.</p></div></div>
-   <div style={{display:'grid',gap:22,marginTop:26}}>
-    <section className="pt-card" aria-label="Ask AiKA">
-     <div className="pt-form-row two">
-      <label className="pt-form-field"><span>About</span><select className="pt-input" aria-label="Milestone for AiKA" value={chosen} onChange={e=>setMilestone(e.target.value)}>
-       <option value="">All of my approved work</option>{options.map(m=><option key={m.id} value={m.id}>{m.title}</option>)}</select></label>
-     </div>
-     <label className="pt-form-field"><span>Your question</span><textarea className="pt-textarea compact" rows={3} maxLength={500} aria-label="Question for AiKA" value={question} disabled={aika.running} onChange={e=>setQuestion(e.target.value)}
-      onKeyDown={e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)&&valid)void send();}}/></label>
-     <div className="pt-actions">
-      <button className="pt-btn sm" disabled={!valid||aika.running||aika.sending} onClick={()=>void send()}>{aika.running||aika.sending?'AiKA is answering…':'Ask AiKA'}</button>
-      {SUGGESTIONS.map(s=><button key={s} className="pt-btn sm ghost" disabled={aika.running||aika.sending} onClick={()=>void send(s)}>{s}</button>)}
-     </div>
-     {aika.error&&<div className="pt-banner error" role="alert">{aikaProblem(aika.error)}</div>}
-    </section>
-    {job&&<section className="pt-card" aria-label="AiKA answer" aria-busy={job.status==='running'}>
-     <div className="pt-card-head"><h3>{job.question}</h3><span className="pt-note" style={{marginTop:0}}>{job.status==='running'?`Thinking… ${Math.round(job.elapsedMs/1000)}s`:`Answered in ${Math.round(job.elapsedMs/1000)}s`}</span></div>
-     {job.status==='running'&&<p className="pt-note" role="status">AiKA is working on your question. This can take up to a minute; you can keep using the Portal.</p>}
-     {job.status==='failed'&&<div className="pt-banner error" role="alert">{aikaProblem(job.error??'AIKA_FAILED')}</div>}
-     {job.answer&&<>
-      <ul className="pt-aika-sections">{job.answer.sections.map((s,i)=><li key={i}><span className={'pt-pill '+KIND[s.kind][1]}>{KIND[s.kind][0]}</span><div><p>{s.text}</p>
-       {s.citations?.length?<p className="pt-note" style={{marginTop:4}} data-testid="aika-citations">Based on: {s.citations.map(c=>{const o=repos?.observations.get(c);return o?`${SIGNAL_LABEL[o.signal]} (${o.mode==='fixture'?'sample data':`live, ${o.repository}${o.commit?`@${o.commit.slice(0,12)}`:''}`}, retrieved ${new Date(o.retrievedAt).toLocaleString()})`:`recorded observation ${c}`;}).join('; ')}</p>:null}</div></li>)}</ul>
-      {job.answer.nextStep&&<><p className="pt-label" style={{marginTop:20}}>Suggested next step</p><p style={{marginTop:6}}>{job.answer.nextStep}</p></>}
-      <p className="pt-note">{job.answer.removed?`${job.answer.removed} part${job.answer.removed===1?' was':'s were'} removed because ${job.answer.removed===1?'it':'they'} didn’t pass AiKA’s checks. `:''}AiKA can be wrong. “Known” means stated in your approved plan; “Verified” cites a repository observation the Portal recorded (“Sample data” cites sample evidence). AiKA itself inspected nothing.</p>
-     </>}
-    </section>}
+  <div className="pt-pagebar"><h1><span className="icon"><AikaMark size={16} filled/></span>AiKA</h1>
+   <div className="tools"><button className="pt-tool" disabled title="Conversation history isn’t available in this demo"><History size={15} aria-hidden="true"/>History</button>
+    {aika.turns.length>0&&<button className="pt-tool" disabled={busy} onClick={aika.reset}>New chat</button>}</div></div>
+  {!aika.modelConfigured&&<div className="pt-banner warn" role="status" style={{margin:'16px 0 0'}}>{aikaProblem('AIKA_UNAVAILABLE')}</div>}
+  {/* One layout for both states, so the composer (and anything typed in it) survives the switch to the conversation. */}
+  <div className={empty?'pt-aika-home':'pt-aika-chat'}>
+   {empty?<div className="pt-aika-hello"><p><span style={{color:'#3fae49'}}><AikaMark size={22}/></span>Hello {first},</p><h2>What can I help you with?</h2></div>
+    :<Conversation aika={aika} repos={repos}/>}
+   <div className={empty?'pt-aika-home-composer':'pt-aika-dock-composer'}>
+    {aika.error&&<div className="pt-banner error" role="alert" style={{width:'min(674px,100%)',margin:empty?'0 0 10px':'0 0 10px'}}>{aikaProblem(aika.error)}</div>}
+    {composer}{footer}
    </div>
+   {empty&&<div className="pt-aika-grid">{suggestionsFor(persona).map(s=>{const p=parseCommand(s,aika.capabilities);
+    return <button key={s} disabled={busy} onClick={()=>void send(p.question,p.capabilities)}>{p.capabilities.length?<span className="pt-aika-chip static">/{p.capabilities[0]}</span>:null}{p.question}</button>;})}</div>}
   </div>
  </div>;
 }

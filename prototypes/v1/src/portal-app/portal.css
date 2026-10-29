@@ -387,3 +387,61 @@ select.pt-input{appearance:auto;height:46px}
 .pt-coord-summary dd small{font-size:13px;font-weight:500;color:var(--p-subtle)}
 .pt-check{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px}
 @media (max-width:640px){.pt-work-log li.reply{margin-left:12px}}
+/* Phase 8: AiKA (053 page, 055 panel) with the slash-command menu */
+.pt-aika-home{display:flex;flex-direction:column;align-items:center;padding:0 0 40px}
+.pt-aika-hello{text-align:center;padding:12vh 0 34px}
+.pt-aika-hello p{display:inline-flex;align-items:center;gap:10px;font-size:24px;color:#bdbdbd}
+.pt-aika-hello h2{margin-top:8px;font-size:32px;font-weight:600;letter-spacing:-.3px}
+.pt-aika-composer{position:relative;width:min(674px,100%)}
+.pt-aika-box{border-radius:6px;background:var(--p-field);padding:14px 12px 8px 16px}
+.pt-aika-box textarea{width:100%;min-height:44px;max-height:180px;resize:none;border:0;background:transparent;color:#fff;font:inherit;font-size:14.5px;line-height:1.5}
+.pt-aika-composer.compact .pt-aika-box textarea{min-height:36px}
+.pt-aika-box textarea:focus{outline:none}
+.pt-aika-box textarea::placeholder{color:#a3a3a3}
+.pt-aika-bar{display:flex;align-items:center;gap:10px;margin-top:4px}
+.pt-aika-send{margin-left:auto;width:32px;height:32px;display:grid;place-items:center;border-radius:6px;color:#d0d0d0}
+.pt-aika-send:hover:not(:disabled){background:#333}
+.pt-aika-send:disabled{opacity:.4}
+.pt-aika-about{max-width:70%;background:transparent;border:0;color:#bdbdbd;font:inherit;font-size:13px;cursor:pointer}
+.pt-aika-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.pt-aika-chip{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 6px 0 10px;border-radius:12px;background:#16283d;color:#9cc8ff;font-size:12.5px;font-weight:700}
+.pt-aika-chip.static{padding:0 10px;margin-right:8px}
+.pt-aika-chip button{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;color:#9cc8ff}
+.pt-aika-chip button:hover{background:#22405f}
+.pt-aika-commands{position:absolute;left:0;right:0;bottom:calc(100% + 6px);z-index:40;margin:0;padding:6px;list-style:none;border-radius:8px;background:#1f1f1f;border:1px solid #333;box-shadow:0 12px 30px rgba(0,0,0,.5)}
+.pt-aika-commands li{display:grid;gap:2px;padding:8px 10px;border-radius:6px;cursor:pointer}
+.pt-aika-commands li[aria-selected=true]{background:#2c2c2c}
+.pt-aika-commands strong{font-size:14px}
+.pt-aika-commands span{font-size:12.5px;color:#b3b3b3}
+.pt-aika-who{width:min(674px,100%);margin-top:10px;text-align:center}
+.pt-aika-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:min(674px,100%);margin-top:40px}
+.pt-aika-grid button{min-height:100px;padding:16px;border-radius:6px;background:#1c1c1c;text-align:left;font-size:14px;font-weight:600;color:#cfcfcf;line-height:1.45}
+.pt-aika-grid button:hover:not(:disabled){background:#242424}
+.pt-aika-chat{display:flex;flex-direction:column;align-items:center;min-height:calc(100vh - 200px)}
+.pt-aika-conversation{flex:1;width:min(760px,100%);padding:28px 0 20px}
+.pt-aika-user{display:flex;flex-direction:column;align-items:flex-end;margin-top:26px}
+.pt-aika-user div{max-width:80%;padding:8px 13px;border-radius:12px;background:var(--p-raised,#2a2a2a);font-size:14.5px;font-weight:600;color:#f1f1f1;white-space:pre-wrap;overflow-wrap:anywhere}
+.pt-aika-user small{margin-bottom:4px;font-size:12px;font-weight:700;color:#9cc8ff}
+.pt-aika-msg{margin-top:14px}
+.pt-aika-ref{margin-left:2px;color:var(--p-green);font-weight:700}
+.pt-aika-next{margin-top:14px;font-size:14.5px}
+.pt-aika-dock-composer{position:sticky;bottom:0;width:min(760px,100%);display:flex;flex-direction:column;align-items:center;padding:10px 0 16px;background:var(--p-surface)}
+.pt-aika-launch{position:fixed;right:18px;bottom:14px;z-index:30;width:48px;height:48px;border-radius:8px;display:grid;place-items:center;color:#3fae49}
+.pt-aika-launch:hover{background:#1c1c1c}
+.pt-aika-panel{position:fixed;right:20px;bottom:12px;z-index:31;width:min(392px,calc(100vw - 24px));height:min(580px,calc(100vh - 90px));display:flex;flex-direction:column;background:var(--p-surface);border:1px solid #2e2e2e;border-radius:8px;box-shadow:0 18px 50px rgba(0,0,0,.6)}
+.pt-aika-panel.expanded{width:min(760px,calc(100vw - 24px));height:calc(100vh - 90px)}
+.pt-aika-head{position:relative;display:flex;align-items:center;gap:10px;padding:14px 14px 12px 18px}
+.pt-aika-head .icon{width:30px;height:30px;border-radius:4px;background:#2a2a2a;display:grid;place-items:center}
+.pt-aika-head .title{display:flex;align-items:center;gap:6px}
+.pt-aika-head strong{font-size:14px;font-weight:700}
+.pt-aika-head .ctl{margin-left:auto;display:flex;gap:6px}
+.pt-aika-head .ctl button{width:28px;height:28px;display:grid;place-items:center;border-radius:4px;color:#cfcfcf}
+.pt-aika-head .ctl button:hover{background:#262626}
+.pt-aika-panel-body{flex:1;overflow:auto;padding:0 18px 12px;font-size:14px}
+.pt-aika-panel-body .pt-aika-conversation{padding-top:0}
+.pt-aika-panel .pt-aika-composer{width:auto;margin:0 10px 10px}
+.pt-aika-suggest{display:grid;gap:2px;padding:0 18px 8px}
+.pt-aika-suggest button{display:flex;gap:8px;align-items:center;text-align:left;padding:7px 0;font-size:13.5px;font-weight:700;color:#e6e6e6}
+.pt-aika-suggest button:hover:not(:disabled){color:#fff;text-decoration:underline}
+@media (max-width:640px){.pt-aika-grid{grid-template-columns:1fr}.pt-aika-hello{padding-top:6vh}.pt-aika-hello h2{font-size:24px}}
+.pt-aika-home-composer{width:min(674px,100%);display:flex;flex-direction:column;align-items:center}

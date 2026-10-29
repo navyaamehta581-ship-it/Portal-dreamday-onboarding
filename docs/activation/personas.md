@@ -40,5 +40,6 @@ Choosing a persona is a simulated sign-in for fictional people. It is not authen
 - **Approvals** happen in Dream Day; see [dream-day.md](dream-day.md).
 - **Assigned work.** After the Champion approves, each developer's Home shows only the approved milestones assigned to them, and **My work** lets them update them with attributed, revision-checked progress. AiKA answers from approved context only. See [developer-work.md](developer-work.md).
 - **Shared onboarding state.** The earlier Guide, repository and team-plan tabs still use one developer session per customer, so those reports are team-level. Milestone work is per developer.
-- **Other features.** Portal entries such as Catalog, Docs and Insights keep the existing "isn't available in this demo" page.
+- **AiKA and Insights.** AiKA keeps its original page (`/aika`) and its contextual panel on every other page, with `/` commands decided on the server; Insights (`/insights`, Chris: `/operator/insights`) counts stored records. See [aika-and-insights.md](aika-and-insights.md).
+- **Other features.** Portal entries such as Catalog and Docs keep the existing "isn't available in this demo" page.
 - **Chris's workflow.** Information entry, background analysis, the editable draft and submission for Champion review are described in [chris-workspace.md](chris-workspace.md). Champion review and approval are in [dream-day.md](dream-day.md).

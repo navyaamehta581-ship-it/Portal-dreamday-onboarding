@@ -10,7 +10,7 @@ const dir = mkdtempSync(join(tmpdir(), 'portal-session-'));
 const devA = 'a'.repeat(64), opA = 'c'.repeat(64), champA = 'e'.repeat(64), devB = 'b'.repeat(64), opB = 'd'.repeat(64);
 for (const [name, value] of [['a', devA], ['a-op', opA], ['a-champ', champA], ['b', devB], ['b-op', opB]]) writeFileSync(join(dir, name), value);
 const customers = [
-  {id: 'north', label: 'Northstar', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a'), operatorTokenFile: join(dir, 'a-op'), championTokenFile: join(dir, 'a-champ')},
+  {id: 'north', label: 'Aperture', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a'), operatorTokenFile: join(dir, 'a-op'), championTokenFile: join(dir, 'a-champ')},
   {id: 'other', label: 'Other', customerId: 'fictional-other', apiOrigin: 'http://127.0.0.1:7002', tokenFile: join(dir, 'b'), operatorTokenFile: join(dir, 'b-op')},
   {id: 'missing', label: 'Missing', customerId: 'fictional-missing', apiOrigin: 'http://127.0.0.1:7003', tokenFile: join(dir, 'none'), operatorTokenFile: join(dir, 'none')},
 ];
@@ -47,7 +47,7 @@ test('lists personas with role and customer, never tokens, files or API origins'
     const text = await (await h.call('/portal-auth/personas')).text();
     for (const secret of [devA, opA, 'tokenFile', 'apiOrigin', dir]) assert.ok(!text.includes(secret));
     const maya = JSON.parse(text).personas.find(p => p.id === 'maya');
-    assert.deepEqual(maya, {id: 'maya', name: 'Maya Chen', role: 'champion', title: 'Platform Champion', customers: [{id: 'north', label: 'Northstar', customerId: 'fictional-north'}]});
+    assert.deepEqual(maya, {id: 'maya', name: 'Maya Chen', role: 'champion', title: 'Platform Champion', customers: [{id: 'north', label: 'Aperture', customerId: 'fictional-north'}]});
   } finally {await h.close();}
 });
 
@@ -139,7 +139,7 @@ test('configuration: personas validated, legacy account arrays still work, demo 
   assert.throws(() => loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers, personas: [{...personas[1], role: 'admin'}]})}));
   assert.throws(() => loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers, personas: [{...personas[1], customers: ['north', 'other']}]})}), /exactly one customer/);
   assert.throws(() => loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers, personas: [{...personas[1], customers: ['nowhere']}]})}));
-  const legacy = loadDirectory({PORTAL_DEMO_ACCOUNTS: config([{id: 'north', label: 'Northstar', user: 'Dev A', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a')}])});
+  const legacy = loadDirectory({PORTAL_DEMO_ACCOUNTS: config([{id: 'north', label: 'Aperture', user: 'Dev A', customerId: 'fictional-north', apiOrigin: 'http://127.0.0.1:7001', tokenFile: join(dir, 'a')}])});
   assert.deepEqual(legacy.personas, [{id: 'north', name: 'Dev A', role: 'developer', title: 'Developer', customers: ['north']}]);
   const demo = loadDirectory({ACTIVATION_DEMO_DIR: dir});
   assert.deepEqual(demo.personas.map(p => [p.name, p.role]), DEFAULT_PERSONAS.map(p => [p.name, p.role]));

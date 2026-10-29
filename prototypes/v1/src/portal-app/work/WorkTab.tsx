@@ -74,7 +74,7 @@ function MilestoneCard({m,work,repos}:{m:MilestoneProgress;work:MilestoneWorkSes
   </>}/>
   {replyTo&&<div className="pt-banner" role="status">Replying to {replyTo.by}: “{replyTo.text.slice(0,120)}” <button className="pt-btn sm ghost" disabled={locked} onClick={()=>setReplyTo(null)}>Cancel reply</button></div>}
   <div className="pt-form-row two">
-   <label className="pt-form-field"><span>Type</span><select className="pt-input" aria-label="Note type" value={replyTo?'response':kind} disabled={locked||!!replyTo} onChange={e=>setKind(e.target.value as typeof kind)}><option value="update">Update</option><option value="blocker">Blocker</option><option value="question">Question</option>{replyTo&&<option value="response">Reply</option>}</select></label>
+   <label className="pt-form-field"><span>Type</span><select className="pt-input" aria-label="Note type" value={replyTo?'response':kind} disabled={locked||!!replyTo} onChange={e=>setKind(e.target.value as typeof kind)}><option value="update">Update</option><option value="blocker">Blocker</option><option value="question">Question for your Champion</option>{replyTo&&<option value="response">Reply</option>}</select></label>
    <label className="pt-form-field"><span>Evidence reference (optional)</span><input className="pt-input" aria-label="Evidence reference" placeholder="PR URL, commit SHA, ticket…" maxLength={300} value={evidence} disabled={locked} onChange={e=>setEvidence(e.target.value)}/></label>
   </div>
   <label className="pt-form-field"><span>Short note</span><textarea className="pt-textarea compact" rows={3} aria-label="Short note" maxLength={1000} value={text} disabled={locked} onChange={e=>setText(e.target.value)}/></label>

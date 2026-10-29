@@ -17,8 +17,8 @@ Use Node 24.12+ within the Node 24 line. Install the existing locked dependencie
 **1. Start one fictional customer API per customer** (terminal per customer, from `services/workflow-api`). Each needs a new private directory:
 
 ```sh
-export DEMO_ROOT="$(mktemp -d /tmp/spotify-portal.XXXXXX)"; mkdir -m 700 "$DEMO_ROOT/northstar" "$DEMO_ROOT/lumen"
-ACTIVATION_DEMO_DIR="$DEMO_ROOT/northstar" ACTIVATION_DEMO_CUSTOMER_ID=fictional-northstar-engineering PORT=7007 npm run demo:handoff
+export DEMO_ROOT="$(mktemp -d /tmp/spotify-portal.XXXXXX)"; mkdir -m 700 "$DEMO_ROOT/aperture" "$DEMO_ROOT/lumen"
+ACTIVATION_DEMO_DIR="$DEMO_ROOT/aperture" ACTIVATION_DEMO_CUSTOMER_ID=fictional-aperture-engineering PORT=7007 npm run demo:handoff
 # second customer (optional, for isolation checks), in another terminal:
 ACTIVATION_DEMO_DIR="$DEMO_ROOT/lumen" ACTIVATION_DEMO_CUSTOMER_ID=fictional-lumen-retail PORT=7008 npm run demo:handoff
 ```
@@ -29,7 +29,7 @@ ACTIVATION_DEMO_DIR="$DEMO_ROOT/lumen" ACTIVATION_DEMO_CUSTOMER_ID=fictional-lum
 
 ```sh
 cat > "$DEMO_ROOT/accounts.json" <<EOF
-[{"id":"northstar","label":"Northstar Engineering","user":"Alex Rivera","customerId":"fictional-northstar-engineering","apiOrigin":"http://127.0.0.1:7007","tokenFile":"$DEMO_ROOT/northstar/token"},
+[{"id":"aperture","label":"Aperture Engineering","user":"Alex Rivera","customerId":"fictional-aperture-engineering","apiOrigin":"http://127.0.0.1:7007","tokenFile":"$DEMO_ROOT/aperture/token"},
  {"id":"lumen","label":"Lumen Retail","user":"Sam Okafor","customerId":"fictional-lumen-retail","apiOrigin":"http://127.0.0.1:7008","tokenFile":"$DEMO_ROOT/lumen/token"}]
 EOF
 ```

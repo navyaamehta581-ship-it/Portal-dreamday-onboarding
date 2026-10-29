@@ -13,28 +13,34 @@ import {ModelError,fit,type JsonModel,type JsonTask,type StageStats} from './oll
 export type GeminiConfig={apiKey:string|null;model:string;timeoutMs:number;retries:number;maxOutputTokens:number;
  /** https://generativelanguage.googleapis.com, or a loopback stand-in for tests only. */
  apiOrigin?:string;
- /** Called before every request; throws ModelError('AI_DAILY_LIMIT') when the deployment's budget is spent. */
- admit?:()=>void};
+ /** Called (and awaited) before every request: paces requests and throws AI_DAILY_LIMIT when the budget is spent. */
+ admit?:()=>void|Promise<void>;now?:()=>number};
 export const GEMINI_ORIGIN='https://generativelanguage.googleapis.com';
 export const geminiOriginAllowed=(o:string)=>o===GEMINI_ORIGIN||/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(o);
 const MODEL=/^[a-z0-9][a-z0-9.-]{2,79}$/;
 const MAX_RESPONSE=2_000_000;
 
-/** Gemini's own error reason, if the body says one; nothing else from the body is kept. */
-async function reason(r:Response){
- try{const t=(await r.text()).slice(0,20_000);const j=JSON.parse(t);return String(j?.error?.details?.find((d:any)=>typeof d?.reason==='string')?.reason??j?.error?.status??'');}catch{return '';}
+/** Gemini's own error reason and suggested retry delay, if the body says them; nothing else from the body is kept. */
+async function problem(r:Response){
+ try{const t=(await r.text()).slice(0,20_000);const j=JSON.parse(t),details:any[]=Array.isArray(j?.error?.details)?j.error.details:[];
+  const delay=/^(\d+(?:\.\d+)?)s$/.exec(String(details.find(d=>typeof d?.retryDelay==='string')?.retryDelay??''));
+  return {reason:String(details.find(d=>typeof d?.reason==='string')?.reason??j?.error?.status??''),retryMs:delay?Math.ceil(Number(delay[1])*1000):null};}catch{return {reason:'',retryMs:null};}
 }
+const reason=async(r:Response)=>(await problem(r)).reason;
 
 export function createGemini(config:GeminiConfig,fetchImpl:typeof fetch=fetch):JsonModel{
  const origin=config.apiOrigin??GEMINI_ORIGIN;
  const usable=!!config.apiKey&&MODEL.test(config.model)&&geminiOriginAllowed(origin)&&Number.isInteger(config.timeoutMs)&&config.timeoutMs>=1000&&config.timeoutMs<=600000
   &&Number.isInteger(config.retries)&&config.retries>=0&&config.retries<=3&&Number.isInteger(config.maxOutputTokens)&&config.maxOutputTokens>=256;
  let schemaSupported=true;
+ // After a 429 the provider asked us to wait; nothing is sent until then (Gemini's free tier enforces per-minute and per-day quotas).
+ const clock=config.now??(()=>Date.now());let blockedUntil=0;
  // Gemini 2.5 Flash models think by default, spending output tokens and time; these tasks don't need it.
  const thinking=/^gemini-2\.5-flash/.test(config.model)?{thinkingConfig:{thinkingBudget:0}}:{};
 
  async function request(task:JsonTask<unknown>,maxTokens:number,withSchema:boolean){
-  config.admit?.();
+  if(clock()<blockedUntil)throw new ModelError('MODEL_RATE_LIMITED','provider_backoff');
+  await config.admit?.();
   const content=typeof task.user==='string'?task.user:JSON.stringify(task.user);
   const system=task.system+(withSchema?'':`\nReturn only one JSON object that follows this JSON Schema:\n${JSON.stringify(task.schema)}`);
   let r:Response;
@@ -58,8 +64,8 @@ export function createGemini(config:GeminiConfig,fetchImpl:typeof fetch=fetch):J
    schemaSupported=false;r=await request(task,maxTokens,false);
   }
   if(!r.ok){
-   const why=await reason(r);
-   if(r.status===429)throw new ModelError('MODEL_RATE_LIMITED');
+   const {reason:why,retryMs}=await problem(r);
+   if(r.status===429){blockedUntil=clock()+Math.min(retryMs??60_000,15*60_000);throw new ModelError('MODEL_RATE_LIMITED');}
    if(/API_KEY_INVALID/.test(why)||r.status===401||r.status===403)throw new ModelError('MODEL_NOT_CONFIGURED',r.status===403?'permission_denied':'invalid_api_key');
    if(r.status===404)throw new ModelError('MODEL_NOT_CONFIGURED','model_not_found');
    throw new ModelError(r.status>=500?'MODEL_UNAVAILABLE':'INVALID_MODEL_OUTPUT',r.status>=500?null:'request_rejected');

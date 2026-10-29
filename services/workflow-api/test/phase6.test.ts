@@ -13,7 +13,7 @@ const ms=(t:TeamProgress,id:string)=>t.milestones.find(m=>m.id===id)! as Milesto
 const rev=async(call:Parameters<typeof work>[0],id:string)=>ms(await work(call,'champ'),id).detail!.revision;
 
 test('team progress: Maya and Chris see the same server-computed status, counts and attention as the developers',async()=>{
- const h=await harness({evidence:['northstar/platform has no catalog-info.yaml at the root']});
+ const h=await harness({evidence:['aperture/platform has no catalog-info.yaml at the root']});
  try{
   await approvedPlan(h.call);
   let t=await work(h.call,'champ');
@@ -28,7 +28,7 @@ test('team progress: Maya and Chris see the same server-computed status, counts 
   assert.deepEqual(alex.latest,{at:alex.detail!.updates.at(-1)!.at,by:'Alex Rivera',kind:'question'});
   assert.equal(alex.detail!.updates[0].evidence,'https://example.test/req/7');
   assert.equal(t.summary!.blocked,1);assert.equal(t.summary!.openBlockers,1);assert.equal(t.summary!.openQuestions,1);assert.equal(t.summary!.actionsCompleted,1);
-  assert.deepEqual(t.verifiedEvidence,['northstar/platform has no catalog-info.yaml at the root'],'only what the backend observed is verified');
+  assert.deepEqual(t.verifiedEvidence,['aperture/platform has no catalog-info.yaml at the root'],'only what the backend observed is verified');
   // Jordan's dependent milestone is shown as waiting once he starts it.
   await update(h.call,'jordan','m-jordan',0,{action:{index:0,status:'started'}});
   t=await work(h.call,'champ');
@@ -116,12 +116,12 @@ test('authorization and stale updates: only Maya coordinates, only the assignee 
    assert.equal(r.status,403,token);assert.equal(r.json.error.code,'CHAMPION_REQUIRED');
   }
   for(const token of ['champ','op'])assert.equal((await update(h.call,token,'m-alex',0,{action:{index:0,status:'started'}})).json.error.code,'DEVELOPER_IDENTITY_REQUIRED');
-  assert.equal((await h.call('northstar','milestone-work','op')).status,200,'Chris reads approved progress');
-  assert.equal((await h.call('northstar','milestone-coordination','lumen-champ',{milestoneId:'m-alex',expectedRevision:0,note:{text:'Other customer'}},'Priya Nair')).status,403,'another customer’s Champion');
-  assert.equal((await h.call('northstar','milestone-work','lumen-champ')).status,403);
+  assert.equal((await h.call('aperture','milestone-work','op')).status,200,'Chris reads approved progress');
+  assert.equal((await h.call('aperture','milestone-coordination','lumen-champ',{milestoneId:'m-alex',expectedRevision:0,note:{text:'Other customer'}},'Priya Nair')).status,403,'another customer’s Champion');
+  assert.equal((await h.call('aperture','milestone-work','lumen-champ')).status,403);
   // Developers still can't approve plans or reach operator-only routes.
-  assert.equal((await h.call('northstar','champion-decisions','alex',{draft:1,reviewRevision:1,decision:'approve',confirmed:true})).status,403);
-  assert.equal((await h.call('northstar','handoff-workspace','alex')).status,403);
+  assert.equal((await h.call('aperture','champion-decisions','alex',{draft:1,reviewRevision:1,decision:'approve',confirmed:true})).status,403);
+  assert.equal((await h.call('aperture','handoff-workspace','alex')).status,403);
   // Stale on both sides: Maya's note makes Alex's open page stale, and the other way round.
   assert.equal((await coordinate(h.call,'champ','m-alex',0,{note:{text:'Starting soon?'}})).status,200);
   const stale=await update(h.call,'alex','m-alex',0,{action:{index:0,status:'started'}});

@@ -3,13 +3,22 @@
  * Every context line is screened again before it reaches the model, answers are labelled (known, reported,
  * suggestion, unknown) and checked, and a run happens in the background so the page stays responsive. */
 import {randomUUID} from 'node:crypto';
-import type {AikaJob,AikaSection,HandoffRecord} from '../../../../../contracts/activation/v1/handoff.ts';
+import type {AikaCapability,AikaCapabilityId,AikaJob,AikaSection,HandoffRecord} from '../../../../../contracts/activation/v1/handoff.ts';
 import {ModelError,type JsonModel} from '../../llm/ollama.ts';
 import {ActivationError,type Principal} from '../store.ts';
 import {unsafeReason} from './intelligence.ts';
 import type {Viewer,WorkService} from './work.ts';
 
-const fail=(code:string):never=>{throw new ActivationError(code);};
+const fail=(code:string,details?:unknown):never=>{throw new ActivationError(code,details);};
+/** Contextual capabilities a person can pick with a slash command. Each one decides which server-side records are
+ * retrieved for the answer; none of them is just a different prompt. /docs is listed only to say honestly that no
+ * documentation source is connected. */
+export const CAPABILITIES:{id:AikaCapabilityId;label:string;description:string}[]=[
+ {id:'onboarding',label:'/onboarding',description:'The approved onboarding plan: problem, goals, facts and open questions'},
+ {id:'my-work',label:'/my-work',description:'Your assigned milestones: actions, completion criteria, dependencies and your notes'},
+ {id:'repository',label:'/repository',description:'Repository observations the Portal recorded (live or sample), with citations'},
+ {id:'team',label:'/team',description:'Team progress and coordination you are allowed to see'},
+ {id:'docs',label:'/docs',description:'Documentation'}];
 const MODEL_KINDS=['known','verified','reported','suggestion','unknown'] as const;
 // Repository facts must be cited; these words in an uncited "known" part are an unsupported repository claim.
 const REPO_FACT=/\b(codeowners|catalog-info|workflow|readme|dockerfile|helm|jenkinsfile|runbook|default branch|commit)\b/i;
@@ -37,22 +46,46 @@ const INSPECTION=/\b(?:i|we|aika)\b[^.]{0,30}\b(?:inspected|checked|verified|sca
 export type RepositoryLine={id:string;mode:'live'|'fixture';status:'observed'|'missing'|'inaccessible'|'not_inspected';line:string};
 type Deps={model:JsonModel|null;work:WorkService;publishedRecord:(p:Principal)=>HandoffRecord|null;
  /** Recorded repository observations this viewer may see, each with its id; `inspected` only when a live inspection succeeded. */
- repositoryEvidence:(p:Principal,viewer:Viewer)=>{lines:RepositoryLine[];inspected:boolean};now?:()=>number};
+ repositoryEvidence:(p:Principal,viewer:Viewer)=>{lines:RepositoryLine[];inspected:boolean};
+ /** How many configured repositories this viewer may see (for /repository). */
+ repositoryCount?:(p:Principal,viewer:Viewer)=>number;now?:()=>number};
 export function createAika(deps:Deps){
  const now=deps.now??(()=>Date.now());
  /** The context for one viewer, as plain lines. Built only from published, approved, developer-safe data. */
- function context(p:Principal,viewer:Viewer,milestoneId:string|null){
+ /** Which capabilities this viewer may use, and why not when they can't. */
+ function capabilities(p:Principal,viewer:Viewer):AikaCapability[]{
+  const approved=!!deps.publishedRecord(p)?.developer?.approval;
+  const team=approved?deps.work.forAika(p,viewer):null;
+  const repos=approved?deps.repositoryCount?.(p,viewer)??0:0;
+  const reason=(id:AikaCapabilityId):string|null=>{
+   if(viewer.role==='operator')return 'AiKA is for the customer’s team.';
+   if(id==='docs')return 'No documentation source is connected to this Portal yet.';
+   if(!approved)return 'Available once your team’s plan is approved in Dream Day.';
+   if(id==='my-work')return viewer.role!=='developer'?'For developers: their assigned milestones.':!team!.milestones.some(m=>m.mine)?'No approved milestones are assigned to you.':null;
+   if(id==='repository')return repos?null:'No repository is configured for your approved work.';
+   return null;
+  };
+  return CAPABILITIES.map(c=>{const r=reason(c.id);return {...c,available:!r,reason:r};});
+ }
+ /** The context for one viewer, as plain lines. Built only from published, approved, developer-safe data; with
+  * capabilities chosen, only those records are retrieved. */
+ function context(p:Principal,viewer:Viewer,milestoneId:string|null,chosen:AikaCapabilityId[]=[]){
   const record=deps.publishedRecord(p);
   if(!record?.developer?.approval)fail('NO_APPROVED_PLAN');
   const h=record!.developer!,team=deps.work.forAika(p,viewer);
+  const all=!chosen.length,use=(c:AikaCapabilityId)=>all||chosen.includes(c);
   const lines:string[]=[];const add=(s:string)=>lines.push(s);
-  add(`APPROVED PLAN (approved by ${h.approval!.by} on ${h.approval!.at.slice(0,10)}): ${h.summary}`);
-  if(h.objective?.problem)add(`ENGINEERING PROBLEM: ${h.objective.problem}`);
-  for(const g of h.objective?.goals??[])add(`TECHNICAL GOAL: ${g}`);
-  for(const n of h.context)add(`FACT [${n.status==='verified'?'verified':n.status==='reported'?'reported':'unconfirmed'}] ${n.topic}: ${n.text}`);
-  for(const u of h.unknowns)add(`UNKNOWN a developer can check: ${u.question}`);
-  for(const q of h.objective?.questions??[])add(`OPEN QUESTION with the customer: ${q}`);
-  const own=team.milestones.filter(m=>m.detail&&(m.mine||viewer.role!=='developer'));
+  if(!all)add(`CAPABILITIES CHOSEN: ${chosen.map(c=>'/'+c).join(', ')}. Only these records were retrieved; if the question needs anything else, say it is unknown here.`);
+  add(`APPROVED PLAN (approved by ${h.approval!.by} on ${h.approval!.at.slice(0,10)})${use('onboarding')?`: ${h.summary}`:'.'}`);
+  if(use('onboarding')){
+   if(h.objective?.problem)add(`ENGINEERING PROBLEM: ${h.objective.problem}`);
+   for(const g of h.objective?.goals??[])add(`TECHNICAL GOAL: ${g}`);
+   for(const n of h.context)add(`FACT [${n.status==='verified'?'verified':n.status==='reported'?'reported':'unconfirmed'}] ${n.topic}: ${n.text}`);
+   for(const u of h.unknowns)add(`UNKNOWN a developer can check: ${u.question}`);
+   for(const q of h.objective?.questions??[])add(`OPEN QUESTION with the customer: ${q}`);
+  }
+  // A developer's own milestones (/my-work); for the Champion, every milestone in full is coordination (/team).
+  const own=team.milestones.filter(m=>m.detail&&(viewer.role==='developer'?m.mine&&use('my-work'):use('team')));
   for(const m of own){
    add(`${viewer.role==='developer'?'YOUR MILESTONE':'MILESTONE'}${m.id===milestoneId?' (the question is about this one)':''}: ${m.title} — assigned to ${m.assignee??'nobody'} — status ${m.status.replace(/_/g,' ')}`);
    if(m.detail!.system)add(`  System: ${m.detail!.system}`);
@@ -62,10 +95,14 @@ export function createAika(deps:Deps){
    for(const d of m.dependsOn)add(`  Depends on: ${d.title} — ${d.assignee??'unassigned'} — status ${d.status.replace(/_/g,' ')}`);
    for(const u of m.detail!.updates)add(`  ${u.kind==='blocker'?(u.resolved?'Resolved blocker':'Open blocker'):u.kind==='question'?'Question':u.kind==='response'?'Reply':u.kind==='coordination'?'Champion coordination note':u.kind==='follow_up'?'Champion follow-up request':'Update'} ${u.role==='champion'?'from the Champion':'reported by'} ${u.by}: ${u.text}${u.evidence?` (reference reported, not verified: ${u.evidence})`:''}`);
   }
-  for(const m of team.milestones.filter(m=>!own.includes(m)))add(`TEAM MILESTONE: ${m.title} — ${m.assignee??'unassigned'} — status ${m.status.replace(/_/g,' ')}`);
-  const evidence=deps.repositoryEvidence(p,viewer);
-  add(evidence.lines.length?'REPOSITORY OBSERVATIONS (recorded by the Portal backend; cite the [obs-…] id):':'REPOSITORY OBSERVATIONS: none. No repository has been inspected.');
-  for(const e of evidence.lines)add(`  ${e.line}`);
+  // Team status: titles, assignees and states only for another developer's work (their notes stay theirs).
+  if(use('team'))for(const m of team.milestones.filter(m=>!own.includes(m)))add(`TEAM MILESTONE: ${m.title} — ${m.assignee??'unassigned'} — status ${m.status.replace(/_/g,' ')}${m.reviewState&&m.reviewState!=='none'?` — review: ${m.reviewState.replace(/_/g,' ')}`:''}${m.openBlockers?` — ${m.openBlockers} open blocker(s)`:''}${m.openQuestions?` — ${m.openQuestions} open question(s)`:''}`);
+  if(use('team')&&team.summary)add(`TEAM PROGRESS: ${team.summary.completed} of ${team.summary.milestones} milestones completed, ${team.summary.blocked} blocked, ${team.summary.awaitingReview} awaiting the Champion's review, ${team.summary.openBlockers} open blocker(s), ${team.summary.openQuestions} open question(s). No deadlines are set in the plan.`);
+  const evidence=use('repository')?deps.repositoryEvidence(p,viewer):{lines:[],inspected:false};
+  if(use('repository')){
+   add(evidence.lines.length?'REPOSITORY OBSERVATIONS (recorded by the Portal backend; cite the [obs-…] id):':'REPOSITORY OBSERVATIONS: none. No repository has been inspected.');
+   for(const e of evidence.lines)add(`  ${e.line}`);
+  }
   // A second screen with the same rules as the developer view: anything private is dropped before the model sees it.
   const kept=lines.filter(l=>!unsafeReason(l,record!.understanding));
   // Only observations whose line reached the model can be cited.
@@ -110,13 +147,17 @@ export function createAika(deps:Deps){
    if(viewer.role==='operator')fail('FORBIDDEN');
    const running=jobs.get(key(p,viewer));
    if(running?.job.status==='running')return {job:snapshot(running),duplicate:true};
-   const b=input as {question?:unknown;milestoneId?:unknown};
+   const b=input as {question?:unknown;milestoneId?:unknown;capabilities?:unknown};
    const question=typeof b?.question==='string'?b.question.trim():'';
    if(question.length<3||question.length>500)fail('INVALID_REQUEST');
    const milestoneId=typeof b.milestoneId==='string'?b.milestoneId:null;
+   // Capabilities are checked here, whatever the page showed: unknown ones are invalid, unavailable ones refused.
+   const chosen=b.capabilities===undefined?[]:Array.isArray(b.capabilities)&&b.capabilities.length<=4&&b.capabilities.every(c=>typeof c==='string')?[...new Set(b.capabilities as string[])]:fail('INVALID_REQUEST');
+   const allowed=capabilities(p,viewer);
+   for(const c of chosen){const cap=allowed.find(x=>x.id===c)??fail('INVALID_REQUEST');if(!cap.available)fail('AIKA_CAPABILITY_FORBIDDEN',{capability:c,reason:cap.reason});}
    if(!deps.model)fail('AIKA_UNAVAILABLE');
-   const ctx=context(p,viewer,milestoneId);
-   const entry={job:{id:randomUUID(),status:'running',question,milestoneId,startedAt:new Date(now()).toISOString(),elapsedMs:0,answer:null,error:null,model:deps.model!.model} as AikaJob,started:now(),ended:null as number|null};
+   const ctx=context(p,viewer,milestoneId,chosen as AikaCapabilityId[]);
+   const entry={job:{id:randomUUID(),status:'running',question,milestoneId,capabilities:chosen as AikaCapabilityId[],startedAt:new Date(now()).toISOString(),elapsedMs:0,answer:null,error:null,model:deps.model!.model} as AikaJob,started:now(),ended:null as number|null};
    jobs.set(key(p,viewer),entry);
    void (async()=>{
     try{
@@ -127,8 +168,9 @@ export function createAika(deps:Deps){
    })();
    return {job:snapshot(entry),duplicate:false};
   },
+  capabilities,modelConfigured:!!deps.model,
   /** Exposed for tests: exactly what the model would receive. */
-  context:(p:Principal,viewer:Viewer)=>context(p,viewer,null).lines,
+  context:(p:Principal,viewer:Viewer,chosen:AikaCapabilityId[]=[])=>context(p,viewer,null,chosen).lines,
  };
 }
 export type AikaService=ReturnType<typeof createAika>;

@@ -7,14 +7,18 @@
  *                                           └─ everything else                 built Portal frontend (static)
  *
  * Environment (exact names from render.yaml): NODE_ENV, PORT, PORTAL_DATA_DIR, PORTAL_LLM_PROVIDER, GEMINI_MODEL,
- * GEMINI_API_KEY, PORTAL_AI_DAILY_REQUEST_LIMIT, PORTAL_DEMO_PASSPHRASE, PORTAL_SESSION_SECRET,
- * PORTAL_DEMO_ROOM_LIMIT, PORTAL_DEMO_ROOM_TTL_HOURS, ACTIVATION_EVIDENCE_MAX_AGE_HOURS.
+ * GEMINI_API_KEY, PORTAL_AI_DAILY_REQUEST_LIMIT, PORTAL_AI_REQUESTS_PER_MINUTE, PORTAL_DEMO_PASSPHRASE, PORTAL_SESSION_SECRET,
+ * PORTAL_DEMO_ROOM_LIMIT, PORTAL_DEMO_ROOM_TTL_HOURS, ACTIVATION_EVIDENCE_MAX_AGE_HOURS, PORTAL_STORAGE.
+ * Storage: PORTAL_STORAGE=ephemeral (the default, Render's free plan) keeps SQLite in PORTAL_DATA_DIR (default: a
+ * directory under the OS temp dir) and tells visitors that demo data is lost on restart, redeploy or sleep;
+ * PORTAL_STORAGE=persistent is for a host with a real disk.
  * Local testing only: PORTAL_ALLOW_HTTP=1 (cookies without Secure over plain http), GEMINI_API_ORIGIN (a loopback
  * stand-in for Gemini). Secrets are never logged; logs are one JSON object per line with codes, never content. */
 import {createHmac,randomBytes,timingSafeEqual,createHash} from 'node:crypto';
 import {createServer,type IncomingMessage,type ServerResponse} from 'node:http';
 import {existsSync,mkdirSync,readFileSync,statSync,writeFileSync} from 'node:fs';
 import {extname,join,resolve,sep} from 'node:path';
+import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {DatabaseSync} from 'node:sqlite';
 import {createApp} from './app.ts';
@@ -42,10 +46,12 @@ export function configFromEnv(env:Record<string,string|undefined>=process.env){
  const geminiOrigin=env.GEMINI_API_ORIGIN||GEMINI_ORIGIN;
  if(!geminiOriginAllowed(geminiOrigin))throw new Error('GEMINI_API_ORIGIN may only be a loopback test origin');
  const production=env.NODE_ENV==='production';
+ const storage=(env.PORTAL_STORAGE||'ephemeral').toLowerCase();
+ if(storage!=='ephemeral'&&storage!=='persistent')throw new Error('PORTAL_STORAGE must be ephemeral or persistent');
  return {production,secure:production&&env.PORTAL_ALLOW_HTTP!=='1',port:num('PORT',10000),
-  dataDir:resolve(env.PORTAL_DATA_DIR||'/var/data'),passphrase,secret,missing,
+  dataDir:resolve(env.PORTAL_DATA_DIR||join(tmpdir(),'spotify-portal-demo')),storage:storage as 'ephemeral'|'persistent',passphrase,secret,missing,
   provider:provider as 'gemini'|'ollama'|'rules',geminiModel:env.GEMINI_MODEL||'gemini-2.5-flash',geminiKey:env.GEMINI_API_KEY||null,geminiOrigin,
-  aiDailyLimit:num('PORTAL_AI_DAILY_REQUEST_LIMIT',300),roomLimit:num('PORTAL_DEMO_ROOM_LIMIT',50),roomTtlHours:num('PORTAL_DEMO_ROOM_TTL_HOURS',24),
+  aiDailyLimit:num('PORTAL_AI_DAILY_REQUEST_LIMIT',200),aiPerMinute:num('PORTAL_AI_REQUESTS_PER_MINUTE',8),roomLimit:num('PORTAL_DEMO_ROOM_LIMIT',50),roomTtlHours:num('PORTAL_DEMO_ROOM_TTL_HOURS',24),
   evidenceMaxAgeHours:num('ACTIVATION_EVIDENCE_MAX_AGE_HOURS',24),commit:env.RENDER_GIT_COMMIT?.slice(0,12)??null};
 }
 export type ProductionConfig=ReturnType<typeof configFromEnv>;
@@ -65,15 +71,18 @@ const SECURITY={'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origi
  'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"};
 
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-function gatePage(message:string|null,closed:string|null){
+function gatePage(message:string|null,closed:string|null,notes:{ephemeral:boolean;gemini:boolean;ended?:boolean}={ephemeral:false,gemini:false}){
  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spotify Portal · Fictional demo</title>
 <style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#121212;color:#fff;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
 main{width:min(440px,calc(100vw - 32px));background:#181818;border:1px solid #2a2a2a;border-radius:8px;padding:32px}h1{font-size:22px;margin:0 0 6px}
 p{color:#b3b3b3;font-size:14px;margin:0 0 18px}label{display:grid;gap:6px;margin-top:16px;font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#bdbdbd}
 input{width:100%;font:inherit;padding:12px 14px;border-radius:6px;border:1px solid #3a3a3a;background:#242424;color:#fff}button{margin-top:22px;width:100%;height:48px;border:0;border-radius:999px;background:#1ed760;color:#000;font:700 16px system-ui;cursor:pointer}
-.err{margin-top:16px;padding:12px 14px;border-left:3px solid #f15e6c;background:#1f1f1f;color:#fff;font-size:14px}.tag{display:inline-block;margin-bottom:14px;padding:2px 10px;border-radius:12px;background:#3d2f12;color:#ffd27a;font-size:12px;font-weight:700}</style></head>
+.err{margin-top:16px;padding:12px 14px;border-left:3px solid #f15e6c;background:#1f1f1f;color:#fff;font-size:14px}.note{font-size:13px;color:#b3b3b3;border-left:3px solid #ffd27a;padding-left:10px}.tag{display:inline-block;margin-bottom:14px;padding:2px 10px;border-radius:12px;background:#3d2f12;color:#ffd27a;font-size:12px;font-weight:700}</style></head>
 <body><main><span class="tag">Fictional demo</span><h1>Spotify Portal onboarding demo</h1>
 <p>A prototype for the Spotify Backstage × TKS Ignition Challenge. Every customer, person and repository here is invented; sample repository data is labelled as sample. Enter the passphrase you were given.</p>
+${notes.ended?'<div class="err" role="status">Your previous demo room is no longer available. On free hosting, demo data is cleared when the service restarts, redeploys or sleeps. Enter again to start a fresh room.</div>':''}
+${notes.ephemeral?'<p class="note"><strong>Temporary demo data.</strong> This free deployment keeps rooms and work only while the service is running. They are lost when it restarts, redeploys or sleeps after about 15 minutes without visitors.</p>':''}
+${notes.gemini?'<p class="note"><strong>Fictional data only.</strong> AI features use Gemini’s free tier, where Google may use submitted text to improve its products. Don’t enter real customer information.</p>':''}
 ${closed?`<div class="err" role="alert">${esc(closed)}</div>`:`<form method="post" action="/demo-gate">
 <label>Demo passphrase<input name="passphrase" type="password" autocomplete="current-password" required minlength="1" maxlength="200"></label>
 <label>Room code (optional)<input name="room" placeholder="Join a shared room, e.g. K7M2Q-9XRTB" maxlength="11" autocomplete="off"></label>
@@ -86,10 +95,13 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
  mkdirSync(config.dataDir,{recursive:true,mode:0o700});
  const filename=join(config.dataDir,'activation.sqlite');
  const rooms=openRooms(filename,{ttlHours:config.roomTtlHours,limit:config.roomLimit,now});
- const budget=openAiBudget(filename,config.aiDailyLimit,now);
+ const budget=openAiBudget(filename,config.aiDailyLimit,now,config.aiPerMinute);
+ // What visitors are told on the gate and in the room bar.
+ const notes={ephemeral:config.storage==='ephemeral',gemini:config.provider==='gemini'};
+ const page=(message:string|null,closed:string|null,ended=false)=>gatePage(message,closed,{...notes,ended});
  // Hosted inference; without a key the analysis is rule-based (labelled as such) and AiKA reports it is unavailable.
  let model:JsonModel|null=null;
- if(config.provider==='gemini'&&config.geminiKey)model=createGemini({apiKey:config.geminiKey,model:config.geminiModel,timeoutMs:90_000,retries:1,maxOutputTokens:8192,apiOrigin:config.geminiOrigin,admit:()=>budget.take()},fetchImpl);
+ if(config.provider==='gemini'&&config.geminiKey)model=createGemini({apiKey:config.geminiKey,model:config.geminiModel,timeoutMs:90_000,retries:1,maxOutputTokens:8192,apiOrigin:config.geminiOrigin,admit:()=>budget.admit(),now},fetchImpl);
  if(config.provider==='ollama'){const o=ollamaConfigFromEnv({...process.env,PORTAL_LLM_PROVIDER:'ollama'});if(o)model=createOllama(o,fetchImpl);}
  const ai=model?`${model.provider}:${model.model}`:config.provider==='gemini'?'not_configured (GEMINI_API_KEY missing)':'rules';
  const hosted=createHostedActivation({filename,rooms,analysisModel:model,aikaModel:model,evidenceMaxAgeHours:config.evidenceMaxAgeHours});
@@ -116,6 +128,12 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
   let v:{r?:string};try{v=JSON.parse(Buffer.from(data,'base64url').toString('utf8'));}catch{return null;}
   return rooms.get(v.r)?.code??null;
  };
+ // A genuine room cookie whose room is gone: the room ended (or ephemeral storage was cleared by a restart).
+ const endedRoom=(req:IncomingMessage)=>{
+  const raw=new RegExp(`(?:^|;\\s*)${ROOM_COOKIE}=([A-Za-z0-9_-]{1,200})\\.([A-Za-z0-9_-]{43})(?:;|$)`).exec(req.headers.cookie??'');
+  if(!raw||config.missing.length)return false;const expected=sign(raw[1]);
+  return raw[2].length===expected.length&&timingSafeEqual(Buffer.from(raw[2]),Buffer.from(expected))&&!roomOf(req);
+ };
  const roomCookie=(code:string,expires:string)=>{const data=Buffer.from(JSON.stringify({r:code})).toString('base64url');
   return `${ROOM_COOKIE}=${data}.${sign(data)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${Math.max(0,Math.floor((Date.parse(expires)-now())/1000))}${config.secure?'; Secure':''}`;};
  const session=createPortalSession({directory,secret:config.secret||null,secure:config.secure,room:roomOf,fetchImpl});
@@ -139,23 +157,23 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
   const url=new URL(req.url??'/','http://local'),path=url.pathname;
   if(path==='/healthz'){
    const storage=storageOk(),ok=storage&&!config.missing.length;
-   return json(res,ok?200:503,{status:ok?'ok':'misconfigured',checks:{storage:storage?'ok':'error',config:config.missing.length?{missing:config.missing}:'ok',ai,aiRequestsToday:`${budget.used()}/${budget.limit}`,activeRooms:rooms.active()},commit:config.commit});
+   return json(res,ok?200:503,{status:ok?'ok':'misconfigured',checks:{storage:storage?'ok':'error',storageMode:config.storage,aiRequestsPerMinute:config.aiPerMinute,config:config.missing.length?{missing:config.missing}:'ok',ai,aiRequestsToday:`${budget.used()}/${budget.limit}`,activeRooms:rooms.active()},commit:config.commit});
   }
-  if(config.missing.length)return send(res,503,gatePage(null,'This demo isn’t configured yet. The site owner needs to set its demo passphrase and session secret.'),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
-  if(path==='/demo-gate'&&req.method==='GET')return send(res,200,gatePage(null,null),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
+  if(config.missing.length)return send(res,503,page(null,'This demo isn’t configured yet. The site owner needs to set its demo passphrase and session secret.'),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
+  if(path==='/demo-gate'&&req.method==='GET')return send(res,200,page(null,null,url.searchParams.get('ended')==='1'),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
   if(path==='/demo-gate'&&req.method==='POST'){
    if(!sameOrigin(req))return fail(res,403,'ORIGIN_NOT_ALLOWED');
-   if(!gateTries(ip(req))){log('warn','gate_rate_limited');return send(res,429,gatePage('Too many attempts. Wait 15 minutes, then try again.',null),'text/html; charset=utf-8');}
+   if(!gateTries(ip(req))){log('warn','gate_rate_limited');return send(res,429,page('Too many attempts. Wait 15 minutes, then try again.',null),'text/html; charset=utf-8');}
    let f:URLSearchParams;try{f=await form(req);}catch{return fail(res,413,'PAYLOAD_TOO_LARGE');}
-   if(!passOk(f.get('passphrase')??''))return send(res,401,gatePage('That passphrase isn’t right.',null),'text/html; charset=utf-8');
+   if(!passOk(f.get('passphrase')??''))return send(res,401,page('That passphrase isn’t right.',null),'text/html; charset=utf-8');
    const wanted=(f.get('room')??'').trim().toUpperCase();
    let room;
-   if(wanted){room=ROOM_CODE.test(wanted)?rooms.get(wanted):null;if(!room)return send(res,404,gatePage('That room code doesn’t exist or has expired. Leave it empty to start a new room.',null),'text/html; charset=utf-8');}
-   else{try{room=rooms.create();}catch(e){if(e instanceof RoomLimitError){log('warn','room_limit_reached');return send(res,503,gatePage('The demo is at capacity right now. Join an existing room with its code, or try again later.',null),'text/html; charset=utf-8');}throw e;}
+   if(wanted){room=ROOM_CODE.test(wanted)?rooms.get(wanted):null;if(!room)return send(res,404,page('That room code doesn’t exist or has expired. Leave it empty to start a new room.',null),'text/html; charset=utf-8');}
+   else{try{room=rooms.create();}catch(e){if(e instanceof RoomLimitError){log('warn','room_limit_reached');return send(res,503,page('The demo is at capacity right now. Join an existing room with its code, or try again later.',null),'text/html; charset=utf-8');}throw e;}
     log('info','room_created');}
    return send(res,303,'','text/plain',{Location:'/','Set-Cookie':roomCookie(room.code,room.expires),'Cache-Control':'no-store'});
   }
-  if(path==='/demo-gate/room'&&req.method==='GET'){const code=roomOf(req),r=code?rooms.get(code):null;return r?json(res,200,{room:r.code,expiresAt:r.expires,fictional:true}):fail(res,401,'DEMO_GATE_REQUIRED');}
+  if(path==='/demo-gate/room'&&req.method==='GET'){const code=roomOf(req),r=code?rooms.get(code):null;return r?json(res,200,{room:r.code,expiresAt:r.expires,fictional:true,storage:config.storage,aiProvider:config.provider}):fail(res,401,'DEMO_GATE_REQUIRED');}
   if(path==='/demo-gate/leave'&&req.method==='POST'){
    if(!sameOrigin(req))return fail(res,403,'ORIGIN_NOT_ALLOWED');
    return json(res,200,{},{'Set-Cookie':[`${ROOM_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${config.secure?'; Secure':''}`,`portal_demo_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${config.secure?'; Secure':''}`]});
@@ -164,7 +182,7 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
   const apiPath=path.startsWith('/portal-auth/')||path.startsWith('/portal-api/')||path.startsWith('/operator-api/');
   if(!room){
    if(apiPath||path.startsWith('/api/'))return fail(res,401,'DEMO_GATE_REQUIRED');
-   return send(res,303,'','text/plain',{Location:'/demo-gate','Cache-Control':'no-store'});
+   return send(res,303,'','text/plain',{Location:endedRoom(req)?'/demo-gate?ended=1':'/demo-gate','Cache-Control':'no-store'});
   }
   if(apiPath){
    // Per-room limits: requests per minute, and model-backed requests per day.
@@ -195,7 +213,7 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
  const purge=()=>{for(const code of rooms.expired()){try{const rows=purgeRoomData(filename,code);rooms.remove(code);log('info','room_purged',{rows});}catch(e){log('error','room_purge_failed',{code:(e as Error).name});}}};
  purge();const timer=setInterval(purge,10*60_000);timer.unref();
  await new Promise<void>(r=>server.listen(config.port,'0.0.0.0',r));
- log(config.missing.length?'warn':'info','started',{port:(server.address() as {port:number}).port,ai,missing:config.missing,secureCookies:config.secure,frontend:!!index});
+ log(config.missing.length?'warn':'info','started',{port:(server.address() as {port:number}).port,ai,storage:config.storage,missing:config.missing,secureCookies:config.secure,frontend:!!index});
  return {server,port:(server.address() as {port:number}).port,
   async close(){clearInterval(timer);await new Promise<void>(r=>server.close(()=>r()));server.closeAllConnections?.();await new Promise<void>(r=>api.close(()=>r()));api.closeAllConnections?.();await hosted.close();goals.close();budget.close();rooms.close();}};
 }

@@ -13,9 +13,9 @@ test('nothing to work on before approval; afterwards each developer works on the
  const h=await harness();
  try{
   await approvedPlan(h.call,false);
-  assert.equal((await h.call('northstar','milestone-work','alex')).json.error.code,'NO_APPROVED_PLAN','submitted, not approved: nothing to work on');
-  const view=(await h.call('northstar','champion-review','champ')).json;
-  await h.call('northstar','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen');
+  assert.equal((await h.call('aperture','milestone-work','alex')).json.error.code,'NO_APPROVED_PLAN','submitted, not approved: nothing to work on');
+  const view=(await h.call('aperture','champion-review','champ')).json;
+  await h.call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen');
   const alex=await work(h.call,'alex');
   assert.deepEqual(alex.milestones.map(m=>[m.title,m.assignee,m.mine,!!m.detail]),[['Assess payments-api repository readiness','Alex Rivera',true,true],['Validate payments-api discoverability','Jordan Lee',false,false]]);
   assert.equal(alex.approval!.by,'Maya Chen');assert.deepEqual(alex.objective!.goals,['Establish a service-readiness baseline for payments-api']);
@@ -28,15 +28,15 @@ test('nothing to work on before approval; afterwards each developer works on the
   assert.equal((await update(h.call,'jordan','m-alex',1,{action:{index:0,status:'completed'}})).json.error.code,'NOT_ASSIGNEE');
   assert.equal((await update(h.call,'alex','m-alex',0,{action:{index:1,status:'started'}})).json.error.code,'REVISION_CONFLICT','no silent overwrite');
   // Only a developer's own credential can change work: shared credential, forged name, Champion and Chris are refused.
-  for(const token of ['dev','champ','op'])assert.equal((await h.call('northstar','milestone-updates',token,{milestoneId:'m-alex',expectedRevision:1,action:{index:0,status:'completed'}},'Alex Rivera')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED',token);
+  for(const token of ['dev','champ','op'])assert.equal((await h.call('aperture','milestone-updates',token,{milestoneId:'m-alex',expectedRevision:1,action:{index:0,status:'completed'}},'Alex Rivera')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED',token);
   // Jordan sees Alex's milestone only as title, assignee and status; Maya and Chris see the consolidated detail.
   const jordan=await work(h.call,'jordan');
   assert.deepEqual([jordan.milestones[0].status,jordan.milestones[0].detail],['in_progress',null]);
   assert.deepEqual(jordan.milestones[1].dependsOn.map(d=>[d.title,d.assignee,d.status]),[['Assess payments-api repository readiness','Alex Rivera','in_progress']]);
   for(const token of ['champ','op']){const all=await work(h.call,token);assert.ok(all.milestones.every(m=>m.detail),token);assert.equal(all.milestones[0].detail!.actions[0].by,'Alex Rivera');}
-  // Another customer's developer with the same name cannot reach Northstar.
-  assert.equal((await h.call('northstar','milestone-work','lumen-alex')).status,403);
-  assert.equal((await h.call('northstar','milestone-updates','lumen-alex',{milestoneId:'m-alex',expectedRevision:1,action:{index:0,status:'completed'}})).status,403);
+  // Another customer's developer with the same name cannot reach Aperture.
+  assert.equal((await h.call('aperture','milestone-work','lumen-alex')).status,403);
+  assert.equal((await h.call('aperture','milestone-updates','lumen-alex',{milestoneId:'m-alex',expectedRevision:1,action:{index:0,status:'completed'}})).status,403);
  }finally{await h.close();}
 });
 
@@ -49,10 +49,10 @@ test('dependencies and blockers: no completing ahead of a dependency, no ready-f
   const early=await j({status:'completed'});
   assert.equal(early.json.error.code,'MILESTONE_NOT_READY');assert.deepEqual(early.json.error.details.issues,['dependencies_incomplete']);
   // A blocker blocks the milestone and stops "ready for review" until it is resolved.
-  const blocked=await j({note:{kind:'blocker',text:'No read access to the payments-api repository',evidence:'https://github.example/northstar/payments-api/issues/12'}});
+  const blocked=await j({note:{kind:'blocker',text:'No read access to the payments-api repository',evidence:'https://github.example/aperture/payments-api/issues/12'}});
   const mine=(blocked.json as TeamProgress).milestones[1];
   assert.equal(mine.status,'blocked');assert.equal(mine.openBlockers,1);assert.equal(mine.detail!.updates[0].by,'Jordan Lee');
-  assert.equal(mine.detail!.updates[0].evidence,'https://github.example/northstar/payments-api/issues/12');
+  assert.equal(mine.detail!.updates[0].evidence,'https://github.example/aperture/payments-api/issues/12');
   assert.deepEqual((await j({status:'ready_for_review'})).json.error.details.issues,['open_blockers']);
   assert.equal((await j({note:{kind:'update',text:'Has a reference',evidence:'two words'}})).json.error.code,'INVALID_EVIDENCE_REFERENCE');
   await j({resolve:mine.detail!.updates[0].id});
@@ -92,13 +92,13 @@ test('AiKA: answers from approved, developer-safe context only, labels what it k
   {kind:'unknown',text:'Which CI system deploys payments-api is still open; ask your Champion.'}],next_step:'Start action 1: locate the payments-api repository.'}));
  const h=await harness({modelUrl:stub.url});
  try{
-  assert.equal((await h.call('northstar','aika-questions','alex',{question:'What should I do next?'})).json.error.code,'NO_APPROVED_PLAN');
+  assert.equal((await h.call('aperture','aika-questions','alex',{question:'What should I do next?'})).json.error.code,'NO_APPROVED_PLAN');
   await approvedPlan(h.call);
   await update(h.call,'jordan','m-jordan',0,{note:{kind:'update',text:'Jordan private scratch note about search'}});
-  const asked=await h.call('northstar','aika-questions','alex',{question:'What should I do next?',milestoneId:'m-alex'});
+  const asked=await h.call('aperture','aika-questions','alex',{question:'What should I do next?',milestoneId:'m-alex'});
   assert.equal(asked.status,202,asked.raw);
-  assert.equal((await h.call('northstar','aika-questions','alex',{question:'Again?'})).json.duplicate,true,'one run at a time');
-  let job;for(let i=0;i<100;i++){job=(await h.call('northstar','aika-questions','alex')).json.job;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
+  assert.equal((await h.call('aperture','aika-questions','alex',{question:'Again?'})).json.duplicate,true,'one run at a time');
+  let job;for(let i=0;i<100;i++){job=(await h.call('aperture','aika-questions','alex')).json.job;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
   assert.equal(job.status,'succeeded',JSON.stringify(job));
   assert.deepEqual(job.answer.sections.map((s:{kind:string})=>s.kind),['known','suggestion','unknown'],'ungrounded "known" becomes a suggestion');
   assert.equal(job.answer.removed,1,'the claimed inspection is removed');
@@ -111,8 +111,8 @@ test('AiKA: answers from approved, developer-safe context only, labels what it k
   for(const x of [...PRIVATE,'Jordan private scratch note','Opportunity','My pricing notes'])assert.ok(!JSON.stringify(stub.requests).includes(x),'AiKA prompt leaked '+x);
   assert.equal(stub.requests[0].model,'qwen3:1.7b');
   // Chris (operator) has no AiKA here; a different viewer has a separate conversation.
-  assert.equal((await h.call('northstar','aika-questions','op',{question:'Hello there'})).status,403);
-  assert.equal((await h.call('northstar','aika-questions','jordan')).json.job,null);
+  assert.equal((await h.call('aperture','aika-questions','op',{question:'Hello there'})).status,403);
+  assert.equal((await h.call('aperture','aika-questions','jordan')).json.job,null);
  }finally{await h.close();await stub.close();}
 });
 
@@ -123,13 +123,13 @@ test('AiKA failures are reported as codes: invalid output, timeout, model not co
   const h=await harness({modelUrl:url,timeoutMs});
   try{
    await approvedPlan(h.call);
-   assert.equal((await h.call('northstar','aika-questions','alex',{question:'What is next?'})).status,202);
-   let job;for(let i=0;i<300;i++){job=(await h.call('northstar','aika-questions','alex')).json.job;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
+   assert.equal((await h.call('aperture','aika-questions','alex',{question:'What is next?'})).status,202);
+   let job;for(let i=0;i<300;i++){job=(await h.call('aperture','aika-questions','alex')).json.job;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,10));}
    assert.deepEqual([job.status,job.error,job.answer],['failed',code,null]);
   }finally{await h.close();}
  }
  await bad.close();await slow.close();
  const none=await harness();
- try{await approvedPlan(none.call);assert.equal((await none.call('northstar','aika-questions','alex',{question:'What is next?'})).json.error.code,'AIKA_UNAVAILABLE');}
+ try{await approvedPlan(none.call);assert.equal((await none.call('aperture','aika-questions','alex',{question:'What is next?'})).json.error.code,'AIKA_UNAVAILABLE');}
  finally{await none.close();}
 });

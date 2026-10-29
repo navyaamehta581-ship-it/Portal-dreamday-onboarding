@@ -1,13 +1,13 @@
 {
- "_note": "SAMPLE DATA for the fictional Northstar Commerce scenario. This repository does not exist on GitHub. Evidence produced from this file is labelled fixture/sample everywhere and is never a live observation.",
- "repository": "northstar-commerce/payments-api",
+ "_note": "SAMPLE DATA for the fictional Aperture Commerce scenario. This repository does not exist on GitHub. Evidence produced from this file is labelled fixture/sample everywhere and is never a live observation.",
+ "repository": "aperture-commerce/payments-api",
  "defaultBranch": "main",
  "commit": "5f1c0de2a9b4e7c3d8f6a1b2c3d4e5f60718293a",
  "committedAt": "2026-10-20T14:32:00Z",
  "pushedAt": "2026-10-20T14:35:00Z",
  "visibility": "private",
  "files": {
-  "README.md": "# payments-api\n\nHandles card authorisation and refunds for Northstar Commerce checkout.\n\n## Running locally\n\nSee docs/development.md.\n",
+  "README.md": "# payments-api\n\nHandles card authorisation and refunds for Aperture Commerce checkout.\n\n## Running locally\n\nSee docs/development.md.\n",
   "docs/architecture.md": "# Architecture\n\nSample content.\n",
   "docs/development.md": "# Development\n\nSample content.\n",
   ".github/workflows/ci.yml": "name: ci\non: [push]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo sample\n",

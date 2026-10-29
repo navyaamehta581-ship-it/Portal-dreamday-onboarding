@@ -127,7 +127,10 @@ export type TeamProgress = { viewer: { role: 'developer' | 'champion' | 'operato
 /** `verified` is a repository observation the backend recorded live and the answer cites; `sample` cites fixture
  * (sample) repository data. Both carry the cited observation ids; uncited repository claims are removed. */
 export type AikaSection = { kind: 'known' | 'verified' | 'sample' | 'reported' | 'suggestion' | 'unknown'; text: string; citations?: string[] };
-export type AikaJob = { id: string; status: 'running' | 'succeeded' | 'failed'; question: string; milestoneId: string | null; startedAt: string; elapsedMs: number;
+/** Phase 8: contextual capabilities chosen with a slash command; each retrieves different server-side records. */
+export type AikaCapabilityId = 'onboarding' | 'my-work' | 'repository' | 'team' | 'docs';
+export type AikaCapability = { id: AikaCapabilityId; label: string; description: string; available: boolean; reason: string | null };
+export type AikaJob = { id: string; status: 'running' | 'succeeded' | 'failed'; question: string; milestoneId: string | null; capabilities?: AikaCapabilityId[]; startedAt: string; elapsedMs: number;
   answer: { sections: AikaSection[]; nextStep: string | null; removed: number } | null; error: string | null; model: string | null };
 
 /** Operator-only record. Drafts are numbered; publishing freezes one draft as a published version. */
@@ -226,3 +229,18 @@ export type RepositoryEvidenceView = { id: string; label: string; repository: st
   /** Evidence older than the configured maximum age is shown as stale, never as current. */
   stale: boolean; maxAgeHours: number };
 export type RepositoryEvidence = { repositories: RepositoryEvidenceView[] };
+
+// ---- Phase 8: Insights, computed on the server from stored records (nothing estimated).
+export type PersonActivity = { name: string; role: 'developer' | 'champion'; actionChanges: number; updates: number; blockers: number; questions: number; replies: number; coordination: number; reviews: number; lastActiveAt: string | null };
+export type Insights = { generatedAt: string; viewer: { role: 'developer' | 'champion' | 'operator'; name: string | null };
+  plan: { approved: boolean; approvedBy: string | null; approvedAt: string | null;
+    /** Where the plan is in Chris's and Maya's workflow; only for Chris and the Champion. */
+    stage: string | null };
+  summary: ProgressSummary | null;
+  milestones: { id: string; title: string; assignee: string | null; status: string; reviewState: string | null; actionsCompleted: number; actionsTotal: number; openBlockers: number; openQuestions: number; lastActivityAt: string | null }[];
+  /** Everyone's for the Champion and Chris; a developer's own only. */
+  activity: PersonActivity[];
+  /** Developer evidence references are reported, never verified. */
+  reportedReferences: number;
+  evidence: { id: string; label: string; repository: string; mode: EvidenceMode; inspected: boolean; lastInspectedAt: string | null; stale: boolean; lastAttemptFailed: boolean;
+    observed: number; notFound: number; notReadable: number; notInspected: number }[] };
