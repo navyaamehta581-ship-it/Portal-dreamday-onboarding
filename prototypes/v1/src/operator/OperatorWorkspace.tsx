@@ -14,11 +14,12 @@ import {ReviewTab} from './ReviewTab';
 import {ProgressTab} from './ProgressTab';
 import {IntegrationTools} from './IntegrationTools';
 import {useMilestoneWork} from '../portal-app/work/useMilestoneWork';
+import {InsightsPage} from '../portal-app/insights/InsightsPage';
 import {useRepositoryEvidence} from '../portal-app/work/useRepositoryEvidence';
 
 const TABS=[['context','Customer Context',''],['draft','Onboarding Draft','/draft'],['progress','Developer Progress','/progress']] as const;
 // Same Portal navigation; the onboarding entry opens Chris's page and other entries stay within /operator.
-const OPERATOR_NAV:NavItem[]=PRIMARY_NAV.map(item=>item.slug==='onboarding'?{...item,slug:'customer-onboarding',label:'Customer Onboarding',to:'/operator'}:{...item,to:undefined});
+const OPERATOR_NAV:NavItem[]=PRIMARY_NAV.map(item=>item.slug==='onboarding'?{...item,slug:'customer-onboarding',label:'Customer Onboarding',to:'/operator'}:item.slug==='insights'?{...item,to:'/operator/insights'}:{...item,to:undefined});
 const operatorHref=(item:NavItem)=>item.to??`/operator/x/${item.slug}`;
 
 /** Chris's workspace: the same Portal shell, for the operator persona only. Operator access is held by the
@@ -50,10 +51,12 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
  const tab=TABS.find(([,,suffix])=>suffix===(tabMatch?.[1]==='/goal'?'/draft':tabMatch?.[1]??''))?.[0]??'context';
  const status=accountStatus(ws,!!state);
  const item=feature?ALL_NAV.find(n=>n.slug===feature[1]):null;
+ const insights=path==='/operator/insights';
 
- return <div className="pt"><Shell active={feature?feature[1]:'customer-onboarding'} user={user} homeHref="/operator" primaryNav={OPERATOR_NAV} href={operatorHref}>
+ return <div className="pt"><Shell active={feature?feature[1]:insights?'insights':'customer-onboarding'} user={user} homeHref="/operator" primaryNav={OPERATOR_NAV} href={operatorHref}>
   {notice}
-  {feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2></div></div></div>:
+  {insights?<InsightsPage api={api} customer={customer?.label??''} demo={/fictional/i.test((customer?.label??'')+(customer?.customerId??''))}/>:
+  feature?<div className="pt-page"><div className="pt-pagebar"><h1>{item?.label??'Not found'}</h1></div><div className="pt-empty"><div><h2>{item?`${item.label} isn’t available in this demo`:'Page not found'}</h2></div></div></div>:
   <div className="pt-page">
    <div className="pt-pagebar"><h1><span className="icon"><Flag size={16} aria-hidden="true"/></span>Customer Onboarding</h1>
     <div className="tools">{customer&&<button className="pt-tool" disabled={busy} onClick={()=>{void session.refresh();void work.reload();void repos.reload();}}><RefreshCw size={15} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button>}</div></div>

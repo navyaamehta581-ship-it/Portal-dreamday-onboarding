@@ -1,6 +1,6 @@
 import type { ActivationState } from '../../../../contracts/activation/v1/state';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types';
-import type { AikaCapability, AikaCapabilityId, AikaJob, AnalysisJob, ChampionReview, RepositoryEvidence, RepositoryInspection, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
+import type { AikaCapability, AikaCapabilityId, AikaJob, AnalysisJob, Insights, ChampionReview, RepositoryEvidence, RepositoryInspection, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
 
 /** One change per request, as the server accepts it. */
 export type MilestoneChange={action:{index:number;status:'not_started'|'started'|'blocked'|'completed'}}|{note:{kind:'update'|'blocker'|'question'|'response';text:string;evidence?:string|null;replyTo?:string}}|{resolve:string}|{status:'in_progress'|'ready_for_review'|'completed'};
@@ -58,6 +58,8 @@ export function activationClient(customerId:string,token:string,base='',apiPrefi
     inspectRepository:(repositoryId:string)=>call<{inspection:RepositoryInspection;reused:boolean;evidence:RepositoryEvidence}>('/repository-inspections',{repositoryId}),
     // AiKA runs in the background on the server; asking returns at once and the answer is polled.
     askAika:(question:string,milestoneId?:string|null,capabilities?:AikaCapabilityId[])=>call<{job:AikaJob;duplicate:boolean}>('/aika-questions',{question,...(milestoneId?{milestoneId}:{}),...(capabilities?.length?{capabilities}:{})}),
+    // Insights: progress computed on the server from stored records.
+    insights:()=>call<Insights>('/insights'),
     // Slash-command capabilities this person may use; decided on the server.
     aikaCapabilities:()=>call<{capabilities:AikaCapability[];modelConfigured:boolean}>('/aika-capabilities'),
     aikaStatus:()=>call<{job:AikaJob|null}>('/aika-questions'),

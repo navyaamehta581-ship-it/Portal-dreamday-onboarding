@@ -67,3 +67,36 @@ test('each capability retrieves its own records, and only what the person may se
   assert.equal((await h.call('aperture','aika-capabilities','lumen-alex')).status,403,'another customer');
  }finally{await h.close();await stub.close();}
 });
+
+test('Insights: computed from stored records; the Champion and Chris see everyone, a developer only their own activity',async()=>{
+ const h=await harness({repositories:[REPO]});
+ try{
+  await approvedPlan(h.call,false);
+  let i=(await h.call('aperture','insights','champ')).json;
+  assert.equal(i.plan.approved,false);assert.equal(i.plan.stage,'submitted');assert.deepEqual(i.milestones,[]);
+  assert.equal((await h.call('aperture','insights','alex')).json.plan.stage,null,'developers don’t see the review workflow');
+  await approvedPlan(h.call);
+  await update(h.call,'alex','m-alex',0,{action:{index:0,status:'completed'}});
+  await update(h.call,'alex','m-alex',1,{note:{kind:'blocker',text:'No read access to payments-api yet',evidence:'https://example.test/req/7'}});
+  await update(h.call,'jordan','m-jordan',0,{note:{kind:'question',text:'Which docs site should I check?'}});
+  await h.call('aperture','milestone-coordination','champ',{milestoneId:'m-jordan',expectedRevision:1,respond:{to:(await h.call('aperture','milestone-work','champ')).json.milestones[1].detail.updates[0].id,text:'TechDocs only.'}},'Maya Chen');
+  await h.call('aperture','repository-inspections','alex',{repositoryId:'payments-api'});
+  i=(await h.call('aperture','insights','champ')).json;
+  assert.equal(i.plan.approved,true);assert.equal(i.plan.approvedBy,'Maya Chen');
+  assert.deepEqual([i.summary.milestones,i.summary.blocked,i.summary.openBlockers,i.summary.openQuestions,i.summary.actionsCompleted],[2,1,1,0,1]);
+  assert.deepEqual(i.activity.map((a:any)=>[a.name,a.actionChanges,a.blockers,a.questions,a.replies]).sort(),[['Alex Rivera',1,1,0,0],['Jordan Lee',0,0,1,0],['Maya Chen',0,0,0,1]]);
+  assert.equal(i.reportedReferences,1);
+  assert.deepEqual(i.evidence.map((e:any)=>[e.id,e.mode,e.inspected,e.stale]),[['payments-api','fixture',true,false]]);
+  assert.ok(i.evidence[0].observed>0&&i.evidence[0].notFound>0);
+  assert.ok(i.milestones.every((m:any)=>m.lastActivityAt));
+  const chris=(await h.call('aperture','insights','op')).json;
+  assert.deepEqual(chris.summary,i.summary);assert.equal(chris.activity.length,3);
+  const alex=(await h.call('aperture','insights','alex')).json;
+  assert.deepEqual(alex.activity.map((a:any)=>a.name),['Alex Rivera'],'only their own activity');
+  assert.deepEqual(alex.summary,i.summary,'the same team totals');
+  assert.equal(alex.milestones.find((m:any)=>m.id==='m-jordan').lastActivityAt,null,'no detail of another developer’s activity');
+  assert.equal(alex.reportedReferences,0);
+  assert.equal((await h.call('aperture','insights','lumen-alex')).status,403);
+  for(const x of PRIVATE)assert.ok(!JSON.stringify([i,alex,chris]).includes(x));
+ }finally{await h.close();}
+});

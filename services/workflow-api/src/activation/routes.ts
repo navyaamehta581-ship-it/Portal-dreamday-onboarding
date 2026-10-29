@@ -6,6 +6,7 @@ import {developerState} from './handoff/project.ts';
 import type {WorkService} from './handoff/work.ts';
 import type {AikaService} from './handoff/aika.ts';
 import type {RepositoryService} from './repository.ts';
+import type {InsightsService} from './insights.ts';
 export type ActivationOptions={handoff?:HandoffService;isOperator?:(request:IncomingMessage,principal:Principal)=>boolean;
   /** Dream Day: the customer's authorized Champion (a separate server-held credential). */
   isChampion?:(request:IncomingMessage,principal:Principal)=>boolean;
@@ -15,9 +16,11 @@ export type ActivationOptions={handoff?:HandoffService;isOperator?:(request:Inco
   developerName?:(request:IncomingMessage,principal:Principal)=>string|null;
   work?:WorkService;aika?:AikaService;
   /** Phase 7: read-only repository evidence for configured repositories. */
-  repositories?:RepositoryService;prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
+  repositories?:RepositoryService;
+  /** Phase 8: onboarding insights computed from stored records. */
+  insights?:InsightsService;prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
 export async function activationRoute(request:IncomingMessage,response:ServerResponse,path:string,options:ActivationOptions,readJson:(r:IncomingMessage)=>Promise<unknown>) {
-  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions|aika-capabilities|repository-evidence|repository-inspections)$/.exec(path);
+  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions|aika-capabilities|repository-evidence|repository-inspections|insights)$/.exec(path);
   if(!match)return false;
   response.setHeader('Access-Control-Expose-Headers','ETag');
   const send=(status:number,value:unknown)=>{response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});response.end(JSON.stringify(value));};
@@ -35,6 +38,11 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
     if(options.championApproval&&(match[2]==='handoff-publications'||match[2]==='intake'||(match[2]==='state'&&request.method==='POST'))){send(403,{error:{code:'CHAMPION_APPROVAL_REQUIRED'}});return true;}
     // Who is reading or acting. A developer's name comes only from their own credential, never from a header.
     const viewer=operator?{role:'operator' as const,name:actor}:champion?{role:'champion' as const,name:actor}:{role:'developer' as const,name:options.developerName?.(request,p)??null};
+    if(match[2]==='insights'){
+      if(!options.insights){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}
+      if(request.method==='GET'){send(200,options.insights.view(p,viewer));return true;}
+      response.setHeader('Allow','GET');send(405,{error:{code:'METHOD_NOT_ALLOWED'}});return true;
+    }
     if(match[2]==='repository-evidence'||match[2]==='repository-inspections'){
       const route=`${request.method} ${match[2]}`;
       if(!options.repositories){send(503,{error:{code:'ADAPTER_UNAVAILABLE'}});return true;}

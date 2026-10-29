@@ -15,6 +15,7 @@ import {createWorkService,openWorkStore} from './handoff/work.ts';
 import {createAika} from './handoff/aika.ts';
 import {createRepositoryService,openRepositoryStore,type GitHubOptions,type RepositoryConfig} from './repository.ts';
 import {hostedInterpreter} from './handoff/hosted.ts';
+import {createInsights} from './insights.ts';
 import {analyzeWithModel,type StageListener} from './handoff/intelligence.ts';
 import {proposeMilestones} from './handoff/milestones.ts';
 import type {JsonModel} from '../llm/ollama.ts';
@@ -57,9 +58,10 @@ export function createActivationServices(c:ServiceConfig){
   repositoryCount:(p,viewer)=>{try{return repositories.view(p,viewer).repositories.length;}catch{return 0;}},
   repositoryEvidence:(p,viewer)=>{const r=repositories.forAika(p,viewer);let legacy:string[]=[];try{legacy=repositoryEvidence(p);}catch{legacy=[];}
    return {lines:[...r.lines,...legacy.map((claim,i)=>({id:`obs-packet-${i+1}`,mode:'live' as const,status:'observed' as const,line:`[obs-packet-${i+1}] OBSERVED (live, read-only inspection packet): ${claim}`}))],inspected:r.inspected||legacy.length>0};}});
+ const insights=createInsights({work,repositories,records:p=>handoffs.all(p),published:p=>handoffs.published(p)});
  const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??c.bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);
  const stop=worker.start();
- return {store,intake,reports,github,handoff,handoffs,work,aika,repositories,
+ return {store,intake,reports,github,handoff,handoffs,work,aika,repositories,insights,
   initialPlan:(p:Principal,context:import('../../../../contracts/activation/v1/types.ts').CustomerContext)=>c.bundles.find(b=>isDeepStrictEqual(b.principal,p)&&isDeepStrictEqual(b.context,context))?.plans.find(plan=>plan.contextRevision===context.revision&&plan.revision===0&&plan.supersedesRevision===null)??null,
   async close(){await stop();handoffs.close();workStore.close();repositoryStore.close();store.close();}};
 }

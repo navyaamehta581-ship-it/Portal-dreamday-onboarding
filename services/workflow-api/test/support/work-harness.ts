@@ -31,12 +31,13 @@ export async function harness({file=':memory:',modelUrl=null as string|null,time
  const {createApp}=await import('../../src/app.ts');const {openGoalStore}=await import('../../src/store.ts');
  const {openActivationStore}=await import('../../src/activation/store.ts');const {createIntake}=await import('../../src/activation/intake.ts');
  const {openHandoffStore}=await import('../../src/activation/handoff/store.ts');const {createHandoffService}=await import('../../src/activation/handoff/service.ts');
- const {createWorkService,openWorkStore}=await import('../../src/activation/handoff/work.ts');const {createRepositoryService,openRepositoryStore}=await import('../../src/activation/repository.ts');const {createAika}=await import('../../src/activation/handoff/aika.ts');
+ const {createWorkService,openWorkStore}=await import('../../src/activation/handoff/work.ts');const {createRepositoryService,openRepositoryStore}=await import('../../src/activation/repository.ts');const {createInsights}=await import('../../src/activation/insights.ts');const {createAika}=await import('../../src/activation/handoff/aika.ts');
  const intake=createIntake({admit:()=>false});
  const store=openActivationStore(file,intake.policy),handoffs=openHandoffStore(file),workStore=openWorkStore(file),repoStore=openRepositoryStore(file),goals=openGoalStore(':memory:');
  const handoff=createHandoffService({handoffs,store:()=>store,analyze:rule,stage:intake.stage,release:intake.release});
  const work=createWorkService({published:p=>handoffs.published(p),work:workStore,verifiedEvidence:p=>p.customerId==='aperture'?evidence:[]});
  const repos=createRepositoryService({config:repositories,store:repoStore,published:p=>handoffs.published(p),github:{fetchImpl:github,token:githubToken},...(now?{now}:{})});
+ const insights=createInsights({work,repositories:repos,records:p=>handoffs.all(p),published:p=>handoffs.published(p)});
  const aika=createAika({model:modelUrl?createOllama({endpoint:modelUrl,model:'qwen3:1.7b',timeoutMs,retries:0,numCtx:8192}):null,work,
   publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,repositoryEvidence:(p,v)=>repos.forAika(p,v),repositoryCount:(p,v)=>{try{return repos.view(p,v).repositories.length;}catch{return 0;}}});
  const north={tenantId:'t',customerId:'aperture',sessionId:'s'},lumen={...north,customerId:'lumen'};
@@ -44,7 +45,7 @@ export async function harness({file=':memory:',modelUrl=null as string|null,time
  const tokens:Record<string,{p:typeof north;role:'dev'|'op'|'champ';name?:string}>={dev:{p:north,role:'dev'},op:{p:north,role:'op'},champ:{p:north,role:'champ'},
   alex:{p:north,role:'dev',name:'Alex Rivera'},jordan:{p:north,role:'dev',name:'Jordan Lee'},'lumen-alex':{p:lumen,role:'dev',name:'Alex Rivera'},'lumen-champ':{p:lumen,role:'champ'}};
  const who=(r:{headers:{authorization?:string}})=>tokens[(r.headers.authorization??'').replace('Bearer ','')];
- const server=createApp(goals,undefined,{store,handoff,work,aika,repositories:repos,championApproval:true,authorize:(r,c)=>who(r)?.p.customerId===c?who(r)!.p:null,
+ const server=createApp(goals,undefined,{store,handoff,work,aika,repositories:repos,insights,championApproval:true,authorize:(r,c)=>who(r)?.p.customerId===c?who(r)!.p:null,
   isOperator:r=>who(r)?.role==='op',isChampion:r=>who(r)?.role==='champ',developerName:r=>who(r)?.name??null});
  await new Promise<void>(r=>server.listen(0,'127.0.0.1',r));
  const base=`http://127.0.0.1:${(server.address() as {port:number}).port}/api/activation/v1/customers/`;
