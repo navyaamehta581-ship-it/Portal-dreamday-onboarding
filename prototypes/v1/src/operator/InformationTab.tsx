@@ -1,4 +1,4 @@
-import {useRef,useState,type DragEvent} from 'react';
+import {useEffect,useRef,useState,type DragEvent} from 'react';
 import {Check,FileText,FileUp,LoaderCircle,TriangleAlert} from 'lucide-react';
 import type {AnalysisStage,DocumentReport} from '../../../../contracts/activation/v1/handoff';
 import {navigate} from '../portal-app/router';
@@ -103,7 +103,7 @@ function DocumentSummary({doc,customer,ws}:{doc:DocumentReport;customer:string;w
    The analysis only uses what was read. Check the missing parts yourself and add anything important to the draft.</span></div>}
   {mismatch&&<div className="pt-banner warn" role="status">This PDF names <strong>{named}</strong>, but you’re working on <strong>{customer}</strong>. Check it’s the right document before using the analysis.</div>}
   {doc.missing.length>0&&<p className="pt-note"><strong>Not found in the document:</strong> {doc.missing.map(m=>MISSING[m]).join('; ')}. The analysis will list these as unknowns rather than guess.</p>}
-  <details className="pt-details"><summary>How the document was read ({doc.sections.length} section{doc.sections.length===1?'':'s'})</summary>
+  <details className="pt-details"><summary>How this document was read ({doc.sections.length} section{doc.sections.length===1?'':'s'})</summary>
    <ul className="pt-findings">{doc.sections.map((s,i)=><li key={i}><span className="pt-pill">{label(s.type)}</span><span>{s.label}<small>{s.chars.toLocaleString()} characters · {s.basis==='heading'?'category from its heading':s.basis==='content'?'category from its content':'category uncertain: no heading or content clue'}</small></span></li>)}</ul>
    {uncertain.length>0&&<p className="pt-note">Sections marked uncertain were read as account preparation. Internal notes and CRM sections are kept private when their heading says so (for example “Internal notes” or “CRM record”).</p>}
    {doc.removedLines>0&&<p className="pt-note">{doc.removedLines} repeated header, footer or page-number line{doc.removedLines===1?' was':'s were'} left out.</p>}
@@ -121,6 +121,9 @@ function EarlierInformation({ws}:{ws:CustomerWorkspace}){
 
 function AnalysisPanel({ws,waiting}:{ws:CustomerWorkspace;waiting:boolean}){
  const job=ws.analysis,running=ws.running,current=job?STAGES.findIndex(([s])=>s===job.stage):-1;
+ // An analysis Chris watched finish takes him straight to the draft: that's the next step, nothing else to set up.
+ const watched=useRef<string|null>(null);
+ useEffect(()=>{if(job?.status==='running')watched.current=job.id;else if(job?.status==='succeeded'&&watched.current===job.id){watched.current=null;navigate('/operator/draft');}},[job?.id,job?.status]);
  // A retry only where it helps: a failed run, a rule-based fallback, or information saved without a finished run.
  const problem=job?.modelOk===false?modelProblem(job.modelError,job.modelErrorDetail):null;
  const retry=!running&&!waiting&&ws.sources.length>0&&(job?.status==='failed'||!!problem?.retry||(!job&&!ws.latest));

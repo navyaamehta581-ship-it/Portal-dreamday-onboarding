@@ -1,9 +1,9 @@
 import type { ActivationState } from '../../../../contracts/activation/v1/state';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types';
-import type { AikaCapability, AikaCapabilityId, AikaJob, AnalysisJob, DocumentReport, Insights, ChampionReview, RepositoryEvidence, RepositoryInspection, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
+import type { Adoption, AikaCapability, AikaCapabilityId, AikaJob, AnalysisJob, DocumentReport, Insights, Opportunities, Priority, ChampionReview, RepositoryEvidence, RepositoryInspection, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
 
 /** One change per request, as the server accepts it. */
-export type MilestoneChange={action:{index:number;status:'not_started'|'started'|'blocked'|'completed'}}|{note:{kind:'update'|'blocker'|'question'|'response';text:string;evidence?:string|null;replyTo?:string}}|{resolve:string}|{status:'in_progress'|'ready_for_review'|'completed'};
+export type MilestoneChange={action:{index:number;status:'not_started'|'started'|'blocked'|'completed'}}|{note:{kind:'update'|'blocker'|'question'|'response';text:string;evidence?:string|null;replyTo?:string}}|{resolve:string}|{status:'in_progress'|'ready_for_review'|'completed'}|{pursue:boolean};
 
 /** The Champion's coordination: one change per request, as the server accepts it. */
 export type CoordinationChange={note:{text:string}}|{followUp:{text:string}}|{respond:{to:string;text:string;resolve?:boolean}}|{review:{decision:'reviewed';note?:string|null}};
@@ -64,7 +64,12 @@ export function activationClient(customerId:string,token:string,base='',apiPrefi
     repositoryEvidence:()=>call<RepositoryEvidence>('/repository-evidence'),
     inspectRepository:(repositoryId:string)=>call<{inspection:RepositoryInspection;reused:boolean;evidence:RepositoryEvidence}>('/repository-inspections',{repositoryId}),
     // AiKA runs in the background on the server; asking returns at once and the answer is polled.
-    askAika:(question:string,milestoneId?:string|null,capabilities?:AikaCapabilityId[])=>call<{job:AikaJob;duplicate:boolean}>('/aika-questions',{question,...(milestoneId?{milestoneId}:{}),...(capabilities?.length?{capabilities}:{})}),
+    askAika:(question:string,milestoneId?:string|null,capabilities?:AikaCapabilityId[],opportunityId?:string|null)=>call<{job:AikaJob;duplicate:boolean}>('/aika-questions',{question,...(milestoneId?{milestoneId}:{}),...(opportunityId?{opportunityId}:{}),...(capabilities?.length?{capabilities}:{})}),
+    // Role redesign: opportunities, the Champion's priorities, developers' choices, adoption.
+    opportunities:()=>call<Opportunities>('/opportunities',undefined,30000),
+    prioritize:(id:string,change:{priority?:Priority|null;highlighted?:boolean})=>call<Opportunities>('/opportunity-priorities',{id,...change}),
+    pursueOpportunity:(id:string,pursue:boolean)=>call<Opportunities>('/opportunity-pursuits',{id,pursue}),
+    adoption:()=>call<Adoption>('/adoption'),
     // Insights: progress computed on the server from stored records.
     insights:()=>call<Insights>('/insights'),
     // Slash-command capabilities this person may use; decided on the server.

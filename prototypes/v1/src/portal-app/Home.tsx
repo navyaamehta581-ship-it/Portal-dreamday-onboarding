@@ -1,81 +1,91 @@
-import {BookOpenText,Check,Clock3,ClipboardList,Lock,TriangleAlert,Users} from 'lucide-react';
+import {BarChart3,ClipboardList,Lightbulb,Sparkles,Target,Users} from 'lucide-react';
 import type {ActivationSession} from '../activation/useActivation';
 import type {Persona} from './session';
-import {Link,navigate} from './router';
+import {navigate} from './router';
 import {loadProblem} from './onboarding/model';
-import {onboardingSteps} from './onboarding/steps';
+import {GoalsList,OpportunityCard} from './adoption/Panels';
+import type {OpportunitiesSession} from './adoption/useOpportunities';
+import {askAikaAbout} from './onboarding/DeveloperOverview';
 import {STATUS_LABEL,statusTone,type MilestoneWorkSession} from './work/useMilestoneWork';
 
-/** “Welcome to Portal” with the Setup Guide card (011, 036), filled from the developer's onboarding steps. */
-export function Home({session,persona,work}:{session:ActivationSession;persona:Persona;work:MilestoneWorkSession}){
+/** “Welcome to Portal” (011, 036). Developers: what they can build or improve, and the milestones they chose. The
+ * Champion: the company goals, adoption and the improvements to steer, or the plan waiting for review. */
+export function Home({session,persona,work,opps}:{session:ActivationSession;persona:Persona;work:MilestoneWorkSession;opps:OpportunitiesSession}){
  const {state,busy,error}=session;
+ const approved=!!state?.handoff?.approval&&!!opps.data;
  return <div className="pt-home">
   <h1>Welcome to Portal</h1>
-  {persona.role==='champion'?<ChampionCard session={session}/>:state&&<AssignedWork session={session} persona={persona} work={work}/>}
-  {!state?<section className="pt-guide" aria-label="Your onboarding">
-   <div className="pt-guide-head"><span className="icon"><BookOpenText size={20} aria-hidden="true"/></span><h2>Get started with your onboarding</h2></div>
-   <div className="pt-step" role={error?'alert':'status'}><h3>{busy||!error?'Loading your onboarding…':loadProblem(error).title}</h3>{error&&!busy&&<p>{loadProblem(error).detail}</p>}{error&&!busy&&<button className="pt-btn" onClick={()=>void session.refresh()}>Try again</button>}</div>
-  </section>:<HomeGuide session={session}/>}
+  {persona.role==='champion'?<ChampionHome session={session} opps={opps}/>:
+   approved?<DeveloperHome opps={opps} work={work}/>:
+   <section className="pt-guide" aria-label="Your onboarding">
+    <div className="pt-guide-head"><span className="icon"><Target size={20} aria-hidden="true"/></span><h2>Your engineering goals</h2></div>
+    <div className="pt-step" role={error&&error!=='NOT_FOUND'?'alert':'status'}>
+     <h3>{busy||opps.loading?'Loading…':error&&error!=='NOT_FOUND'?loadProblem(error).title:'Your team’s plan isn’t approved yet'}</h3>
+     <p>{error&&error!=='NOT_FOUND'?loadProblem(error).detail:'When your Champion approves it, your team’s goals and what you can build or improve appear here.'}</p>
+     <button className="pt-btn" onClick={()=>navigate('/aika')}><Sparkles size={16} aria-hidden="true"/>Ask AiKA</button>
+    </div>
+   </section>}
  </div>;
 }
 
-function HomeGuide({session}:{session:ActivationSession}){
- const state=session.state!;
- const {steps,done,total,current}=onboardingSteps(session);
+function DeveloperHome({opps,work}:{opps:OpportunitiesSession;work:MilestoneWorkSession}){
+ const d=opps.data!;
+ const top=[...d.opportunities].sort((a,b)=>Number(!!b.mine)-Number(!!a.mine)||Number(b.highlighted)-Number(a.highlighted)).slice(0,3);
+ const mine=(work.progress?.milestones??[]).filter(m=>m.mine);
  return <>
-  {!current&&<section className="pt-done" aria-label="Onboarding complete">
-   <p className="pt-done-mark" aria-hidden="true">🎉</p><h3>You’re all done!</h3>
-   <p>Chris can see your progress. Bring your team along next.</p>
-   <button className="pt-btn" onClick={()=>navigate('/activation/team')}>Go to Team</button>
-  </section>}
-  <section className="pt-guide" aria-label="Your onboarding">
-   <div className="pt-guide-head"><span className="icon"><BookOpenText size={20} aria-hidden="true"/></span><h2>Get started with your onboarding</h2></div>
-   <div className="pt-progress" aria-hidden="true"><span style={{width:`${done/total*100}%`}}/></div>
-   <div className="pt-guide-meta"><span>{done} of {total} completed</span><span className="pt-chip"><Clock3 size={15} aria-hidden="true"/>Milestone {state.milestone.status.replace('_',' ')}</span></div>
-   {current&&<div className="pt-step">
-    <h3>First up: {current.title.charAt(0).toLowerCase()+current.title.slice(1)}</h3>
-    <p className="pt-clamp">{current.attention??(current.id==='goal'?state.context.agreedGoal.text:current.summary)}</p>
-    <button className="pt-btn" onClick={()=>navigate('/activation')}>Open your onboarding</button>
-   </div>}
-   <div className="pt-rows">{steps.filter(s=>s!==current).map(s=>s.status==='locked'?
-    <div key={s.id} className="pt-row locked"><Lock size={18} aria-hidden="true"/>&nbsp;Accept your direction or share an update to unlock {s.title}</div>:
-    <div key={s.id} className={'pt-row '+s.status}>
-     <span className="check" aria-label={s.status==='done'?'Completed':'Not started'}>{s.status==='done'?<Check size={20} strokeWidth={2.6}/>:s.attention?<TriangleAlert size={18}/>:s.id==='team'?<Users size={18}/>:<span className="num">{steps.indexOf(s)+1}</span>}</span>
-     <span className="label">{s.title}<small className="pt-clamp">{s.attention??s.summary}</small></span>
-     {(s.status==='done'||s.id==='team')&&<Link className="pt-btn" to={s.to}>{s.goLabel}</Link>}
-    </div>)}</div>
+  <section className="pt-guide" aria-label="Your engineering goals">
+   <div className="pt-guide-head"><span className="icon"><Target size={20} aria-hidden="true"/></span><h2>Your team’s engineering goals</h2></div>
+   <div className="pt-step panel"><GoalsList goals={d.goals}/></div>
+  </section>
+  <section className="pt-guide" aria-label="What you can build or improve">
+   <div className="pt-guide-head"><span className="icon"><Lightbulb size={20} aria-hidden="true"/></span><h2>What you can build or improve</h2></div>
+   <div className="pt-step panel">
+    {top.length?<div className="pt-opportunities" style={{marginTop:0}}>{top.map(o=><OpportunityCard key={o.id} o={o} mode="developer" session={opps} onAsk={askAikaAbout}/>)}</div>:<p>No suggestions yet.</p>}
+    <div className="pt-actions"><button className="pt-btn" onClick={()=>navigate('/activation')}>See all opportunities and milestones</button></div>
+   </div>
+  </section>
+  <section className="pt-guide" aria-label="Your milestones">
+   <div className="pt-guide-head"><span className="icon"><ClipboardList size={20} aria-hidden="true"/></span><h2>Your milestones</h2></div>
+   <div className="pt-step panel">
+    {mine.length?<ul className="pt-plain-list">{mine.map(m=><li key={m.id}><strong>{m.title}</strong> <span className={'pt-pill '+statusTone(m.status)}>{STATUS_LABEL[m.status]}</span>{m.suggestedForMe&&!m.workingOn?.length?<small className="pt-sub">Suggested for you</small>:null}</li>)}</ul>
+     :<p>You haven’t chosen a milestone yet. Pick one when you’re ready; nothing is assigned.</p>}
+    <div className="pt-actions"><button className="pt-btn ghost" onClick={()=>navigate(mine.length?'/activation/work':'/activation')}>{mine.length?'Open my milestones':'Choose a milestone'}</button>
+     <button className="pt-btn ghost" onClick={()=>navigate('/progress')}><BarChart3 size={16} aria-hidden="true"/>My progress</button></div>
+   </div>
   </section>
  </>;
 }
 
-/** Work approved for this developer in Dream Day. The server sends each developer only their own approved
- * milestones, so everything here is theirs; before approval nothing is assigned. */
-function AssignedWork({session,persona,work}:{session:ActivationSession;persona:Persona;work:MilestoneWorkSession}){
+function ChampionHome({session,opps}:{session:ActivationSession;opps:OpportunitiesSession}){
  const h=session.state?.handoff;
- const mine=(h?.milestones??[]).filter(m=>m.assignmentStatus==='approved'&&m.proposedAssignee===persona.name);
- return <section className="pt-guide" aria-label="Your assigned work">
-  <div className="pt-guide-head"><span className="icon"><ClipboardList size={20} aria-hidden="true"/></span><h2>Your assigned work</h2></div>
-  {mine.length?<>
-   {h?.approval&&<p className="pt-note" style={{margin:'14px 0 0'}}>Approved by {h.approval.by} in Dream Day on {new Date(h.approval.at).toLocaleDateString()}.</p>}
-   {mine.map(m=><div key={m.id} className="pt-step assigned" aria-label={`Assigned: ${m.objective}`}>
-    <h3>{m.objective}</h3>
-    {(()=>{const s=work.progress?.milestones.find(x=>x.id===m.id)?.status;return s&&<p><span className={'pt-pill '+statusTone(s)}>{STATUS_LABEL[s]}</span></p>;})()}
-    {m.why&&m.why!==m.objective&&<p>{m.why}</p>}
-    <p className="pt-label" style={{marginTop:16}}>Actions</p><ol className="pt-plain-list">{m.actions.map(a=><li key={a}>{a}</li>)}</ol>
-    <p className="pt-label" style={{marginTop:14}}>Done when</p><ul className="pt-plain-list">{m.completionCriteria.map(c=><li key={c}>{c}</li>)}</ul>
-    {m.dependencies.length>0&&<p className="pt-note">Starts after: {m.dependencies.join(', ')}</p>}
-    <Link className="pt-btn" to="/activation/work">Open my work</Link>
-   </div>)}</>
-   :<div className="pt-step"><h3>Nothing is assigned to you yet</h3><p>{h?.approval?'Your Champion approved the team’s plan, but none of its milestones are assigned to you. Ask your Champion if you expected work.':'Work is assigned when your Champion approves the team’s onboarding plan in Dream Day.'}</p></div>}
+ if(!h?.approval||!opps.data)return <section className="pt-guide" aria-label="Team coordination">
+  <div className="pt-guide-head"><span className="icon"><Users size={20} aria-hidden="true"/></span><h2>Your team’s onboarding plan</h2></div>
+  <div className="pt-step"><h3>Review the plan Chris proposed in Dream Day</h3>
+   <p>See the goals and milestones at a glance, change what you want and approve it. Technical setup stays with Spotify’s solutions engineers.</p>
+   <button className="pt-btn" onClick={()=>navigate('/champion')}>Open Dream Day</button></div>
  </section>;
-}
-
-function ChampionCard({session}:{session:ActivationSession}){
- const h=session.state?.handoff;
- return <section className="pt-guide" aria-label="Team coordination">
-  <div className="pt-guide-head"><span className="icon"><Users size={20} aria-hidden="true"/></span><h2>Coordinate your team</h2></div>
-  <div className="pt-step"><h3>{h?.approval?`Plan approved · ${h.milestones.length} milestone${h.milestones.length===1?'':'s'} assigned`:'Review your team’s onboarding plan in Dream Day'}</h3>
-   <p>{h?.approval?'See who is doing what in Team Coordination.':'When Chris submits the plan, you review it, assign the work and approve it in Dream Day.'}</p>
-   <button className="pt-btn" onClick={()=>navigate(h?.approval?'/champion/team':'/champion')}>{h?.approval?'Open Team overview':'Open Dream Day'}</button></div>
- </section>;
+ const a=opps.adoption,d=opps.data;
+ const recommended=d.opportunities.filter(o=>o.highlighted).length;
+ return <>
+  <section className="pt-guide" aria-label="Company goals">
+   <div className="pt-guide-head"><span className="icon"><Target size={20} aria-hidden="true"/></span><h2>Company goals</h2></div>
+   <div className="pt-step panel"><GoalsList goals={d.goals}/></div>
+  </section>
+  <section className="pt-guide" aria-label="Adoption progress">
+   <div className="pt-guide-head"><span className="icon"><BarChart3 size={20} aria-hidden="true"/></span><h2>Adoption progress</h2></div>
+   <div className="pt-step panel">
+    {a?<dl className="pt-coord-summary">
+     <div><dt>Milestones completed</dt><dd>{a.milestones.completed}<small> of {a.milestones.total}</small></dd></div>
+     <div><dt>Opportunities pursued</dt><dd>{a.opportunities.pursued}<small> of {a.opportunities.total}</small></dd></div>
+     <div><dt>Developers active this week</dt><dd>{a.developers.filter(x=>x.activeThisWeek).length}<small> of {a.developers.length} engaged</small></dd></div>
+    </dl>:<p>Loading…</p>}
+    {a?.suggestions[0]&&<p className="pt-note">{a.suggestions[0]}</p>}
+   </div>
+  </section>
+  <section className="pt-guide" aria-label="Recommended improvements">
+   <div className="pt-guide-head"><span className="icon"><Lightbulb size={20} aria-hidden="true"/></span><h2>Recommended improvements</h2></div>
+   <div className="pt-step panel"><p>{d.opportunities.length} suggestion{d.opportunities.length===1?'':'s'} for your repositories, services, docs and workflows; {recommended?`you recommended ${recommended} to developers`:'none recommended to developers yet'}.</p>
+    <div className="pt-actions"><button className="pt-btn" onClick={()=>navigate('/champion/team')}>Prioritise in Team overview</button></div></div>
+  </section>
+ </>;
 }

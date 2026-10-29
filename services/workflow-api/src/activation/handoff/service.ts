@@ -9,7 +9,7 @@ import {ActivationError,type ActivationStore,type Principal} from '../store.ts';
 import {interpretRuleBased} from './interpret.ts';
 import {proposeMilestones,validMilestone} from './milestones.ts';
 import {unsafeReason,type Analysis,type StageListener} from './intelligence.ts';
-import {applyChampionEdits,approvalIssues,championPlan,reviewFromAnalysis,reviewIssues,toMilestoneDrafts,validateReview} from './review.ts';
+import {applyChampionEdits,approvalIssues,championChanges,championPlan,reviewFromAnalysis,reviewIssues,toMilestoneDrafts,validateReview} from './review.ts';
 import {developerHandoff} from './project.ts';
 import type {HandoffStore} from './store.ts';
 
@@ -204,14 +204,16 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
    approval:championApproved?{by:r.approvals!.champion.by!,at:r.approvals!.champion.at!}:null,
    plan:visible?championPlan(r):null};
  }
- function saveChampionReview(p:Principal,input:unknown){
+ function saveChampionReview(p:Principal,input:unknown,actor='Customer Champion'){
   const b=input as {draft?:unknown;expectedRevision?:unknown;plan?:unknown};
   if(!b||typeof b!=='object'||!Number.isSafeInteger(b.expectedRevision))fail('INVALID_REQUEST');
   const record=editable(p,b.draft);
   if(!underReview(record.status))fail('NOT_UNDER_REVIEW');
   if((record.reviewRevision??0)!==b.expectedRevision)fail('REVISION_CONFLICT');
-  const review=applyChampionEdits(record.review??reviewFromAnalysis(record),b.plan);
-  deps.handoffs.save(p,{...record,review,reviewRevision:bump(record),reviewUpdatedAt:stamp()});
+  const before=record.review??reviewFromAnalysis(record),review=applyChampionEdits(before,b.plan);
+  // Chris sees what the Champion changed in the history, by count; he doesn't approve it again.
+  const changes=championChanges(before,review);
+  deps.handoffs.save(p,{...record,review,reviewRevision:bump(record),reviewUpdatedAt:stamp(),...(changes?{history:event(record,{action:'edited',at:stamp(),by:actor,comment:changes})}:{})});
   return championView(p);
  }
  function championDecision(p:Principal,input:unknown,actor='Customer Champion'){
@@ -250,7 +252,8 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   if(milestones.some(m=>confidentialHits(m,outcome,record.understanding).length))fail('CONFIDENTIAL_CONTENT');
   // The broader objective developers may see: the approved problem, goals and open questions, screened again.
   const safe=(t:string)=>!!t.trim()&&!unsafeReason(t,record.understanding),r=record.review;
-  const objective=r?{problem:safe(r.problem.summary)?r.problem.summary:null,goals:r.goals.map(g=>g.text).filter(safe),questions:r.questions.map(q=>q.text).filter(safe)}:undefined;
+  const more=(r?.moreProblems??[]).map(x=>x.summary).filter(x=>x.trim()&&safe(x));
+  const objective=r?{problem:safe(r.problem.summary)?r.problem.summary:null,goals:r.goals.map(g=>g.text).filter(safe),questions:r.questions.map(q=>q.text).filter(safe),...(more.length?{problems:more}:{})}:undefined;
   const at=approval.at,id=randomUUID(),developer={...developerHandoff(1,at,record.understanding,milestones),approval,...(objective?{objective}:{})},m=milestones[0];
   const proof={type:'none' as const,actionId:'none',actionRevision:0,reference:'none',verifier:'none',result:'not_checked' as const};
   const ev=(suffix:string,kind:EvidenceRecord['kind'],claim:string,basisIds:string[]=[]):EvidenceRecord=>({id:`${id}-${suffix}`,kind,claim,source:'Chris activation intake',observedAt:at,sourceRevision:id,scope:m.objective,producer:'authenticated local intake operator',basisIds,proof});

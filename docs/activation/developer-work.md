@@ -1,5 +1,7 @@
 # Developer work and AiKA (Phase 5)
 
+> **Updated by the role redesign.** Where this page talks about assigned work, the Repository, Evidence or Team tabs, inspecting repositories by hand, "Ask Chris" or developer Insights, [roles-and-opportunities.md](roles-and-opportunities.md) is current: developers choose their work, the Portal observes repositories itself, and developers have **My progress**.
+
 After Maya approves the plan in [Dream Day](dream-day.md), Alex and Jordan each work through their own approved milestones inside the developer Portal. AiKA helps them, using approved, developer-safe context only.
 
 ## What each person sees

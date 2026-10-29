@@ -1,5 +1,7 @@
 # Team Coordination (Phase 6)
 
+> **Updated by the role redesign.** Where this page talks about assigned work, the Repository, Evidence or Team tabs, inspecting repositories by hand, "Ask Chris" or developer Insights, [roles-and-opportunities.md](roles-and-opportunities.md) is current: developers choose their work, the Portal observes repositories itself, and developers have **My progress**.
+
 Maya, the customer's Champion, coordinates the approved technical onboarding from **Team Coordination → Team overview** (`/champion/team`). This sits beside Dream Day inside the Portal. It uses the same milestone progress records as the developers' **My work** ([developer-work.md](developer-work.md)); there is no second progress system.
 
 ## What Maya sees

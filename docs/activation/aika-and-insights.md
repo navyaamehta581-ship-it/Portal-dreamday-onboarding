@@ -1,5 +1,7 @@
 # AiKA commands and Insights (Phase 8)
 
+> **Updated by the role redesign.** Where this page talks about assigned work, the Repository, Evidence or Team tabs, inspecting repositories by hand, "Ask Chris" or developer Insights, [roles-and-opportunities.md](roles-and-opportunities.md) is current: developers choose their work, the Portal observes repositories itself, and developers have **My progress**.
+
 ## AiKA: the original assistant, plus onboarding
 
 The Portal's existing AiKA is preserved:

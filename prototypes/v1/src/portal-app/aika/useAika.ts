@@ -28,11 +28,11 @@ export function useAika(api:ReturnType<typeof activationClient>|null){
  },[api]);
  useEffect(()=>{void poll();void loadCapabilities();return()=>{if(timer.current)clearTimeout(timer.current);};},[poll,loadCapabilities]);
  const running=turns.at(-1)?.job?.status==='running';
- async function ask(question:string,milestoneId:string|null,caps:AikaCapabilityId[]=[]){
+ async function ask(question:string,milestoneId:string|null,caps:AikaCapabilityId[]=[],opportunityId:string|null=null){
   if(!api||sending||running)return false;
   setSending(true);setError(null);
   try{
-   const r=await api.askAika(question,milestoneId,caps);
+   const r=await api.askAika(question,milestoneId,caps,opportunityId);
    setTurns(ts=>[...ts.filter(t=>t.job?.id!==r.job.id),{id:r.job.id,question,capabilities:caps,milestoneId,job:r.job,error:null}]);
    if(timer.current)clearTimeout(timer.current);timer.current=setTimeout(()=>void poll(),POLL_MS);return true;
   }catch(e){

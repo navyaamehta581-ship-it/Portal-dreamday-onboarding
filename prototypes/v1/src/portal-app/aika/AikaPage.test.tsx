@@ -12,7 +12,7 @@ import {useAika} from './useAika';
 
 let api:ReturnType<typeof mockApi>,m:ReturnType<typeof mount>;
 const alex:Persona={id:'alex',name:'Alex Rivera',role:'developer',title:'Developer',customers:[{id:'aperture',label:'Aperture Commerce',customerId:'fictional-aperture-commerce'}]};
-const job=(patch:Partial<AikaJob>):AikaJob=>({id:'j1',status:'running',question:'What should I do next on this milestone?',milestoneId:'m-1',startedAt:'2026-10-29T11:00:00Z',elapsedMs:0,answer:null,error:null,model:'gemini-2.5-flash',...patch});
+const job=(patch:Partial<AikaJob>):AikaJob=>({id:'j1',status:'running',question:'How do I get started on what I chose?',milestoneId:'m-1',startedAt:'2026-10-29T11:00:00Z',elapsedMs:0,answer:null,error:null,model:'gemini-2.5-flash',...patch});
 const cap=(id:AikaCapability['id'],available=true):AikaCapability=>({id,label:'/'+id,description:`About ${id}`,available,reason:available?null:'Not available'});
 function Harness({dock=false}:{dock?:boolean}){
  const work=useMilestoneWork(api as never),repos=useRepositoryEvidence(api as never),aika=useAika(api as never);
@@ -34,20 +34,21 @@ it('keeps the original AiKA page: greeting, composer, suggestion cards, History 
  const history=Array.from(m.host.querySelectorAll('button')).find(b=>b.textContent==='History')!;
  expect(history.disabled).toBe(true);expect(history.title).toContain('isn’t available in this demo');
  expect(m.host.querySelectorAll('.pt-aika-grid button').length).toBe(4);
- expect(text()).toContain('You’re asking AiKA, not a person. To ask Maya, record a question on your milestone in My work.');
+ expect(text()).toContain('You’re asking AiKA, not a person. To ask your Champion, add a question to a milestone you’re working on.');
+ expect(text()).not.toContain('Chris');
 });
 
 it('asks through the Portal API, shows progress while it runs, then labelled sections and what was removed',async()=>{
  window.history.replaceState(null,'','/aika?milestone=m-1');
  await m.render(<Harness/>);await flush();await flush();
- expect(byLabel<HTMLSelectElement>(m.host,'Milestone for AiKA')!.value).toBe('m-1');
+ expect(byLabel<HTMLSelectElement>(m.host,'What AiKA should focus on')!.value).toBe('m:m-1');
  api.askAika.mockResolvedValue({job:job({}),duplicate:false});
  api.aikaStatus.mockResolvedValueOnce({job:job({elapsedMs:2000})}).mockResolvedValue({job:job({status:'succeeded',elapsedMs:4200,answer:{sections:[
   {kind:'known',text:'Your milestone is to assess payments-api readiness.'},{kind:'reported',text:'Alex reported a missing CODEOWNERS file.'},
   {kind:'suggestion',text:'Start with the repository settings.'},{kind:'unknown',text:'Which CI deploys it; ask Maya.'}],nextStep:'Mark action 1 started.',removed:1}})});
  vi.useFakeTimers();
- await click(m.host,'What should I do next on this milestone?');
- expect(api.askAika).toHaveBeenCalledWith('What should I do next on this milestone?','m-1',[]);
+ await click(m.host,'How do I get started on what I chose?');
+ expect(api.askAika).toHaveBeenCalledWith('How do I get started on what I chose?','m-1',['my-work'],null);
  expect(text()).toContain('AiKA is working on your question');
  expect(area().hasAttribute('disabled')).toBe(true);
  await act(async()=>{await vi.advanceTimersByTimeAsync(1000);});
@@ -80,7 +81,7 @@ it('the “/” menu: only usable capabilities, filtered as you type, keyboard s
  expect(Array.from(m.host.querySelectorAll('.pt-aika-chips .pt-aika-chip')).map(c=>c.textContent)).toEqual(['/repository']);
  api.askAika.mockResolvedValue({job:job({question:'Who owns it?',capabilities:['repository']}),duplicate:false});
  await key('Enter');await flush();
- expect(api.askAika).toHaveBeenCalledWith('Who owns it?',null,['repository']);
+ expect(api.askAika).toHaveBeenCalledWith('Who owns it?',null,['repository'],null);
  expect(m.host.querySelector('.pt-aika-user small')!.textContent).toBe('/repository');
  expect(m.host.querySelectorAll('.pt-aika-chips .pt-aika-chip').length).toBe(0);
 });
@@ -121,9 +122,9 @@ it('contextual AiKA (055): the corner mark opens “New AiKA Chat”, which asks
  expect(m.host.querySelector('[aria-label="Contextual AiKA"]')).toBeNull();
  await click(m.host,'Open AiKA');
  expect(text()).toContain('New AiKA Chat');
- api.askAika.mockResolvedValue({job:job({question:'What does my milestone depend on, and is it ready?',capabilities:['my-work']}),duplicate:false});
- await click(m.host,/\/my-work What does my milestone depend on/);await flush();
- expect(api.askAika).toHaveBeenCalledWith('What does my milestone depend on, and is it ready?',null,['my-work']);
+ api.askAika.mockResolvedValue({job:job({question:'How do I get started on what I chose?',capabilities:['my-work']}),duplicate:false});
+ await click(m.host,/\/my-work How do I get started on what I chose/);await flush();
+ expect(api.askAika).toHaveBeenCalledWith('How do I get started on what I chose?',null,['my-work'],null);
  await click(m.host,'Minimize AiKA');expect(m.host.querySelector('[aria-label="Contextual AiKA"]')).toBeNull();
 });
 
@@ -136,4 +137,15 @@ it('keeps what you typed when an earlier answer loads and the page switches to t
  await act(async()=>{resolve({job:job({status:'succeeded',question:'Earlier question',answer:{sections:[{kind:'unknown',text:'Not recorded.'}],nextStep:null,removed:0}})});});await flush();
  expect(text()).toContain('Earlier question');
  expect(area().value).toBe('Who owns payments-api?');
+});
+
+it('asks about an engineering opportunity from a link, so the answer is about that suggestion',async()=>{
+ window.history.replaceState(null,'','/aika?opportunity=o-owners');
+ const opp={id:'o-owners',kind:'improvement' as const,title:'Record who owns payments-api’s code',why:'w',basis:'sample' as const,evidence:[],steps:[],service:'payments-api',goal:null,priority:null,highlighted:false,pursuers:0,mine:false};
+ function WithOpportunity(){const work=useMilestoneWork(api as never),aika=useAika(api as never);return <AikaPage aika={aika} work={work} persona={alex} opportunities={[opp]}/>;}
+ await m.render(<WithOpportunity/>);await flush();await flush();
+ expect(byLabel<HTMLSelectElement>(m.host,'What AiKA should focus on')!.value).toBe('o:o-owners');
+ api.askAika.mockResolvedValue({job:job({question:'Where do I start?',milestoneId:null}),duplicate:false});
+ await type(area(),'Where do I start?');await click(m.host,'Ask AiKA');await flush();
+ expect(api.askAika).toHaveBeenCalledWith('Where do I start?',null,[],'o-owners');
 });

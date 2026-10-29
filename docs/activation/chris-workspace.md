@@ -1,5 +1,7 @@
 # Chris's customer activation workspace (Phase 3)
 
+> **Updated by the role redesign.** Where this page talks about assigned work, the Repository, Evidence or Team tabs, inspecting repositories by hand, "Ask Chris" or developer Insights, [roles-and-opportunities.md](roles-and-opportunities.md) is current: developers choose their work, the Portal observes repositories itself, and developers have **My progress**.
+
 Chris (operator persona) turns scattered customer information into a reviewed technical onboarding draft and marks it ready for Champion review. Everything here is operator-only. Nothing in this workspace reaches the Champion or developers.
 
 ## Flow

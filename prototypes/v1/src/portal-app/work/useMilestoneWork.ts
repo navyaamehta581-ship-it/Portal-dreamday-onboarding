@@ -19,9 +19,11 @@ export function useMilestoneWork(api:ReturnType<typeof activationClient>|null){
  useEffect(()=>{void load();},[load]);
  async function write(milestoneId:string,send:(revision:number)=>Promise<TeamProgress>){
   const m=progress?.milestones.find(x=>x.id===milestoneId);
-  if(!api||!m?.detail||busy)return false;
+  // Choosing a milestone works from its outline; every other change needs the viewer's own detail.
+  const revision=m?.detail?.revision??m?.revision;
+  if(!api||!m||revision===undefined||busy)return false;
   setBusy(milestoneId);setError(null);
-  try{setProgress(await send(m.detail.revision));return true;}
+  try{setProgress(await send(revision));return true;}
   catch(e){
    const code=e instanceof Error?e.message:'ACTIVATION_UNAVAILABLE';
    setError({code,milestoneId,issues:e instanceof ActivationRequestError?(e.details as {issues?:string[]}|null)?.issues:undefined});

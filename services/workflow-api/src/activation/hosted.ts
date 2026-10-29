@@ -83,7 +83,7 @@ export function createHostedActivation(c:HostedConfig){
  const is=(r:IncomingMessage,t:string)=>{const b=Buffer.from(bearer(r)),e=Buffer.from(t);return b.length===e.length&&timingSafeEqual(b,e);};
  const developerName=(r:IncomingMessage)=>{const id=Object.entries(tokens.developers).find(([,t])=>is(r,t))?.[0];return DEMO_PERSONAS.find(p=>p.id===id)?.name??null;};
  const known=(r:IncomingMessage)=>is(r,tokens.developer)||is(r,tokens.operator)||is(r,tokens.champion)||!!developerName(r);
- const options:ActivationOptions={store:services.store,handoff:services.handoff,work:services.work,aika:services.aika,repositories:services.repositories,insights:services.insights,
+ const options:ActivationOptions={store:services.store,handoff:services.handoff,work:services.work,aika:services.aika,repositories:services.repositories,insights:services.insights,opportunities:services.opportunities,
   championApproval:true,developerName,isOperator:r=>is(r,tokens.operator),isChampion:r=>is(r,tokens.champion),
   reportProgress:services.reports.progress,reportBlocker:services.reports.submit,prepareGitHub:services.github.prepare,initialPlan:services.initialPlan,
   authorize(r,customerId){

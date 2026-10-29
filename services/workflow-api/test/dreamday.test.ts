@@ -73,7 +73,7 @@ test('Dream Day end to end: review, edit and assign, request changes, resubmit, 
   // 3. Maya edits, adds Jordan's milestone with a dependency, assigns both, adds a question, and saves.
   const plan={goals:view.plan!.goals,questions:[...view.plan!.questions,{id:'q-maya',text:'Who owns the runbooks today?',origin:'champion'}],
    milestones:[{...view.plan!.milestones[0],assignee:'Alex Rivera',edited:true},milestone('m-jordan','Validate payments-api and docs discoverability','Jordan Lee',['m-1'])].map(m=>m.id==='m-jordan'?{...m,origin:'champion'}:m)};
-  const saved=await call('aperture','champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan});
+  const saved=await call('aperture','champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan},'Maya Chen');
   assert.equal(saved.status,200,saved.raw);
   assert.equal((await call('aperture','champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan})).json.error.code,'REVISION_CONFLICT','stale save refused');
   view=(await call('aperture','champion-review','champ')).json;
@@ -87,7 +87,9 @@ test('Dream Day end to end: review, edit and assign, request changes, resubmit, 
   assert.equal((await call('aperture','state','dev')).status,404,'returned plans never reach developers');
   const chris:HandoffRecord=(await call('aperture','handoff','op')).json.drafts[0];
   assert.equal(chris.status,'changes_requested');
-  assert.deepEqual(chris.history!.map(e=>[e.action,e.by]),[['submitted','Chris'],['changes_requested','Maya Chen']]);assert.match(chris.history![1].comment!,/which CI system/);
+  // Chris sees what Maya changed (by count, no content) without having to approve it again.
+  assert.deepEqual(chris.history!.map(e=>[e.action,e.by]),[['submitted','Chris'],['edited','Maya Chen'],['changes_requested','Maya Chen']]);
+  assert.equal(chris.history![1].comment,'Added 1 milestone, edited 1 milestone, added 1 question.');assert.match(chris.history![2].comment!,/which CI system/);
   assert.equal(chris.review!.milestones[1].assignee,'Jordan Lee','Maya’s edits carry back to Chris');
   const revised={...chris.review!,problem:{...chris.review!.problem,unknowns:[...chris.review!.problem.unknowns,{id:'u-ci',text:'Deploys use GitHub Actions; Jenkins is retired (confirmed with Maya)',origin:'chris' as const}]}};
   assert.equal((await call('aperture','handoff-reviews','op',{draft:1,expectedRevision:chris.reviewRevision,review:revised})).status,200);
@@ -101,22 +103,23 @@ test('Dream Day end to end: review, edit and assign, request changes, resubmit, 
   const approved=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen');
   assert.equal(approved.json.status,'published',approved.raw);assert.equal(approved.json.approval.by,'Maya Chen');
   assert.equal((await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+1,decision:'approve',confirmed:true})).json.error.code,'ALREADY_APPROVED');
-  // 6–7. Alex and Jordan each see only their approved work; 8. Chris sees the approval; Maya sees the whole plan.
+  // 6–7. Alex and Jordan see the whole approved plan, the work suggested for them first; 8. Chris sees the approval.
   const state=async(token:string,actor:string)=>{const r=await call('aperture','state',token,undefined,actor);for(const x of PRIVATE)assert.ok(!r.raw.includes(x),`${actor} state leaked ${x}`);return r.json;};
   const alex=await state('alex','Alex Rivera'),jordan=await state('jordan','Jordan Lee'),maya=await state('champ','Maya Chen');
-  assert.deepEqual(alex.handoff.milestones.map((m:{objective:string})=>m.objective),['Assess payments-api repository readiness']);
-  assert.deepEqual(jordan.handoff.milestones.map((m:{objective:string;dependencies:string[]})=>[m.objective,m.dependencies]),[['Validate payments-api and docs discoverability',['Assess payments-api repository readiness']]]);
+  assert.deepEqual(alex.handoff.milestones.map((m:{objective:string})=>m.objective),['Assess payments-api repository readiness','Validate payments-api and docs discoverability']);
+  assert.deepEqual(jordan.handoff.milestones.map((m:{objective:string;dependencies:string[]})=>[m.objective,m.dependencies]),[['Validate payments-api and docs discoverability',['Assess payments-api repository readiness']],['Assess payments-api repository readiness',[]]]);
   assert.equal(jordan.plan.selectedMilestone.outcome,'Validate payments-api and docs discoverability');
   assert.deepEqual(maya.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Alex Rivera','Jordan Lee']);
   assert.equal(alex.handoff.approval.by,'Maya Chen');
   const sam=await state('sam','Sam Nobody');
   // A forged name header on the shared credential grants no identity: no personal filtering, no work updates.
-  assert.equal((await call('aperture','milestone-updates','dev',{milestoneId:'m-1',expectedRevision:0,action:{index:0,status:'started'}},'Alex Rivera')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED');assert.deepEqual(sam.handoff.milestones,[]);assert.equal(sam.plan.selectedMilestone.outcome,'No approved work is assigned to you yet');
+  assert.equal((await call('aperture','milestone-updates','dev',{milestoneId:'m-1',expectedRevision:0,action:{index:0,status:'started'}},'Alex Rivera')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED');assert.equal(sam.handoff.milestones.length,2,'a developer on the team sees the approved plan too');assert.equal(sam.plan.selectedMilestone.outcome,'Assess payments-api repository readiness','nothing suggested for Sam: the plan’s first milestone');
   const final:HandoffRecord=(await call('aperture','handoff','op')).json.drafts[0];
   assert.equal(final.status,'published');assert.equal(final.approvals!.champion.by,'Maya Chen');
-  assert.deepEqual(final.history!.map(e=>e.action),['submitted','changes_requested','resubmitted','approved','published']);
+  assert.deepEqual(final.history!.map(e=>e.action),['submitted','edited','changes_requested','resubmitted','approved','published']);
   // The same milestones in every view.
-  assert.deepEqual(maya.handoff.milestones.map((m:{id:string})=>m.id),[...alex.handoff.milestones,...jordan.handoff.milestones].map((m:{id:string})=>m.id));
+  const ids=(x:{handoff:{milestones:{id:string}[]}})=>x.handoff.milestones.map(m=>m.id).sort();
+  assert.deepEqual(ids(alex),ids(maya));assert.deepEqual(ids(jordan),ids(maya));
  }finally{await h.close();}
 });
 
@@ -136,10 +139,7 @@ test('authorization: only the customer’s Champion can review or decide; the ol
   for(const [path,body] of [['handoff-publications',{draft:1,fromReview:true,outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true}],['intake',{briefing:'x',outcome:'y',agreedBy:'z',agreementConfirmed:true}],['state',{context:{}}]] as const)
    assert.equal((await call('aperture',path,'op',body)).json.error.code,'CHAMPION_APPROVAL_REQUIRED',path);
   assert.equal((await call('aperture','state','dev')).status,404);
-  // Approval needs an explicit assignee on every milestone.
-  const incomplete=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:rev,decision:'approve',confirmed:true});
-  assert.equal(incomplete.json.error.code,'REVIEW_INCOMPLETE');assert.deepEqual(incomplete.json.error.details.issues.map((i:{label:string;reason:string})=>[i.label,i.reason]),[['Milestone 1 · assignee','unassigned']]);
-  // A Champion can't assign work to someone outside the technical team (e.g. the account executive).
+  // A Champion can't suggest work for someone outside the technical team (e.g. the account executive).
   const view=(await call('aperture','champion-review','champ')).json;
   await call('aperture','champion-reviews','champ',{draft:1,expectedRevision:rev,plan:{goals:view.plan.goals,questions:view.plan.questions,milestones:[{...view.plan.milestones[0],assignee:'Jamie Park'}]}});
   const wrong=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:rev+1,decision:'approve',confirmed:true});
@@ -165,7 +165,7 @@ test('withdrawn or changed drafts cannot be approved; edits and decisions surviv
   h=await harness(join(dir,'db.sqlite'));
   view=(await h.call('aperture','champion-review','champ')).json;
   assert.equal(view.status,'resubmitted');assert.equal(view.plan.milestones[0].assignee,'Alex Rivera');
-  assert.deepEqual(view.history.map((e:{action:string})=>e.action),['submitted','withdrawn','resubmitted']);
+  assert.deepEqual(view.history.map((e:{action:string})=>e.action),['submitted','edited','withdrawn','resubmitted']);
   await h.close();
  }finally{rmSync(dir,{recursive:true,force:true});}
 });

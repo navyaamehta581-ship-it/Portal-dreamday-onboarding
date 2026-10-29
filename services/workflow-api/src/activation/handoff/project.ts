@@ -22,7 +22,7 @@ export function technicalNotes(u:Understanding,m:MilestoneDraft|null):TechnicalN
  const status=(t:string)=>{const f=pick(t);return f?.status==='verified'?'verified':f?.status==='assumption'||f?.status==='contradicted'?'assumption':'reported';};
  const notes:TechnicalNote[]=[];const name=m?.system.service??u.entities.services[0]??'the service';const Name=name==='the service'?'The service':name;
  const repo=pick('Repository'),scm=pick('Source control');
- if(repo||scm)notes.push({topic:'Repository',status:status(repo?'Repository':'Source control'),text:`${repo?plain(repo.statement):`The repository for ${name} is not identified yet`}${scm?` on ${u.entities.scm}`:''}. Start by inspecting it from the Repository tab; the inspection is read-only and records what it finds as evidence.`});
+ if(repo||scm)notes.push({topic:'Repository',status:status(repo?'Repository':'Source control'),text:`${repo?plain(repo.statement):`The repository for ${name} is not identified yet`}${scm?` on ${u.entities.scm}`:''}. The Portal observes connected repositories read-only and records what it finds; nobody has to set this up.`});
  const own=pick('Ownership');
  if(own||!m||m.id.startsWith('service_readiness')||m.id.startsWith('techdocs'))notes.push({topic:'Ownership',status:own?status('Ownership'):'assumption',text:own?.status==='contradicted'?`Sources disagree about who owns ${name}. Confirm the owning team with its maintainers before writing it into catalog-info.yaml.`:own&&/reported as/.test(own.statement)?`${plain(own.statement)}, but this hasn't been confirmed by that team. Confirm it before using it in catalog metadata.`:`No confirmed owner for ${name}. Catalog registration needs one, so confirm it with the maintainers rather than inferring it from commit history.`});
  const cat=pick('Catalog metadata');
@@ -42,7 +42,7 @@ export function developerSummary(m:MilestoneDraft|null,u:Understanding):string{
  return `Your first milestone: ${m.objective.charAt(0).toLowerCase()+m.objective.slice(1)}${where}. ${m.why.split(/(?<=\.)\s/)[0]}`;
 }
 
-const WITHHELD='Milestone text withheld: it contained private customer context. Ask Chris for a revised version.';
+const WITHHELD='Milestone text withheld: it contained private customer context. Ask your Champion about it.';
 /** Last screen before anything reaches a developer: every milestone field passes the same check as model output,
  * whoever wrote it (model, rule-based templates or Chris's edits). Unsafe list items are removed, unsafe prose replaced. */
 export function screenMilestone(m:MilestoneDraft,u:Understanding):MilestoneDraft{
@@ -79,13 +79,14 @@ export function legacyHandoff(state:ActivationState):DeveloperHandoff{
 }
 
 /** Field-level projection for developer principals. Applied server-side to every state response. */
-/** Who is reading: the Champion sees the whole approved plan; a developer sees the approved milestones assigned to
- * them (identified by the session layer). Plans published before Dream Day keep the earlier shared view. */
+/** Who is reading. Everyone on the team sees the whole approved plan: developers choose the milestones they pursue.
+ * For a developer, a milestone the Champion suggested for them comes first. Plans published before Dream Day keep the
+ * earlier shared view. */
 export type Viewer={role:'developer'|'champion';actor:string|null};
 export function developerState(state:ActivationState,stored:DeveloperHandoff|null,viewer:Viewer={role:'developer',actor:null}):ActivationState&{handoff:DeveloperHandoff}{
  let h=stored??legacyHandoff(state);
  const personal=!!stored?.approval&&viewer.role==='developer'&&!!viewer.actor;
- if(personal)h={...h,milestones:h.milestones.filter(x=>x.assignmentStatus==='approved'&&x.proposedAssignee===viewer.actor)};
+ if(personal)h={...h,milestones:[...h.milestones].filter(x=>x.assignmentStatus==='approved').sort((a,b)=>Number(b.proposedAssignee===viewer.actor)-Number(a.proposedAssignee===viewer.actor))};
  const m=h.milestones[0]??null;
  const s=structuredClone(state) as ActivationState&{handoff:DeveloperHandoff};
  s.context.briefing=h.summary;
@@ -99,11 +100,11 @@ export function developerState(state:ActivationState,stored:DeveloperHandoff|nul
  // Plan text comes from the approved milestone only. Replacement plans after a blocker keep the
  // developer's own blocker wording, which they wrote.
  if(personal&&!m){
-  // An approved plan with nothing for this developer: say so rather than show someone else's work.
-  s.plan.selectedMilestone={...s.plan.selectedMilestone,outcome:'No approved work is assigned to you yet',successCriteria:[]};
-  s.plan.prerequisites=[];s.plan.rationale='Your Champion assigns approved work to developers.';
-  s.plan.suggestedNextAction={...s.plan.suggestedNextAction,description:'Ask your Champion which milestone you should pick up.'};
-  s.context.agreedGoal={...s.context.agreedGoal,text:'No approved work is assigned to you yet'};
+  // An approved plan without milestones: say so rather than invent work.
+  s.plan.selectedMilestone={...s.plan.selectedMilestone,outcome:'Your team’s plan has no milestones yet',successCriteria:[]};
+  s.plan.prerequisites=[];s.plan.rationale='Developers choose the milestones and opportunities they pursue.';
+  s.plan.suggestedNextAction={...s.plan.suggestedNextAction,description:'Look at your team’s engineering opportunities and choose one to pursue.'};
+  s.context.agreedGoal={...s.context.agreedGoal,text:'Your team’s plan has no milestones yet'};
  } else if(m){
   s.plan.selectedMilestone={...s.plan.selectedMilestone,outcome:m.objective,successCriteria:m.completionCriteria};
   const added=state.plan.prerequisites.filter(p=>p.description.startsWith('Confirm the attributed blocker'));

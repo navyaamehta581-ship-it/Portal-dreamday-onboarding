@@ -25,10 +25,10 @@ export function openWorkStore(filename:string){
 }
 export type WorkStore=ReturnType<typeof openWorkStore>;
 
-type Work=MilestoneWorkRecord&{developerRevision:number;review:NonNullable<MilestoneWorkRecord['review']>|null;updates:(WorkUpdate&{role:'developer'|'champion';replyTo:string|null})[]};
+type Work=MilestoneWorkRecord&{workingOn:string[];developerRevision:number;review:NonNullable<MilestoneWorkRecord['review']>|null;updates:(WorkUpdate&{role:'developer'|'champion';replyTo:string|null})[]};
 const blank=(m:MilestoneDraft):MilestoneWorkRecord=>({milestoneId:m.id,revision:0,explicit:null,actions:m.actions.map(()=>({status:'not_started',at:null,by:null})),updates:[],updatedAt:null,updatedBy:null,developerRevision:0,review:null});
 // Records written before Phase 6 have no roles, replies, review or developer revision: they were all the developer's.
-const normal=(w:MilestoneWorkRecord):Work=>({...w,developerRevision:w.developerRevision??w.revision,review:w.review??null,updates:w.updates.map(u=>({...u,role:u.role??'developer',replyTo:u.replyTo??null}))});
+const normal=(w:MilestoneWorkRecord):Work=>({...w,workingOn:w.workingOn??[],developerRevision:w.developerRevision??w.revision,review:w.review??null,updates:w.updates.map(u=>({...u,role:u.role??'developer',replyTo:u.replyTo??null}))});
 const answered=(w:Work,id:string)=>w.updates.some(u=>u.replyTo===id);
 const openBlockers=(w:Work)=>w.updates.filter(u=>u.kind==='blocker'&&!u.resolved).length;
 const openQuestions=(w:Work)=>w.updates.filter(u=>u.kind==='question'&&!answered(w,u.id)).length;
@@ -67,7 +67,10 @@ export function createWorkService(deps:{published:(p:Principal)=>DeveloperHandof
   const works=new Map(h.milestones.map(m=>[m.id,record(p,m)]));
   const status=new Map(h.milestones.map(m=>[m.id,statusOf(works.get(m.id)!)]));
   const milestones=h.milestones.map(m=>{
-   const w=works.get(m.id)!,s=status.get(m.id)!,mine=viewer.role==='developer'&&!!viewer.name&&m.proposedAssignee===viewer.name;
+   const w=works.get(m.id)!,s=status.get(m.id)!;
+   // A developer's own milestone: one they chose to work on, or one the Champion suggested for them.
+   const suggestedForMe=viewer.role==='developer'&&!!viewer.name&&m.proposedAssignee===viewer.name;
+   const mine=suggestedForMe||(viewer.role==='developer'&&!!viewer.name&&w.workingOn.includes(viewer.name));
    // Another developer's workspace (their notes and action-level progress) stays theirs; the Champion and Chris see all.
    const full=mine||viewer.role!=='developer';
    const dependsOn=depsOf(m,byTitle).map(d=>({id:d.id,title:d.objective,assignee:d.proposedAssignee??null,status:status.get(d.id)!}));
@@ -75,7 +78,8 @@ export function createWorkService(deps:{published:(p:Principal)=>DeveloperHandof
    const attention:AttentionReason[]=[...(s==='blocked'?['blocked' as const]:[]),...(openBlockers(w)&&s!=='blocked'?['open_blocker' as const]:[]),...(openQuestions(w)?['open_question' as const]:[]),
     ...(reviewState==='awaiting_review'?['awaiting_review' as const]:[]),...(reviewState==='reviewed_outdated'?['review_outdated' as const]:[]),
     ...(s!=='completed'&&s!=='not_started'&&dependsOn.some(d=>d.status!=='completed')?['waiting_on_dependency' as const]:[])];
-   return {id:m.id,title:m.objective,assignee:m.proposedAssignee??null,status:s,openBlockers:openBlockers(w),mine,dependsOn,
+   return {id:m.id,title:m.objective,assignee:m.proposedAssignee??null,status:s,openBlockers:openBlockers(w),mine,dependsOn,workingOn:[...w.workingOn],suggestedForMe,revision:w.revision,
+    outline:{description:m.why,system:[m.system.service,m.system.repository].filter(Boolean).join(' · ')||null,actions:[...m.actions],completionCriteria:[...m.completionCriteria]},
     openQuestions:openQuestions(w),openFollowUps:openFollowUps(w),actionsCompleted:w.actions.filter(a=>a.status==='completed').length,actionsTotal:m.actions.length,
     reviewState,review:w.review,attention,latest:full&&last?{at:last.at,by:last.by,kind:last.kind}:null,
     detail:full?{description:m.why,system:[m.system.service,m.system.repository].filter(Boolean).join(' · ')||null,
@@ -100,20 +104,28 @@ export function createWorkService(deps:{published:(p:Principal)=>DeveloperHandof
   const at=new Date(now()).toISOString();
   deps.work.save(p,{...next,revision:w.revision+1,developerRevision:w.developerRevision+(developerChange?1:0),updatedAt:at,updatedBy:by});
  };
- const copy=(w:Work):Work=>({...w,actions:w.actions.map(a=>({...a})),updates:[...w.updates]});
+ const copy=(w:Work):Work=>({...w,actions:w.actions.map(a=>({...a})),updates:[...w.updates],workingOn:[...w.workingOn]});
 
  /** The assignee's changes. One change per request: an action status, a note or reply, resolving a blocker, or the milestone status. */
  function update(p:Principal,developer:string|null,input:unknown){
-  const b=input as {milestoneId?:unknown;expectedRevision?:unknown;action?:{index?:unknown;status?:unknown};note?:{kind?:unknown;text?:unknown;evidence?:unknown;replyTo?:unknown};resolve?:unknown;status?:unknown};
+  const b=input as {milestoneId?:unknown;expectedRevision?:unknown;pursue?:unknown;action?:{index?:unknown;status?:unknown};note?:{kind?:unknown;text?:unknown;evidence?:unknown;replyTo?:unknown};resolve?:unknown;status?:unknown};
   if(!b||typeof b!=='object'||typeof b.milestoneId!=='string'||!Number.isSafeInteger(b.expectedRevision))fail('INVALID_REQUEST');
   // Identity comes from the developer's own credential; a shared or missing identity cannot change work.
   if(!developer)fail('DEVELOPER_IDENTITY_REQUIRED');
   const {m,byTitle,w}=target(p,b);
-  if(m.proposedAssignee!==developer)fail('NOT_ASSIGNEE');
   if(w.revision!==b.expectedRevision)fail('REVISION_CONFLICT');
-  const at=new Date(now()).toISOString(),changes=[b.action,b.note,b.resolve,b.status].filter(x=>x!==undefined).length;
+  const at=new Date(now()).toISOString(),changes=[b.action,b.note,b.resolve,b.status,b.pursue].filter(x=>x!==undefined).length;
   if(changes!==1)fail('INVALID_REQUEST');
   const next=copy(w);let developerChange=true;
+  // Choosing (or stopping) work is open to any developer on the team; nothing else changes.
+  if(b.pursue!==undefined){
+   if(typeof b.pursue!=='boolean')fail('INVALID_REQUEST');
+   next.workingOn=b.pursue?[...new Set([...w.workingOn,developer!])]:w.workingOn.filter(x=>x!==developer);
+   commit(p,w,next,developer!,false);
+   return view(p,{role:'developer',name:developer});
+  }
+  // Everything else: only someone working on the milestone, or the developer the Champion suggested for it.
+  if(m.proposedAssignee!==developer&&!w.workingOn.includes(developer!))fail('NOT_ASSIGNEE');
   if(b.action!==undefined){
    const i=b.action?.index,s=b.action?.status as ActionStatus;
    if(!Number.isSafeInteger(i)||(i as number)<0||(i as number)>=m.actions.length||!ACTION.includes(s))fail('INVALID_REQUEST');

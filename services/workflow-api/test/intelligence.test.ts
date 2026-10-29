@@ -198,7 +198,7 @@ test('developer-safe screen and AiKA context boundary',()=>{
  assert.equal(planInput({...ruleBasedAnalysis(APERTURE).understanding}).problems.length>=0,true);
 });
 
-test('HTTP Dream Day: model draft → Chris submits → Champion approves; each developer receives only their approved work',async()=>{
+test('HTTP Dream Day: model draft → Chris submits → Champion approves; each developer sees the approved plan, their suggested work first',async()=>{
  const {createApp}=await import('../src/app.ts');const {openGoalStore}=await import('../src/store.ts');
  const {openActivationStore}=await import('../src/activation/store.ts');const {createIntake}=await import('../src/activation/intake.ts');
  const {openHandoffStore}=await import('../src/activation/handoff/store.ts');const {createHandoffService}=await import('../src/activation/handoff/service.ts');
@@ -230,9 +230,10 @@ test('HTTP Dream Day: model draft → Chris submits → Champion approves; each 
   assert.equal(ok.status,'published');assert.deepEqual(ok.approval.by,'Maya Chen');
   const as=async(actor:string|null,token='dev')=>{const raw=await (await call('state',token,undefined,actor??undefined)).text();for(const x of [...PRIVATE,'Call with Maya','My notes'])assert.ok(!raw.includes(x),'state leaked '+x);return JSON.parse(raw);};
   const alex=await as(null,'alex'),jordan=await as(null,'jordan'),maya=await as('Maya Chen','champ');
-  assert.deepEqual(alex.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Alex Rivera']);
-  assert.deepEqual(jordan.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Jordan Lee']);
-  assert.notEqual(alex.plan.selectedMilestone.outcome,jordan.plan.selectedMilestone.outcome,'different work for different people');
+  // Everyone sees the whole approved plan (developers choose their work); the milestone suggested for them comes first.
+  assert.deepEqual(alex.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Alex Rivera','Jordan Lee']);
+  assert.deepEqual(jordan.handoff.milestones.map((m:{proposedAssignee:string})=>m.proposedAssignee),['Jordan Lee','Alex Rivera']);
+  assert.notEqual(alex.plan.selectedMilestone.outcome,jordan.plan.selectedMilestone.outcome,'each starts from the work suggested for them');
   assert.deepEqual(maya.handoff.milestones.map((m:{proposedAssignee:string;assignmentStatus:string})=>[m.proposedAssignee,m.assignmentStatus]),[['Alex Rivera','approved'],['Jordan Lee','approved']]);
   assert.deepEqual(maya.handoff.team.map((x:{name:string})=>x.name),['Maya Chen','Alex Rivera','Jordan Lee']);
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();await s.close();}

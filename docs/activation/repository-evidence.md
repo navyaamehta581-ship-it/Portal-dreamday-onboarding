@@ -1,5 +1,7 @@
 # Repository evidence (Phase 7)
 
+> **Updated by the role redesign.** Where this page talks about assigned work, the Repository, Evidence or Team tabs, inspecting repositories by hand, "Ask Chris" or developer Insights, [roles-and-opportunities.md](roles-and-opportunities.md) is current: developers choose their work, the Portal observes repositories itself, and developers have **My progress**.
+
 Alex, Jordan and Maya can see read-only evidence about the repositories their approved milestones rely on. Chris sees the same evidence without being able to start an inspection. The evidence appears in **My work**, in **Team Coordination → Team overview** and in Chris's **Developer Progress**, and AiKA can cite it.
 
 ## Three kinds of information, never mixed

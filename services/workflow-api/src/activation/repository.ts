@@ -242,16 +242,17 @@ export function createRepositoryService(deps:{config:RepositoryConfig[];store:Re
  const running=new Map<string,Promise<RepositoryInspection>>();
  function plan(p:Principal){const h=deps.published(p);if(!h?.approval)fail('NO_APPROVED_PLAN');return h!;}
  const mine=(m:MilestoneDraft,v:Viewer)=>v.role!=='developer'||(!!v.name&&m.proposedAssignee===v.name);
- function views(p:Principal,v:Viewer){
+ // Everyone on the team may see observations of the repositories the approved plan relies on: developers choose
+ // their work, so evidence isn't limited to milestones someone was assigned.
+ function views(p:Principal,_v:Viewer){
   const h=plan(p);
-  return deps.config.filter(c=>c.customerId===p.customerId).map(c=>({c,ms:h.milestones.filter(m=>relevant(c,m))}))
-   // Developers see repositories relevant to their own approved milestones; the Champion and Chris see all.
-   .filter(({ms})=>ms.some(m=>mine(m,v))||(v.role!=='developer'&&ms.length>0));
+  return deps.config.filter(c=>c.customerId===p.customerId).map(c=>({c,ms:h.milestones.filter(m=>relevant(c,m))})).filter(({ms})=>ms.length>0);
  }
  function view(p:Principal,v:Viewer):RepositoryEvidence{
   return {repositories:views(p,v).map(({c,ms}):RepositoryEvidenceView=>{
    const history=deps.store.list(p,c.id),latest=history[0]??null,evidence=history.find(i=>i.status!=='failed')??null;
-   return {id:c.id,label:c.label,repository:c.repository,mode:c.mode,canInspect:v.role==='champion'||(v.role==='developer'&&!!v.name&&ms.some(m=>mine(m,v))),
+   // Nobody inspects by hand: the Portal observes configured repositories itself (Spotify's integration).
+   return {id:c.id,label:c.label,repository:c.repository,mode:c.mode,canInspect:false,
     milestones:ms.filter(m=>mine(m,v)).map(m=>({id:m.id,title:m.objective,assignee:m.proposedAssignee??null,
      focus:focusOf([m.objective,m.why,...m.actions,...m.completionCriteria].join(' ')),
      actionLinks:m.actions.map((a,index)=>({index,signals:focusOf(a)})).filter(x=>x.signals.length)})),
@@ -265,14 +266,16 @@ export function createRepositoryService(deps:{config:RepositoryConfig[];store:Re
   if(v.role==='operator')fail('FORBIDDEN');
   if(v.role==='developer'&&!v.name)fail('DEVELOPER_IDENTITY_REQUIRED');
   const found=views(p,v).find(x=>x.c.id===b.repositoryId)??fail('NOT_FOUND');
-  if(v.role==='developer'&&!found!.ms.some(m=>mine(m,v)))fail('FORBIDDEN');
-  const c=found!.c,key=JSON.stringify([p.tenantId,p.customerId,p.sessionId,c.id]);
+  return inspectAs(p,found!.c,v.name??v.role);
+ }
+ async function inspectAs(p:Principal,c:RepositoryConfig,by:string){
+  const key=JSON.stringify([p.tenantId,p.customerId,p.sessionId,c.id]);
   const last=deps.store.list(p,c.id,1)[0];
   if(running.has(key))return {inspection:await running.get(key)!,reused:true};
   // A recent inspection is returned instead of asking GitHub again.
   if(last&&now()-Date.parse(last.completedAt)<cooldown)return {inspection:last,reused:true};
   const source=c.mode==='live'?githubSource(c.repository,deps.github??{}):fixtureSource(c);
-  const job=analyse(source,c,c.mode,()=>new Date(now()).toISOString(),v.name??v.role).then(i=>{deps.store.save(p,i);return i;}).finally(()=>running.delete(key));
+  const job=analyse(source,c,c.mode,()=>new Date(now()).toISOString(),by).then(i=>{deps.store.save(p,i);return i;}).finally(()=>running.delete(key));
   running.set(key,job);
   return {inspection:await job,reused:false};
  }
@@ -283,6 +286,12 @@ export function createRepositoryService(deps:{config:RepositoryConfig[];store:Re
    line:`[${o.id}] ${o.mode==='fixture'?'SAMPLE (fixture data for a fictional repository, not a live observation)':o.status==='observed'?'OBSERVED (live, read-only)':o.status==='missing'?'NOT FOUND (live listing)':o.status==='inaccessible'?'NOT READABLE':'NOT INSPECTED'} ${r.repository}${o.commit?`@${o.commit.slice(0,12)}`:''} ${o.signal}: ${o.summary}${o.limitation?` Limitation: ${o.limitation}`:''}`})):[]);
   return {lines,inspected:list.some(r=>r.evidence&&!r.stale&&r.mode==='live'&&r.evidence.observations.some(o=>o.status==='observed'))};
  }
- return {view,inspect,forAika};
+ /** Spotify's side: observe every configured repository the approved plan relies on, read-only, without anyone
+  * having to connect or inspect anything. Recent observations are reused (cooldown); failures are recorded, not thrown. */
+ async function observe(p:Principal){
+  let found:{c:RepositoryConfig}[]=[];try{found=views(p,{role:'champion',name:null});}catch{return [];}
+  return Promise.all(found.map(({c})=>inspectAs(p,c,'Spotify integration').then(r=>r.inspection).catch(()=>null)));
+ }
+ return {view,inspect,forAika,observe};
 }
 export type RepositoryService=ReturnType<typeof createRepositoryService>;

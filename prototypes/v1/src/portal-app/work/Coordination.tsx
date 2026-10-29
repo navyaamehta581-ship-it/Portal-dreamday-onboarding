@@ -2,8 +2,6 @@ import {useState} from 'react';
 import {RefreshCw} from 'lucide-react';
 import type {AttentionReason,MilestoneProgress,WorkUpdate} from '../../../../../contracts/activation/v1/handoff';
 import {Thread,isOpen,when} from './Thread';
-import {RepositoryPanel} from './RepositoryEvidence';
-import {repositoryProblem,type RepositoryEvidenceSession} from './useRepositoryEvidence';
 import {REVIEW_LABEL,STATUS_LABEL,statusTone,workProblem,type MilestoneWorkSession} from './useMilestoneWork';
 
 const ACTION_LABEL={not_started:'Not started',started:'Started',blocked:'Blocked',completed:'Completed'} as const;
@@ -12,7 +10,7 @@ const reviewTone=(s:MilestoneProgress['reviewState'])=>s==='reviewed'?'green':s=
 
 /** Team progress from the server's progress records. The Champion coordinates and reviews here; Chris sees the same
  * view read-only. Every number comes from the server, so this view, Chris's and the developers' always agree. */
-export function CoordinationView({work,repos,mode}:{work:MilestoneWorkSession;repos?:RepositoryEvidenceSession;mode:'champion'|'observer'}){
+export function CoordinationView({work,mode}:{work:MilestoneWorkSession;mode:'champion'|'observer'}){
  const {progress,loading,error}=work,champion=mode==='champion';
  if(!progress)return <p className="pt-note" role={error&&!loading?'alert':'status'}>{loading?'Loading team progress…':error?workProblem(error):''}</p>;
  const s=progress.summary,attention=progress.milestones.filter(m=>m.attention?.length);
@@ -35,14 +33,8 @@ export function CoordinationView({work,repos,mode}:{work:MilestoneWorkSession;re
    {attention.length?<ul className="pt-milestones">{attention.map(m=><li key={m.id}><div><strong><a href={`#coord-${m.id}`}>{m.title}</a></strong><p>{m.assignee??'Unassigned'} · {m.attention!.map(r=>REASON[r]).join(' · ')}</p></div></li>)}</ul>
     :<p className="pt-note">Nothing is blocked, waiting for an answer or waiting for review.</p>}
   </section>
-  <section className="pt-card" aria-label="Evidence">
-   <h3>Evidence</h3>
-   <p className="pt-note">Repository observations below are what the Portal retrieved itself, read-only (or sample data, labelled as such). References developers add to their notes appear with each milestone as <strong>reported</strong>, not verified.</p>
-   {progress.verifiedEvidence?.length?<><p className="pt-label" style={{marginTop:16}}>Other observations recorded by the Portal</p><ul className="pt-plain-list">{progress.verifiedEvidence.map(e=><li key={e}><span className="pt-pill green">Observed</span> {e}</li>)}</ul></>:null}
-   {repos&&!repos.data&&!repos.loading&&repos.error&&<p className="pt-note" role="status">{repositoryProblem(repos.error.code)}</p>}
-   {repos?.data&&!repos.data.repositories.length&&<p className="pt-note">No repository is configured for this team’s approved work, so nothing about its repositories is verified.</p>}
-  </section>
-  {repos?.data?.repositories.map(r=><RepositoryPanel key={r.id} repo={r} repos={repos} canInspect={champion&&r.canInspect}/>)}
+  {/* Repository observations are Spotify's integration, not the Champion's job: they reach the team through the
+   suggested opportunities and AiKA, not as a panel to check here. */}
   {progress.milestones.map(m=><MilestoneCoordination key={m.id} m={m} work={work} champion={champion}/>)}
  </div>;
 }
@@ -58,7 +50,7 @@ function MilestoneCoordination({m,work,champion}:{m:MilestoneProgress;work:Miles
   <div className="pt-card-head"><h3>{m.title}</h3><span style={{display:'flex',gap:8,flexWrap:'wrap'}}>
    <span className={'pt-pill '+statusTone(m.status)} data-testid="coord-status">{STATUS_LABEL[m.status]}</span>
    {m.reviewState&&m.reviewState!=='none'&&<span className={'pt-pill '+reviewTone(m.reviewState)} data-testid="review-state">{REVIEW_LABEL[m.reviewState]}</span>}</span></div>
-  <p className="pt-note" style={{marginTop:6}}>{m.assignee??'Unassigned'} · {m.actionsCompleted??0} of {m.actionsTotal??0} actions completed
+  <p className="pt-note" style={{marginTop:6}}>{m.workingOn?.length?`Working on it: ${m.workingOn.join(', ')}`:m.assignee?`Suggested for ${m.assignee}`:'Nobody has picked it up yet'} · {m.actionsCompleted??0} of {m.actionsTotal??0} actions completed
    {m.openBlockers?` · ${m.openBlockers} open blocker${m.openBlockers===1?'':'s'}`:''}{m.openQuestions?` · ${m.openQuestions} open question${m.openQuestions===1?'':'s'}`:''}
    {m.latest?` · latest: ${m.latest.by}, ${when(m.latest.at)}`:' · no updates yet'}</p>
   {err&&<div className="pt-banner error" role="alert">{workProblem(err)}</div>}
