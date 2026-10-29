@@ -12,7 +12,7 @@ import type {OpportunityService} from './opportunities.ts';
 export type ActivationOptions={handoff?:HandoffService;isOperator?:(request:IncomingMessage,principal:Principal)=>boolean;
   /** Dream Day: the customer's authorized Champion (a separate server-held credential). */
   isChampion?:(request:IncomingMessage,principal:Principal)=>boolean;
-  /** When set, new developer plans are published only by a Champion approval: direct publication, intake and initialization are refused. */
+  /** When set, new developer plans are published only by finalizing the Onboarding Draft: direct publication, intake and initialization are refused. */
   championApproval?:boolean;
   /** Phase 5: the developer named by this request's own credential, or null for a shared or non-developer credential. */
   developerName?:(request:IncomingMessage,principal:Principal)=>string|null;
@@ -110,7 +110,10 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
       if(route==='GET handoff-analyses'){send(200,{job:h.analysisStatus(p)});return true;}
       if(route==='POST handoff-analyses'){const r=h.startAnalysis(p,await readJson(request));send(r.duplicate?200:202,r);return true;}
       if(route==='POST handoff-reviews'){send(200,h.saveReview(p,await readJson(request)));return true;}
-      if(route==='POST handoff-submissions'){send(200,h.submission(p,await readJson(request),actor??undefined));return true;}
+      if(route==='POST handoff-submissions'){const r=h.submission(p,await readJson(request),actor??undefined);
+        // Finalizing publishes; the Portal then observes the team's repositories itself (read-only).
+        if(r.status==='published')void options.repositories?.observe(p).catch(()=>undefined);
+        send(200,r);return true;}
       response.setHeader('Allow',match[2]==='handoff'?'GET':match[2]==='handoff-analyses'?'GET, POST':'POST');send(405,{error:{code:'METHOD_NOT_ALLOWED'}});return true;
     }
     let state;

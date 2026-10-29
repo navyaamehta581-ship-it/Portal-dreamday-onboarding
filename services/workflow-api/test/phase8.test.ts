@@ -4,7 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type {AikaCapability} from '../../../contracts/activation/v1/handoff.ts';
 import type {RepositoryConfig} from '../src/activation/repository.ts';
-import {PRIVATE,approvedPlan,harness,ollamaStub,update} from './support/work-harness.ts';
+import {PRIVATE,approvedPlan,harness,ollamaStub,update,finalizePlan} from './support/work-harness.ts';
 
 const REPO:RepositoryConfig={customerId:'aperture',id:'payments-api',label:'payments-api (sample)',repository:'aperture-commerce/payments-api',mode:'fixture',fixture:'aperture-payments-api',services:['payments-api']};
 const caps=async(call:Parameters<typeof approvedPlan>[0],token:string)=>(await call('aperture','aika-capabilities',token)).json.capabilities as AikaCapability[];
@@ -15,7 +15,7 @@ test('the capability list depends on the person and the approved plan; /docs is 
  try{
   await approvedPlan(h.call,false);
   assert.deepEqual(available(await caps(h.call,'alex')),[],'nothing before approval');
-  await approvedPlan(h.call);
+  await finalizePlan(h.call);
   assert.deepEqual(available(await caps(h.call,'alex')),['onboarding','my-work','repository','team']);
   assert.deepEqual(available(await caps(h.call,'champ')),['onboarding','repository','team'],'the Champion has no /my-work');
   const docs=(await caps(h.call,'jordan')).find(c=>c.id==='docs')!;
@@ -73,16 +73,16 @@ test('Insights: computed from stored records; the Champion and Chris see everyon
  try{
   await approvedPlan(h.call,false);
   let i=(await h.call('aperture','insights','champ')).json;
-  assert.equal(i.plan.approved,false);assert.equal(i.plan.stage,'submitted');assert.deepEqual(i.milestones,[]);
+  assert.equal(i.plan.approved,false);assert.equal(i.plan.stage,'draft');assert.deepEqual(i.milestones,[]);
   assert.equal((await h.call('aperture','insights','alex')).json.plan.stage,null,'developers don’t see the review workflow');
-  await approvedPlan(h.call);
+  await finalizePlan(h.call);
   await update(h.call,'alex','m-alex',0,{action:{index:0,status:'completed'}});
   await update(h.call,'alex','m-alex',1,{note:{kind:'blocker',text:'No read access to payments-api yet',evidence:'https://example.test/req/7'}});
   await update(h.call,'jordan','m-jordan',0,{note:{kind:'question',text:'Which docs site should I check?'}});
   await h.call('aperture','milestone-coordination','champ',{milestoneId:'m-jordan',expectedRevision:1,respond:{to:(await h.call('aperture','milestone-work','champ')).json.milestones[1].detail.updates[0].id,text:'TechDocs only.'}},'Maya Chen');
   await h.call('aperture','repository-inspections','alex',{repositoryId:'payments-api'});
   i=(await h.call('aperture','insights','champ')).json;
-  assert.equal(i.plan.approved,true);assert.equal(i.plan.approvedBy,'Maya Chen');
+  assert.equal(i.plan.approved,true);assert.equal(i.plan.approvedBy,'Chris','published when Chris finalized it');
   assert.deepEqual([i.summary.milestones,i.summary.blocked,i.summary.openBlockers,i.summary.openQuestions,i.summary.actionsCompleted],[2,1,1,0,1]);
   assert.deepEqual(i.activity.map((a:any)=>[a.name,a.actionChanges,a.blockers,a.questions,a.replies]).sort(),[['Alex Rivera',1,1,0,0],['Jordan Lee',0,0,1,0],['Maya Chen',0,0,0,1]]);
   assert.equal(i.reportedReferences,1);

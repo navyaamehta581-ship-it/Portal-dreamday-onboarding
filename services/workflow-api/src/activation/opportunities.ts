@@ -105,8 +105,8 @@ export function createOpportunities(deps:{published:(p:Principal)=>DeveloperHand
    const key=`${rule.topic}:${service}`;
    if(out.has(key)||(rule.topic==='pipeline'&&out.has(`ci:${service}`)))continue;
    const why=goalFor(rule.title(service));
-   out.set(key,{id:`${rule.topic}-plan-${hash(service)}`,kind:rule.kind,title:rule.title(service),why:why?`Supports your goal: ${why}`:'Suggested by your team’s approved onboarding plan.',basis:'hypothesis',
-    evidence:['From your team’s approved onboarding plan; not yet confirmed in a repository.'],steps:rule.steps(service),service,goal:why});
+   out.set(key,{id:`${rule.topic}-plan-${hash(service)}`,kind:rule.kind,title:rule.title(service),why:why?`Supports your goal: ${why}`:'Suggested by your team’s onboarding plan.',basis:'hypothesis',
+    evidence:['From your team’s onboarding plan; not yet confirmed in a repository.'],steps:rule.steps(service),service,goal:why});
   }
   return [...out.values()];
  }

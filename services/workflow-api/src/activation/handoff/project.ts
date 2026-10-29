@@ -55,7 +55,7 @@ export function screenMilestone(m:MilestoneDraft,u:Understanding):MilestoneDraft
 }
 
 export function developerHandoff(version:number,publishedAt:string,u:Understanding,milestones:MilestoneDraft[]):DeveloperHandoff{
- // Assignments stay proposed until the Champion approves them; the projection hides unapproved assignees.
+ // Suggested owners stay proposed until the plan is finalized; the projection hides unfinalized ones.
  milestones=milestones.map(x=>({...screenMilestone(x,u),assignmentStatus:x.assignmentStatus??'proposed'}));
  const m=milestones[0]??null;
  const team=(u.stakeholders??[]).filter(s=>s.name&&technicalRole(s.role)&&developerSafe(s.role,u)).map(s=>({name:s.name!,role:s.role.slice(0,80),status:s.confidence==='reported'?'reported' as const:'inferred' as const}));

@@ -39,10 +39,10 @@ export function repositoryProblem(code:string,retryAfter?:string|null):string{
   case 'GITHUB_TIMEOUT':case 'GITHUB_UNAVAILABLE':return 'GitHub couldn’t be reached. Your onboarding work is unaffected; try again later.';
   case 'GITHUB_INVALID_RESPONSE':case 'GITHUB_RESPONSE_TOO_LARGE':case 'GITHUB_BLOB_MISMATCH':return 'GitHub returned something the inspector couldn’t use, so nothing from it was recorded.';
   case 'FIXTURE_INVALID':return 'The sample data for this repository couldn’t be read.';
-  case 'NO_APPROVED_PLAN':return 'Repository evidence opens once your team’s plan is approved in Dream Day.';
+  case 'NO_APPROVED_PLAN':return 'Repository evidence opens once your team’s onboarding plan is published.';
   case 'DEVELOPER_IDENTITY_REQUIRED':return 'Your sign-in isn’t linked to your own developer credential, so you can’t start an inspection.';
   case 'FORBIDDEN':return 'You can view this evidence but not start an inspection.';
-  case 'NOT_FOUND':return 'That repository isn’t configured for your approved work.';
+  case 'NOT_FOUND':return 'That repository isn’t configured for your team’s work.';
   default:return 'The repository couldn’t be inspected right now. Your onboarding work is unaffected; try again later.';
  }
 }

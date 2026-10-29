@@ -39,7 +39,7 @@ export function MilestoneChoices({work}:{work:MilestoneWorkSession}){
  const sorted=[...p.milestones].sort((a,b)=>Number(b.mine)-Number(a.mine)||Number(!!b.suggestedForMe)-Number(!!a.suggestedForMe));
  return <section className="pt-card" aria-label="Milestones to choose from">
   <div className="pt-card-head"><h3>Milestones</h3><button className="pt-btn sm ghost" onClick={()=>navigate('/activation/work')}>Open my milestones</button></div>
-  <p className="pt-note">Engineering outcomes from the approved plan. Choose the ones you want to work on; there are no deadlines.</p>
+  <p className="pt-note">Engineering outcomes from your team’s onboarding plan. Choose the ones you want to work on; there are no deadlines.</p>
   {work.error&&!work.error.milestoneId&&<div className="pt-banner error" role="alert">{workProblem(work.error)}</div>}
   <div className="pt-opportunities">{sorted.map(m=><MilestoneChoice key={m.id} m={m} work={work}/>)}</div>
  </section>;

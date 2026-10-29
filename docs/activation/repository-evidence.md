@@ -1,6 +1,6 @@
 # Repository evidence (Phase 7)
 
-> **Updated by the role redesign.** Where this page talks about assigned work, the Repository, Evidence or Team tabs, inspecting repositories by hand, "Ask Chris" or developer Insights, [roles-and-opportunities.md](roles-and-opportunities.md) is current: developers choose their work, the Portal observes repositories itself, and developers have **My progress**.
+> **Updated by the role redesign and the non-blocking flow.** Where this page talks about Champion approval, submitting for Champion review, assigned work, the Repository, Evidence or Team tabs, inspecting repositories by hand, "Ask Chris" or developer Insights, [roles-and-opportunities.md](roles-and-opportunities.md) is current: Chris's **Finalize and publish** publishes the plan to the Champion and developers with no approval step ("approved" on this page now means "published"), developers choose their work, the Portal observes repositories itself, and progress is what people record in Portal (nothing is detected automatically).
 
 Alex, Jordan and Maya can see read-only evidence about the repositories their approved milestones rely on. Chris sees the same evidence without being able to start an inspection. The evidence appears in **My work**, in **Team Coordination → Team overview** and in Chris's **Developer Progress**, and AiKA can cite it.
 

@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import type {RepositoryEvidence,RepositoryInspection,RepositoryObservation} from '../../../contracts/activation/v1/handoff.ts';
 import type {RepositoryConfig} from '../src/activation/repository.ts';
-import {approvedPlan,harness,ollamaStub,update,work,type Call} from './support/work-harness.ts';
+import {approvedPlan,harness,ollamaStub,update,work,type Call,finalizePlan} from './support/work-harness.ts';
 import {githubMock} from './support/github-mock.ts';
 
 const LIVE:RepositoryConfig={customerId:'aperture',id:'payments-api',label:'payments-api',repository:'example-org/payments-api',mode:'live',services:['payments-api']};
@@ -129,7 +129,7 @@ test('authorization: approved plan, configured repository, relevant milestone, i
  try{
   await approvedPlan(h.call,false);
   assert.equal((await inspect(h.call,'alex')).json.error.code,'NO_APPROVED_PLAN');
-  await approvedPlan(h.call);
+  await finalizePlan(h.call);
   assert.equal((await inspect(h.call,'op')).json.error.code,'FORBIDDEN','Chris observes; he doesn’t inspect');
   assert.equal((await inspect(h.call,'dev')).json.error.code,'DEVELOPER_IDENTITY_REQUIRED');
   assert.equal((await inspect(h.call,'alex',{repositoryId:'docs-site'})).json.error.code,'NOT_FOUND','not relevant to any approved milestone');

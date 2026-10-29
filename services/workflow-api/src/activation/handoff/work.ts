@@ -50,7 +50,7 @@ const textOf=(v:unknown)=>{const t=typeof v==='string'?v.trim():'';if(t.length<3
 
 export function createWorkService(deps:{published:(p:Principal)=>DeveloperHandoff|null;work:WorkStore;verifiedEvidence?:(p:Principal)=>string[];now?:()=>number}){
  const now=deps.now??(()=>Date.now());
- // Only plans approved in Dream Day can be worked on.
+ // Only published plans (finalized by Chris) can be worked on.
  function plan(p:Principal){
   const h=deps.published(p);
   if(!h?.approval)fail('NO_APPROVED_PLAN');

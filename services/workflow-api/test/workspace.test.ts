@@ -21,9 +21,9 @@ const NOTES='Opportunity: $300K ARR. Her VP thinks Backstage is a nice-to-have.'
 const sources=[{id:'a',type:'conversation',label:'Discovery call',text:CALL},{id:'b',type:'chris_notes',label:'My notes',text:NOTES},{id:'c',type:'integration_tools',label:'Tools',text:'Docs live in Confluence.'}];
 const rule=async(s:SourceInput[],onStage?:StageListener):Promise<Analysis>=>{onStage?.('interpreting',null);const understanding=interpretRuleBased(s);onStage?.('planning',null);return {understanding,proposal:proposeMilestones(understanding)};};
 
-function setup(analyze=rule,file=':memory:'){
+function setup(analyze=rule,file=':memory:',publishEnabled?:boolean){
  const handoffs=openHandoffStore(file);
- const service=createHandoffService({handoffs,store:()=>{throw Error('activation store not used');},analyze,stage:()=>undefined,release:()=>undefined});
+ const service=createHandoffService({handoffs,store:()=>{throw Error('activation store not used');},analyze,stage:()=>undefined,release:()=>undefined,publishEnabled});
  return {handoffs,service};
 }
 const code=(c:string)=>(e:unknown)=>e instanceof ActivationError&&e.code===c;
@@ -101,8 +101,8 @@ test('the review is built from the analysis with origins, keeps every milestone,
  assert.ok(drafts.every(validMilestone));assert.deepEqual(drafts[0].dependencies,[r.milestones[0].title]);
 });
 
-test('submission: incomplete or confidential reviews are refused with field labels; submitted drafts are locked, the direct publication is closed, and they can be withdrawn',async()=>{
- const {service}=setup();
+test('finalizing: incomplete or confidential reviews are refused with field labels; finalized drafts are locked and the direct publication is closed',async()=>{
+ const {service}=setup(rule,':memory:',false);
  service.saveWorkspace(p,{expectedRevision:0,sources});service.startAnalysis(p,{workspaceRevision:1});await done(service);
  const r=service.overview(p).drafts[0].review!;
  const broken:ReviewDraft={...r,milestones:[{id:'m-1',title:'Assess payments-api readiness',description:'',system:'payments-api',actions:[],completionCriteria:['Each item marked verified, missing or inaccessible'],assignee:'Chris',role:'developer',dependsOn:['nope'],origin:'chris'}]};
@@ -118,13 +118,12 @@ test('submission: incomplete or confidential reviews are refused with field labe
  service.saveReview(p,{draft:1,expectedRevision:2,review:clean});
  assert.throws(()=>service.submission(p,{draft:1,reviewRevision:3,action:'submit'}),code('INVALID_REQUEST'),'confirmation required');
  assert.throws(()=>service.submission(p,{draft:1,reviewRevision:2,action:'submit',confirmed:true}),code('REVISION_CONFLICT'));
- const submitted=service.submission(p,{draft:1,reviewRevision:3,action:'submit',confirmed:true});
- assert.equal(submitted.status,'submitted');assert.equal(submitted.approvals!.chris.status,'approved');assert.equal(submitted.approvals!.champion.status,'pending');
- assert.throws(()=>service.saveReview(p,{draft:1,expectedRevision:3,review:clean}),code('AWAITING_CHAMPION_REVIEW'));
- assert.throws(()=>service.saveWorkspace(p,{expectedRevision:1,sources}).revision===2&&service.startAnalysis(p,{workspaceRevision:2}),code('AWAITING_CHAMPION_REVIEW'));
- assert.throws(()=>service.publish(p,{draft:1,milestones:toMilestoneDrafts(clean,submitted),outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, call',agreementConfirmed:true}),code('CHAMPION_APPROVAL_REQUIRED'));
- const back=service.submission(p,{draft:1,action:'withdraw'});
- assert.equal(back.status,'draft');assert.equal(back.approvals!.chris.status,'pending');
+ // This server doesn't publish (publishEnabled: false), so finalizing records the plan as finalized.
+ const finalized=service.submission(p,{draft:1,reviewRevision:3,action:'submit',confirmed:true});
+ assert.equal(finalized.status,'approved');assert.equal(finalized.approvals!.chris.status,'approved');assert.equal(finalized.approvals!.champion.status,'pending','no Champion approval is involved');
+ assert.throws(()=>service.saveReview(p,{draft:1,expectedRevision:4,review:clean}),code('ALREADY_APPROVED'));
+ assert.throws(()=>service.publish(p,{draft:1,milestones:toMilestoneDrafts(clean,finalized),outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, call',agreementConfirmed:true}),code('CHAMPION_APPROVAL_REQUIRED'));
+ assert.throws(()=>service.submission(p,{draft:1,action:'withdraw'}),code('INVALID_TRANSITION'),'nothing waits for anyone, so there is nothing to withdraw');
 });
 
 test('privacy screen for the Champion: internal people stay out, technical stakeholders and the engineering problem are fine',()=>{
@@ -138,7 +137,7 @@ test('privacy screen for the Champion: internal people stay out, technical stake
  assert.ok(reviewIssues({...base,questions:[{id:'q',text:'Is the deal closing this quarter?',origin:'chris'}]},u).some(i=>i.reason==='commercial_text'));
 });
 
-test('HTTP: workspace routes are operator-only; submission shows nothing to developers or the Champion; customers are isolated',async()=>{
+test('HTTP: workspace routes are operator-only; a draft shows nothing to developers or the Champion; customers are isolated',async()=>{
  const {createApp}=await import('../src/app.ts');const {openGoalStore}=await import('../src/store.ts');
  const {openActivationStore}=await import('../src/activation/store.ts');const {createIntake}=await import('../src/activation/intake.ts');
  const intake=createIntake({admit:()=>false});
@@ -166,14 +165,12 @@ test('HTTP: workspace routes are operator-only; submission shows nothing to deve
   assert.equal(refused.status,400);assert.equal(refused.json.error.code,'CONFIDENTIAL_CONTENT');
   assert.deepEqual(refused.json.error.details.issues.map((i:{label:string})=>i.label),['Milestone 1 · description']);assert.ok(!JSON.stringify(refused.json).includes('nice-to-have'));
   await call('aperture','handoff-reviews','Bearer op',{draft:1,expectedRevision:1,review:{...leaky,milestones:[{...leaky.milestones[0],description:'Establish a readiness baseline'}]}});
-  assert.equal((await call('aperture','handoff-submissions','Bearer op',{draft:1,reviewRevision:2,action:'submit',confirmed:true})).json.status,'submitted');
-  // Submission publishes nothing: developer and Champion credentials still see no onboarding at all.
+  // Until Chris finalizes, developer and Champion credentials see no onboarding at all.
   const dev=await call('aperture','state','Bearer dev');
   assert.equal(dev.status,404);assert.ok(!JSON.stringify(dev.json).match(/payments-api|readiness|Discovery/));
-  // The pre-Dream Day direct publication is refused, before and after withdrawal.
+  // The direct publication without the reviewed draft is refused.
   assert.equal((await call('aperture','handoff-publications','Bearer op',{draft:1,milestones:toMilestoneDrafts(review,overview.drafts[0]),outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})).json.error.code,'CHAMPION_APPROVAL_REQUIRED');
   assert.equal((await call('lumen','handoff','Bearer lumen-op')).json.drafts.length,0,'Lumen’s operator sees only Lumen');
-  assert.equal((await call('aperture','handoff-submissions','Bearer op',{draft:1,action:'withdraw'})).json.status,'draft');
   assert.equal((await call('aperture','handoff-publications','Bearer op',{draft:1,fromReview:true,outcome:'Assess payments-api readiness',agreedBy:'Maya Chen, discovery call',agreementConfirmed:true})).json.error.code,'CHAMPION_APPROVAL_REQUIRED');
   assert.equal((await call('aperture','state','Bearer dev')).status,404,'still nothing for developers');
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();}

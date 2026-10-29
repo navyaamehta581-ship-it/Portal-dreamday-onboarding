@@ -132,96 +132,70 @@ try{
    await op.getByLabel(`Stakeholder ${n+1} name`).fill(name);await op.getByLabel(`Stakeholder ${n+1} role`).fill(role);
   }
  }
- async function sendToChampion(label){
-  await op.getByRole('checkbox',{name:/I checked this proposal/}).check();
-  await op.getByRole('button',{name:label}).click();
+ async function finalize(){
+  await op.getByRole('checkbox',{name:/I checked this plan/}).check();
+  await op.getByRole('button',{name:'Finalize and publish'}).click();
+  await op.getByRole('heading',{name:'Published onboarding plan'}).waitFor();
  }
- async function championApproves(page){
-  await page.getByRole('checkbox',{name:/I reviewed the technical goals and milestones/}).check();
-  await page.getByRole('button',{name:'Approve onboarding plan'}).click();
-  await page.getByLabel('Approved responsibilities').waitFor();
- }
+ const ALEX='Review checkout-api repository readiness',JORDAN='Independently validate that checkout-api and its docs are discoverable';
  await prepare('aperture',APERTURE);
  assert.ok((await op.getByLabel('Kept internal').innerText()).includes('Kept internal'));
  // The draft reads as an overview first; facts and stakeholders stay closed until Chris opens them.
  for(const id of ['draft-facts','draft-people','draft-questions','draft-problems'])assert.equal(await op.locator(`#${id} > .pt-section-head`).getAttribute('aria-expanded'),'false',id);
  const draftText=await op.locator('body').innerText();
- for(const x of [/Inspect repository/,/Connect (a |your )?repositor/,/Integration tools/])assert.ok(!x.test(draftText),'no technical-setup task for Chris: '+x);
- // Edit: retitle the first milestone, add a second one that depends on it, name the technical team; save.
+ for(const x of [/Inspect repository/,/Connect (a |your )?repositor/,/Integration tools/,/Champion review/,/Approve/])assert.ok(!x.test(draftText),'no technical-setup or approval step for Chris: '+x);
+ // Edit: name the technical team, retitle the first milestone and suggest Alex for it, add a second one that depends on it; save.
+ await addPeople([['Maya Chen','Champion, Platform Engineering'],['Alex Rivera','Developer'],['Jordan Lee','Developer']]);
+ assert.ok((await op.getByLabel('Stakeholder list').innerText()).includes('Responsibility not specified in the sources'),'no invented responsibilities');
  await editMilestone(op,1);await op.getByLabel('Milestone 1 title').fill('Review checkout-api repository readiness and prepare it for Catalog registration');
+ await op.getByLabel('Milestone 1 suggested owner').selectOption('Alex Rivera');
  await op.getByRole('button',{name:'Add milestone'}).click();
- await op.getByLabel('Milestone 2 title').fill('Validate that checkout-api is discoverable in the Catalog');
+ await op.getByLabel('Milestone 2 title').fill(JORDAN);
  await op.getByLabel('Milestone 2 system').fill('checkout-api · aperture/platform');
  await op.getByLabel('Milestone 2 actions').fill('Search the Catalog for checkout-api\nOpen its docs link');
  await op.getByLabel('Milestone 2 completion criteria').fill('checkout-api is found from Catalog search with a working docs link');
  await op.getByLabel('Milestone 2',{exact:true}).getByRole('checkbox').check();
- await addPeople([['Maya Chen','Champion, Platform Engineering'],['Alex Rivera','Developer'],['Jordan Lee','Developer']]);
- assert.ok((await op.getByLabel('Stakeholder list').innerText()).includes('Responsibility not specified in the sources'),'no invented responsibilities');
  await op.getByRole('button',{name:'Save draft'}).click();await op.getByLabel('Draft status').getByText(/^Saved/).waitFor();
  // Persisted on the server: a reload brings the edited draft back.
  await op.reload();await op.getByLabel('Draft overview').waitFor();
- assert.ok((await op.getByLabel('Draft overview').innerText()).includes('Validate that checkout-api is discoverable in the Catalog'));
- // Sent as a proposed plan, with open questions and unknown owners left for the Champion.
- await sendToChampion('Send to Champion for review');
- await op.getByRole('heading',{name:'Submitted for Champion review'}).waitFor();
- // Submission publishes nothing: the developer credential still has no onboarding, and no workspace route.
- assert.equal((await api(north,'state',devToken)).status,404,'developers see nothing after submission');
+ assert.ok((await op.getByLabel('Draft overview').innerText()).includes(JORDAN));
+ // A saved draft publishes nothing.
+ assert.equal((await api(north,'state',devToken)).status,404,'developers see nothing before Chris finalizes');
  assert.equal((await api(north,'handoff',devToken)).status,403);
  const early=await (await browser.newContext()).newPage();watch(early);await signInAs(early,'Alex Rivera');
- await early.getByText('Your team’s plan isn’t approved yet').waitFor();
- assert.ok(!(await early.locator('body').innerText()).includes('Validate that checkout-api'),'Alex does not see the submitted draft');
+ await early.getByText('Your team’s onboarding plan isn’t published yet').waitFor();
+ assert.ok(!(await early.locator('body').innerText()).includes(JORDAN),'Alex does not see the draft');
+ // Chris finalizes: that publishes the plan to the Champion and developers at once. Open questions can stay open.
+ await finalize();
+ assert.ok((await op.getByLabel('Agreed outcome').innerText()).includes('Published by Chris'));
+ assert.ok((await op.getByLabel('Suggested owners').innerText()).includes('Alex Rivera'));
+ assert.equal((await api(north,'state',devToken)).status,200,'developers have the plan straight away');
+ await early.reload();await early.getByLabel('What you can build or improve').waitFor();
  await early.close();
-
- // --- Dream Day: Maya sees the plan at a glance, edits one milestone, sends one point back, then approves.
- const ALEX='Review checkout-api repository readiness',JORDAN='Independently validate that checkout-api and its docs are discoverable';
- const maya=await (await browser.newContext({viewport:{width:1440,height:1000}})).newPage();watch(maya);
- const mayaLeaks=[];maya.on('response',async r=>{if(!r.url().includes('/portal-api/'))return;const body=await r.text().catch(()=>'');for(const x of ['PRIVATE CONTRACT NOTE','renewal discount','Discovery call','Kept internal'])if(body.includes(x))mayaLeaks.push(x);});
- await signInAs(maya,'Maya Chen');
- await maya.getByRole('button',{name:'Open Dream Day'}).click();await maya.getByLabel('Dream Day',{exact:true}).waitFor();
- assert.ok((await maya.getByLabel('Dream Day review').innerText()).includes('Waiting for your review'));
- const glance=await maya.getByLabel('Proposed plan').innerText();
- assert.ok(glance.includes('Validate that checkout-api is discoverable in the Catalog')&&glance.includes('Proposed by Chris · nothing changed yet'),glance);
- for(const id of ['dd-problems','dd-facts','dd-people'])assert.equal(await maya.locator(`#${id} > .pt-section-head`).getAttribute('aria-expanded'),'false','supporting context is collapsed: '+id);
- assert.equal(await maya.getByRole('button',{name:/Inspect repository/}).count(),0,'the Champion inspects nothing');
- // A targeted edit: one title and one optional suggested owner. Milestone 2 keeps no owner.
- await editMilestone(maya,2);await maya.getByLabel('Milestone 2 title').fill(JORDAN);
- await editMilestone(maya,1);await maya.getByLabel('Milestone 1 suggested owner').selectOption('Alex Rivera');
- await maya.getByRole('button',{name:'Save draft'}).click();await maya.getByLabel('Review status').getByText(/^Saved$/).waitFor();
- await maya.getByLabel('Proposed plan').getByText(/Your last saved changes: Edited 2 milestones/).waitFor();
- assert.equal((await api(north,'state',devToken)).status,404,'saving is not approving');
- // Chris sees her changes as updates he doesn't approve.
- await op.reload();await op.getByLabel('Champion updates').waitFor();
- assert.ok((await op.getByLabel('Champion updates').innerText()).includes('Maya Chen updated the plan'));
- // Sending it back is optional; here one point only Chris can answer.
- await maya.getByText('Send it back to Chris instead (optional)').click();
- await maya.getByLabel('What should Chris change?').fill('Please confirm which CI system deploys checkout-api before Alex starts.');
- await maya.getByRole('button',{name:'Request changes'}).click();
- await maya.getByLabel('Dream Day review').getByText('Changes requested',{exact:true}).waitFor();
- assert.equal((await api(north,'state',devToken)).status,404,'returned plans never reach developers');
- // Chris sees the feedback, answers with a question entry, and resubmits.
- await op.reload();await op.getByLabel('Champion feedback').waitFor();
- assert.ok((await op.getByLabel('Champion feedback').innerText()).includes('Please confirm which CI system deploys checkout-api'));
- assert.ok((await op.getByLabel('Draft overview').innerText()).includes('Alex Rivera'),'Maya’s suggested owner carries back to Chris');
- await openSection(op,'draft-questions');await op.getByRole('button',{name:'Add question'}).click();
- await op.getByRole('textbox',{name:/^Question \d+$/}).last().fill('Confirm with Maya that CI runs in GitHub Actions.');
- await op.getByRole('button',{name:'Save draft'}).click();await op.getByLabel('Draft status').getByText(/^Saved/).waitFor();
- await sendToChampion('Resubmit for Champion review');
- await op.getByRole('heading',{name:'Resubmitted for Champion review'}).waitFor();
- // Chris and developers cannot approve; nobody can publish around Dream Day.
+ // Nobody approves: there is nothing to decide, and nobody can publish around the reviewed draft.
+ assert.equal((await api(north,'champion-decisions',champToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,409,'nothing to approve');
  assert.equal((await api(north,'champion-decisions',opToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,403);
  assert.equal((await api(north,'champion-decisions',devToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,403);
  const bypass=await op.evaluate(async c=>{const r=await fetch(`/operator-api/aperture/activation/v1/customers/${c}/handoff-publications`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({draft:1,fromReview:true,outcome:'x x x',agreedBy:'y y y',agreementConfirmed:true})});return [r.status,(await r.json()).error.code];},north.customerId);
- assert.deepEqual(bypass,[403,'CHAMPION_APPROVAL_REQUIRED'],'the removed publishing bypass is refused on the server');
+ assert.deepEqual(bypass,[403,'CHAMPION_APPROVAL_REQUIRED'],'the old direct publication is still refused on the server');
  assert.equal((await api(north,'champion-review',devToken)).status,403,'developers cannot open Dream Day');
- // Maya approves without an owner on every milestone.
- await maya.reload();await maya.getByLabel('Dream Day review').getByText('Resubmitted · waiting for your review').waitFor();
- await championApproves(maya);
- const responsibilities=await maya.getByLabel('Approved responsibilities').innerText();
- assert.ok(responsibilities.includes('Alex Rivera')&&responsibilities.includes('Anyone')&&responsibilities.includes('Independently validate'),responsibilities);
+
+ // --- Dream Day, optional: Maya sees the published plan at a glance; nothing to approve. Priorities are in Team overview.
+ const maya=await (await browser.newContext({viewport:{width:1440,height:1000}})).newPage();watch(maya);
+ const mayaLeaks=[];maya.on('response',async r=>{if(!r.url().includes('/portal-api/'))return;const body=await r.text().catch(()=>'');for(const x of ['PRIVATE CONTRACT NOTE','renewal discount','Discovery call','Kept internal'])if(body.includes(x))mayaLeaks.push(x);});
+ await signInAs(maya,'Maya Chen');
+ await maya.getByLabel('Company goals').waitFor();
+ await maya.goto(url+'/champion');await maya.getByLabel('Dream Day',{exact:true}).waitFor();
+ const ddText=await maya.getByLabel('Dream Day review').innerText();
+ assert.ok(ddText.includes('Published by Chris')&&ddText.includes('nothing here needs your approval'),ddText);
+ const glance=await maya.getByLabel('Plan at a glance').innerText();
+ assert.ok(glance.includes(JORDAN)&&glance.includes('Suggested owner: Alex Rivera')&&glance.includes('No suggested owner'),glance);
+ for(const id of ['dd-problems','dd-facts','dd-people'])assert.equal(await maya.locator(`#${id} > .pt-section-head`).getAttribute('aria-expanded'),'false','supporting context is collapsed: '+id);
+ assert.equal(await maya.getByLabel('Dream Day',{exact:true}).getByRole('checkbox').count(),0,'no approval checkbox');
+ for(const b of ['Approve onboarding plan','Request changes','Save draft'])assert.equal(await maya.getByRole('button',{name:b}).count(),0,b);
+ assert.equal(await maya.getByRole('button',{name:/Inspect repository/}).count(),0,'the Champion inspects nothing');
+ await maya.getByRole('button',{name:'Set priorities and recommend opportunities'}).click();await maya.waitForURL(url+'/champion/team');
  assert.deepEqual(mayaLeaks,[],'Dream Day responses carry no operator-only information');
- assert.equal((await api(north,'champion-decisions',champToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,409,'no second approval');
- await op.reload();await op.getByText('Champion approval complete: approved by Maya Chen in Dream Day').waitFor();
- assert.ok((await op.getByLabel('Dream Day review history').innerText()).includes('Changed by the Champion'),'Chris sees what the Champion changed');
  // A scanned PDF (images only) is refused with an explanation; nothing is analyzed, and a text PDF then works.
  await op.getByLabel('Customer account').selectOption('lumen');await op.getByRole('tab',{name:'Customer Context'}).click();
  await op.getByLabel('Customer PDF').setInputFiles({name:'scan.pdf',mimeType:'application/pdf',buffer:makePdf([{image:true},{image:true}])});
@@ -230,11 +204,10 @@ try{
  await prepare('lumen',LUMEN);
  await addPeople([['Sam Okafor','Developer']]);
  await op.getByRole('button',{name:'Save draft'}).click();await op.getByLabel('Draft status').getByText(/^Saved/).waitFor();
- await sendToChampion('Send to Champion for review');await op.getByRole('heading',{name:'Submitted for Champion review'}).waitFor();
+ await finalize();
  const priya=await (await browser.newContext()).newPage();watch(priya);await signInAs(priya,'Priya Nair');
- await priya.getByRole('link',{name:'Team Coordination'}).click();await priya.getByLabel('Your decision').waitFor();
- await championApproves(priya);await priya.close();
- console.log('Both customers approved in Dream Day');
+ await priya.getByLabel('Company goals').waitFor();await priya.close();
+ console.log('Both customers published by Chris; no approval step');
  // Same Portal shell, separate navigation targets and access.
  assert.equal(await op.locator('.pt-shell .pt-side').count(),1);
  assert.equal(await op.getByRole('link',{name:'Customer Onboarding'}).getAttribute('href'),'/operator');
@@ -268,14 +241,14 @@ try{
  assert.equal(await dev.locator('a[href^="/operator"]').count(),0,'no operator links for developers');
  await dev.goto(url+'/activation');await dev.getByRole('tab',{name:'Overview'}).waitFor();
  assert.deepEqual(await dev.getByRole('tab').allInnerTexts(),['Overview','My milestones','Guide'],'no Repository, Evidence or Team tabs');
- // Opportunities: verified ones come from the Portal's own read-only observation, made after approval with nobody inspecting.
+ // Opportunities: verified ones come from the Portal's own read-only observation, made once Chris published the plan, with nobody inspecting.
  await dev.locator('[data-basis=verified]').first().waitFor({timeout:20000});
  assert.ok(githubCalls.length>0&&[...new Set(githubCalls.map(c=>c.method))].join()==='GET','observed read-only');
  assert.ok(githubCalls.every(c=>c.path.startsWith('/repos/example-org/checkout-api')&&c.auth==='Bearer e2e-read-only-test-token'));
  assert.equal((await (await api(north,'repository-evidence',champToken)).json()).repositories[0].latest.requestedBy,'Spotify integration');
  assert.equal(await dev.getByRole('button',{name:/Inspect/}).count(),0,'developers inspect nothing');
  text=await dev.locator('body').innerText();
- assert.ok(text.includes('Nobody has picked it up yet')&&text.includes(JORDAN),'every approved milestone is visible to choose');
+ assert.ok(text.includes('Nobody has picked it up yet')&&text.includes(JORDAN),'every published milestone is visible to choose');
  assert.ok(!/Chris|Upload|Ask Chris|kickoff/i.test(text),'no Chris, uploads or kickoff for developers');
  // Developer credentials cannot publish (role denial at the API).
  assert.equal((await fetch(`${north.apiOrigin}/api/activation/v1/customers/${north.customerId}/intake`,{method:'POST',headers:{Authorization:`Bearer ${devToken}`,'Content-Type':'application/json'},body:'{}'})).status,403);
@@ -287,7 +260,7 @@ try{
  assert.equal(await dev.locator('[aria-label^="Guide: "]').first().getAttribute('aria-label'),`Guide: ${VERIFIED}`);
  assert.equal(bearer.length,0,'developer browser never sends bearer tokens');
 
- console.log('Phase 5: Alex works on his suggested milestone; AiKA answers from approved context');
+ console.log('Phase 5: Alex works on his suggested milestone; AiKA answers from the published plan’s context');
  await dev.goto(url+'/activation/work');
  const card=dev.locator(`section[aria-label^="Milestone: ${ALEX}"]`);await card.waitFor();
  assert.equal(await dev.locator(`section[aria-label^="Milestone: ${JORDAN}"]`).count(),0,'Alex hasn’t chosen Jordan’s milestone');
@@ -389,7 +362,7 @@ try{
  const mopp=maya.getByLabel('Improvement opportunities').locator(`[aria-label="Opportunity: ${VERIFIED}"]`);
  await mopp.getByText('Pursued by Alex Rivera').waitFor();
  await mopp.getByLabel(`Priority: ${VERIFIED}`).selectOption('high');await maya.waitForFunction(t=>document.querySelector(`[aria-label="Opportunity: ${t}"] select`)?.value==='high',VERIFIED);
- await mopp.getByRole('checkbox',{name:'Recommend to developers'}).check();await mopp.getByText('Recommended by your Champion').waitFor();
+ await mopp.getByRole('checkbox',{name:'Recommend to developers'}).click();await mopp.getByText('Recommended by your Champion').waitFor();
  const engagement=await maya.getByLabel('Developer engagement').innerText();
  assert.ok(engagement.includes('Alex Rivera')&&engagement.includes('Jordan Lee'),engagement);
  assert.equal(await maya.getByRole('button',{name:/Inspect/}).count(),0,'the Champion inspects nothing');
@@ -477,9 +450,10 @@ try{
  await aikaPanel.getByRole('button',{name:'Minimize AiKA'}).click();
  // Insights for the Champion and Chris: the server's numbers.
  await maya.goto(url+'/insights');const mi=await maya.getByLabel('Activity').innerText();
- assert.ok(mi.includes('Team activity')&&mi.includes('Alex Rivera')&&mi.includes('Jordan Lee'),mi);
+ assert.ok(mi.includes('Activity recorded in Portal')&&mi.includes('Alex Rivera')&&mi.includes('Jordan Lee'),mi);
  await op.goto(url+'/operator/insights');await op.getByLabel('Progress summary').waitFor();
- assert.ok((await op.getByLabel('Plan status').innerText()).includes('Approved by Maya Chen'));
+ assert.ok((await op.getByLabel('Plan status').innerText()).includes('Published by Chris'));
+ assert.ok((await op.locator('body').innerText()).includes('nothing here needs your follow-up'),'Chris only reads Insights');
  assert.deepEqual(leaked,[],'developer API responses carry no private research');
 
  // --- Sign-out ends the session; mobile layouts do not overflow.
@@ -490,7 +464,7 @@ try{
  await maya.goto(url+'/champion/team');await maya.getByLabel('Company goals').waitFor();await jordan.goto(url+'/activation');await jordan.getByRole('tab',{name:'Overview'}).waitFor();
  for(const page of [op,other,maya,jordan,entry]){await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal overflow');}
  assert.deepEqual(errors,[]);
- console.log('PASS: one entry → persona sign-in → Chris: PDF upload only, scanned PDF refused, automatic analysis straight to the draft (overview first, details collapsed, no technical-setup task), edited multi-milestone draft (survives reload), sent as a proposed plan → Dream Day: Maya sees the plan at a glance, edits one milestone and suggests one owner (optional), Chris sees her changes as updates without approving them, she sends one point back; Chris answers and resubmits; Maya approves with a milestone left unowned; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → developers: goals, opportunities labelled verified (the Portal’s own read-only observation after approval, GET only, server-side token, requested by Spotify integration) or sample, every milestone to choose, no Chris/uploads/repository tabs; Alex pursues an opportunity (Guide shows it first) and works on his suggested milestone with attributed, revision-checked updates; AiKA via a local stub gets approved context incl. his chosen opportunity, labels answers and removes claimed inspections; My progress → Jordan chooses the unowned milestone; dependency holds → Maya: goals, prioritises and recommends the opportunity, engagement, coordination one click away (answers, reviews, follow-up); Alex sees the recommendation and replies; Chris reads progress and opportunities without controls → AiKA cites the live observation, slash commands narrow retrieval; Insights for Maya and Chris; isolation, no browser tokens, sign-out, mobile overflow.');
+ console.log('PASS: one entry → persona sign-in → Chris: PDF upload only, scanned PDF refused, automatic analysis straight to the draft (overview first, details collapsed, no technical-setup or approval step), edited multi-milestone draft with a suggested owner (survives reload), nothing published until he finalizes → Finalize and publish: the Champion and developers have the plan at once; no Champion approval, the old direct publication still refused → Dream Day is optional and read-only (published by Chris, no checkbox, approve, send-back or save), links to Team overview → Lumen published the same way → developers: goals, opportunities labelled verified (the Portal’s own read-only observation, GET only, server-side token, requested by Spotify integration) or sample, every milestone to choose; Alex pursues an opportunity and works on his suggested milestone with attributed, revision-checked updates; AiKA via a local stub gets the published context incl. his chosen opportunity, labels answers and removes claimed inspections; My progress → Jordan chooses the unowned milestone; dependency holds → Maya prioritises and recommends, engagement, coordination one click away; Alex replies; Chris reads progress, opportunities and Insights without controls → AiKA cites the live observation, slash commands narrow retrieval; isolation, no browser tokens, sign-out, mobile overflow.');
 }catch(error){console.error(error);throw error;}finally{
  await browser?.close();for(const child of children.reverse()){if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(()=>{child.kill('SIGKILL');r();},3000))]);}}
  stubOllama.close();stubGitHub.close();rmSync(directory,{recursive:true,force:true});

@@ -57,7 +57,7 @@ export async function harness({file=':memory:',modelUrl=null as string|null,time
 }
 
 /** Chris submits; Maya assigns Alex the repository assessment and Jordan the dependent discoverability check, and approves. */
-export async function approvedPlan(call:Call,approve=true){
+export async function approvedPlan(call:Call,finalize=true){
  await call('aperture','handoff-workspace','op',{expectedRevision:0,sources:[{type:'conversation',label:'Discovery call',text:CALL},{type:'chris_notes',label:'My pricing notes',text:NOTES}]});
  await call('aperture','handoff-analyses','op',{workspaceRevision:1});
  for(let i=0;i<50&&(await call('aperture','handoff-analyses','op')).json.job.status==='running';i++)await new Promise(r=>setTimeout(r,5));
@@ -67,10 +67,11 @@ export async function approvedPlan(call:Call,approve=true){
   stakeholders:[{id:'p1',name:'Maya Chen',role:'Champion',responsibilities:'Coordinate',basis:'stated',sources:[],technical:true},{id:'p2',name:'Alex Rivera',role:'Developer',responsibilities:'',basis:'stated',sources:[],technical:true},{id:'p3',name:'Jordan Lee',role:'Developer',responsibilities:'',basis:'stated',sources:[],technical:true}],
   milestones:[m('m-alex','Assess payments-api repository readiness','Alex Rivera'),m('m-jordan','Validate payments-api discoverability','Jordan Lee',['m-alex'])]};
  await call('aperture','handoff-reviews','op',{draft:1,expectedRevision:0,review});
- await call('aperture','handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true},'Chris');
- if(!approve)return;
- const view=(await call('aperture','champion-review','champ')).json;
- const r=await call('aperture','champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen');
+ if(finalize)await finalizePlan(call);
+}
+/** Chris finalizes the saved draft: that publishes it to the Champion and developers; nobody approves it. */
+export async function finalizePlan(call:Call){
+ const r=await call('aperture','handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true},'Chris');
  assert.equal(r.json.status,'published',r.raw);
 }
 export const work=async(call:Call,token:string)=>(await call('aperture','milestone-work',token)).json as TeamProgress;

@@ -6,7 +6,7 @@ import {CATEGORIES,PDF_MAX_BYTES,type CustomerWorkspace} from './useCustomerWork
 
 const STAGES:[AnalysisStage,string][]=[['preparing','Preparing information'],['interpreting','Interpreting customer context'],['planning','Generating technical onboarding plan'],['preparing_review','Preparing review']];
 const ERRORS:Record<string,string>={REVISION_CONFLICT:'This information was changed in another tab. Reload to see the latest version.',
- ALREADY_PUBLISHED:'This customer is already published to developers, so its information can no longer change.',AWAITING_CHAMPION_REVIEW:'A draft is waiting for Champion review in Dream Day. Withdraw it on the Onboarding Draft tab before uploading a new PDF.',ALREADY_APPROVED:'The Champion already approved this plan.',
+ ALREADY_PUBLISHED:'This customer’s plan is already published to the Champion and developers, so its information can no longer change.',AWAITING_CHAMPION_REVIEW:'A draft was sent for review under an earlier version. Withdraw it on the Onboarding Draft tab before uploading a new PDF.',ALREADY_APPROVED:'This plan is already finalized.',
  INVALID_REQUEST:'The information read from the PDF couldn’t be analyzed. Upload the PDF again.',
  ADAPTER_UNAVAILABLE:'Analysis isn’t available on this server.',ANALYSIS_FAILED:'The analysis stopped unexpectedly. The information read from your PDF is saved; try the analysis again.',
  PERSONA_UNAVAILABLE:'Operator access for this customer isn’t configured on the demo server.',
@@ -50,7 +50,7 @@ export function InformationTab({ws,locked,customer=''}:{ws:CustomerWorkspace;loc
  return <div className="pt-grid">
   <section className="pt-card pt-span" aria-label="Customer information">
    <div className="pt-card-head"><h3>Customer information</h3>{doc&&<span className="pt-savestate" role="status"><Check size={14} aria-hidden="true"/>Read {new Date(doc.uploadedAt).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}</span>}</div>
-   {!locked&&<Dropzone ws={ws} sample={/fictional/i.test(customer)} replacing={!!doc||ws.sources.length>0} disabled={waiting?ws.latest?.status==='approved'?'The Champion approved this plan, so its information can no longer change.':'A draft is waiting for Champion review in Dream Day. Withdraw it on the Onboarding Draft tab to upload a new PDF.':ws.running?'An analysis is running. You can upload a new PDF when it finishes.':null}/>}
+   {!locked&&<Dropzone ws={ws} sample={/fictional/i.test(customer)} replacing={!!doc||ws.sources.length>0} disabled={waiting?ws.latest?.status==='approved'?'This plan is finalized, so its information can no longer change.':'A draft was sent for review under an earlier version. Withdraw it on the Onboarding Draft tab to upload a new PDF.':ws.running?'An analysis is running. You can upload a new PDF when it finishes.':null}/>}
    {ws.error?.scope==='upload'&&<div className="pt-banner error" role="alert">{ws.error.code==='PDF_NO_TEXT'?noText(ws.error.details):describe(ws.error.code)}</div>}
    {doc?<DocumentSummary doc={doc} customer={customer} ws={ws}/>:ws.sources.length>0&&<EarlierInformation ws={ws}/>}
   </section>
@@ -131,7 +131,7 @@ function AnalysisPanel({ws,waiting}:{ws:CustomerWorkspace;waiting:boolean}){
   <div className="pt-card-head"><h3>Analysis</h3>
    {retry&&<button className="pt-btn sm ghost" disabled={ws.starting} onClick={()=>void ws.analyze()}>{ws.starting?'Starting…':'Analyze again'}</button>}</div>
   {!running&&!job&&!ws.latest&&<p className="pt-note">Analysis starts automatically when you upload a PDF. It drafts the engineering problem, stakeholders, goals, milestones and questions for you to review.</p>}
-  {waiting&&<p className="pt-note">{ws.latest?.status==='approved'?'The Champion approved this plan in Dream Day.':'A draft is waiting for Champion review in Dream Day.'}</p>}
+  {waiting&&<p className="pt-note">{ws.latest?.status==='approved'?'This plan is finalized.':'A draft was sent for review under an earlier version. Withdraw it on the Onboarding Draft tab to change it.'}</p>}
   {running&&job&&<div role="status" aria-live="polite" aria-label="Analysis progress">
    <ol className="pt-analysis-stages">{STAGES.map(([id,text],i)=><li key={id} className={i<current?'done':i===current?'current':''}>
     <span className="mark" aria-hidden="true">{i<current?<Check size={14}/>:i===current?<LoaderCircle size={14} className="pt-spin"/>:null}</span>

@@ -33,6 +33,8 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
  const ws=useCustomerWorkspace(api);
  const work=useMilestoneWork(api);
  useEffect(()=>{if(api)void session.refresh();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
+ // Finalizing publishes: load the published onboarding and its progress straight away.
+ useEffect(()=>{if(api&&ws.latest?.status==='published'&&!session.state){void session.refresh();void work.reload();}},[api,ws.latest?.status]); // eslint-disable-line react-hooks/exhaustive-deps
  useEffect(()=>{if(session.error==='DEMO_GATE_REQUIRED')window.location.assign('/demo-gate');if(session.error==='PERSONA_CHANGED'||session.error==='SIGN_IN_REQUIRED')onPersonaChanged();},[session.error]); // eslint-disable-line react-hooks/exhaustive-deps
  // Once the customer is known to be unpublished, keep the draft mounted through later errors (e.g. conflicts).
  useEffect(()=>{if(session.error==='NOT_FOUND')setNeedsPublish(true);if(session.state)setNeedsPublish(false);},[session.error,session.state]);

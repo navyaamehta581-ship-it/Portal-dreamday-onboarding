@@ -20,8 +20,8 @@ export function Home({session,persona,work,opps}:{session:ActivationSession;pers
    <section className="pt-guide" aria-label="Your onboarding">
     <div className="pt-guide-head"><span className="icon"><Target size={20} aria-hidden="true"/></span><h2>Your engineering goals</h2></div>
     <div className="pt-step" role={error&&error!=='NOT_FOUND'?'alert':'status'}>
-     <h3>{busy||opps.loading?'Loading…':error&&error!=='NOT_FOUND'?loadProblem(error).title:'Your team’s plan isn’t approved yet'}</h3>
-     <p>{error&&error!=='NOT_FOUND'?loadProblem(error).detail:'When your Champion approves it, your team’s goals and what you can build or improve appear here.'}</p>
+     <h3>{busy||opps.loading?'Loading…':error&&error!=='NOT_FOUND'?loadProblem(error).title:'Your team’s onboarding plan isn’t published yet'}</h3>
+     <p>{error&&error!=='NOT_FOUND'?loadProblem(error).detail:'When it’s published, your team’s goals and what you can build or improve appear here.'}</p>
      <button className="pt-btn" onClick={()=>navigate('/aika')}><Sparkles size={16} aria-hidden="true"/>Ask AiKA</button>
     </div>
    </section>}
@@ -60,8 +60,8 @@ function ChampionHome({session,opps}:{session:ActivationSession;opps:Opportuniti
  const h=session.state?.handoff;
  if(!h?.approval||!opps.data)return <section className="pt-guide" aria-label="Team coordination">
   <div className="pt-guide-head"><span className="icon"><Users size={20} aria-hidden="true"/></span><h2>Your team’s onboarding plan</h2></div>
-  <div className="pt-step"><h3>Review the plan Chris proposed in Dream Day</h3>
-   <p>See the goals and milestones at a glance, change what you want and approve it. Technical setup stays with Spotify’s solutions engineers.</p>
+  <div className="pt-step"><h3>Your team’s onboarding plan isn’t published yet</h3>
+   <p>When Chris publishes it, your company goals, improvement opportunities and adoption appear here, and your developers can start. Technical setup stays with Spotify’s solutions engineers.</p>
    <button className="pt-btn" onClick={()=>navigate('/champion')}>Open Dream Day</button></div>
  </section>;
  const a=opps.adoption,d=opps.data;
@@ -77,7 +77,7 @@ function ChampionHome({session,opps}:{session:ActivationSession;opps:Opportuniti
     {a?<dl className="pt-coord-summary">
      <div><dt>Milestones completed</dt><dd>{a.milestones.completed}<small> of {a.milestones.total}</small></dd></div>
      <div><dt>Opportunities pursued</dt><dd>{a.opportunities.pursued}<small> of {a.opportunities.total}</small></dd></div>
-     <div><dt>Developers active this week</dt><dd>{a.developers.filter(x=>x.activeThisWeek).length}<small> of {a.developers.length} engaged</small></dd></div>
+     <div><dt>Developers with recorded activity this week</dt><dd>{a.developers.filter(x=>x.activeThisWeek).length}<small> of {a.developers.length} engaged</small></dd></div>
     </dl>:<p>Loading…</p>}
     {a?.suggestions[0]&&<p className="pt-note">{a.suggestions[0]}</p>}
    </div>

@@ -27,7 +27,7 @@ export type ServiceConfig={
  filename:string;
  /** Operator-owned admission bundles (local development); the hosted demo starts empty and publishes through Dream Day. */
  bundles:AdmissionBundle[];
- /** Handoff mode: Chris's workspace publishes new plans, only through a Champion approval. */
+ /** Handoff mode: Chris's workspace publishes new plans when he finalizes the Onboarding Draft. */
  handoffMode:boolean;
  /** Model for Chris's analysis and AiKA; null uses rule-based analysis (or an OpenAI-compatible interpreter if configured) and AiKA reports it is unavailable. */
  analysisModel:JsonModel|null;aikaModel:JsonModel|null;

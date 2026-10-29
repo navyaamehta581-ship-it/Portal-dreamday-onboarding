@@ -71,7 +71,7 @@ export type DeveloperHandoff = {
   milestones: MilestoneDraft[];
   /** Technical stakeholders named in the sources (Champion, developers, platform/service owners) and their roles. */
   team?: { name: string; role: string; status: 'reported' | 'inferred' }[];
-  /** The Champion's Dream Day approval of this plan. Absent for plans published before Dream Day. */
+  /** Who finalized and published this plan (Chris; a Champion in older Dream Day records). Absent for plans published before Dream Day. */
   approval?: { by: string; at: string };
   /** The approved plan's engineering problem, technical goals and open clarification questions (developer-safe). */
   objective?: { problem: string | null; goals: string[]; questions: string[]; /** Further engineering problems, when the plan has more than one. */ problems?: string[] };
@@ -149,9 +149,10 @@ export type Assignment = { milestoneId: string; role: string; proposedAssignee: 
 
 /** Record status (Dream Day review workflow):
  * 'draft' = Chris is reviewing or revising; 'submitted' / 'resubmitted' = waiting for the Champion's review;
- * 'changes_requested' = the Champion sent it back with a comment; 'approved' = the Champion approved it but this
- * server doesn't publish; 'published' = developers can see it. Only a Champion approval publishes new plans;
- * a 'published' record without a recorded Champion approval predates Dream Day. */
+ * 'changes_requested' = the Champion sent it back with a comment (older records); 'approved' = finalized but this
+ * server doesn't publish; 'published' = the Champion and developers can see it. Chris finalizing the draft publishes
+ * it; 'submitted', 'resubmitted' and 'changes_requested' only appear on records from the earlier Champion-approval flow.
+ * A 'published' record without a recorded publisher predates Dream Day. */
 export type HandoffStatus = 'draft' | 'submitted' | 'changes_requested' | 'resubmitted' | 'approved' | 'published';
 /** One step of the Dream Day review, kept on the record. `by` is the display name of who acted. */
 /** `edited`: the Champion saved changes to the plan; `comment` then summarises them by count (never content). */
@@ -267,7 +268,8 @@ export type Insights = { generatedAt: string; viewer: { role: 'developer' | 'cha
     /** Where the plan is in Chris's and Maya's workflow; only for Chris and the Champion. */
     stage: string | null };
   summary: ProgressSummary | null;
-  milestones: { id: string; title: string; assignee: string | null; status: string; reviewState: string | null; actionsCompleted: number; actionsTotal: number; openBlockers: number; openQuestions: number; lastActivityAt: string | null }[];
+  /** `assignee` is only the suggested owner; `workingOn` is who chose the milestone. */
+  milestones: { id: string; title: string; assignee: string | null; workingOn?: string[]; status: string; reviewState: string | null; actionsCompleted: number; actionsTotal: number; openBlockers: number; openQuestions: number; lastActivityAt: string | null }[];
   /** Everyone's for the Champion and Chris; a developer's own only. */
   activity: PersonActivity[];
   /** Developer evidence references are reported, never verified. */

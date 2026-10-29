@@ -198,7 +198,7 @@ test('developer-safe screen and AiKA context boundary',()=>{
  assert.equal(planInput({...ruleBasedAnalysis(APERTURE).understanding}).problems.length>=0,true);
 });
 
-test('HTTP Dream Day: model draft → Chris submits → Champion approves; each developer sees the approved plan, their suggested work first',async()=>{
+test('HTTP: model draft → Chris finalizes, which publishes it; the Champion and each developer see it, their suggested work first',async()=>{
  const {createApp}=await import('../src/app.ts');const {openGoalStore}=await import('../src/store.ts');
  const {openActivationStore}=await import('../src/activation/store.ts');const {createIntake}=await import('../src/activation/intake.ts');
  const {openHandoffStore}=await import('../src/activation/handoff/store.ts');const {createHandoffService}=await import('../src/activation/handoff/service.ts');
@@ -218,16 +218,15 @@ test('HTTP Dream Day: model draft → Chris submits → Champion approves; each 
   assert.deepEqual(draft.assignments.map((a:{proposedAssignee:string;status:string})=>[a.proposedAssignee,a.status]),[['Alex Rivera','proposed'],['Jordan Lee','proposed']]);
   // The stub model also extracted a commercial "fact"; submission would refuse it, so Chris removes it first.
   assert.equal((await call('handoff-reviews','op',{draft:1,expectedRevision:0,review:{...draft.review,facts:draft.review.facts.filter((f:{text:string})=>!/ARR/.test(f.text))}})).status,200);
+  assert.equal((await call('state','dev')).status,404,'nothing reaches developers before Chris finalizes');
   const sub=await call('handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true},'Chris');assert.equal(sub.status,200,JSON.stringify(await sub.clone().json()));
-  assert.equal((await call('state','dev')).status,404,'nothing reaches developers before approval');
-  assert.equal((await call('champion-review','dev')).status,403,'developers cannot review');
-  assert.equal((await call('champion-decisions','op',{draft:1,reviewRevision:2,decision:'approve',confirmed:true})).status,403,'Chris cannot approve his own plan');
+  assert.equal((await sub.json()).status,'published','finalizing publishes; no Champion approval is needed');
+  assert.equal((await call('champion-review','dev')).status,403,'developers cannot open Dream Day');
   const view=await (await call('champion-review','champ')).json();
-  assert.equal(view.status,'submitted');
+  assert.equal(view.status,'published');assert.equal(view.approval.by,'Chris');
   for(const x of [...PRIVATE,'Call with Maya','My notes','Jamie'])assert.ok(!JSON.stringify(view).includes(x),'champion view leaked '+x);
   assert.deepEqual(view.plan.stakeholders.map((x:{name:string})=>x.name),['Maya Chen','Alex Rivera','Jordan Lee'],'technical stakeholders only');
-  const ok=await (await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen')).json();
-  assert.equal(ok.status,'published');assert.deepEqual(ok.approval.by,'Maya Chen');
+  assert.equal((await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision,decision:'approve',confirmed:true},'Maya Chen')).status,409,'there is nothing to approve');
   const as=async(actor:string|null,token='dev')=>{const raw=await (await call('state',token,undefined,actor??undefined)).text();for(const x of [...PRIVATE,'Call with Maya','My notes'])assert.ok(!raw.includes(x),'state leaked '+x);return JSON.parse(raw);};
   const alex=await as(null,'alex'),jordan=await as(null,'jordan'),maya=await as('Maya Chen','champ');
   // Everyone sees the whole approved plan (developers choose their work); the milestone suggested for them comes first.

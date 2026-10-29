@@ -26,7 +26,7 @@ export function CoordinationView({work,mode}:{work:MilestoneWorkSession;mode:'ch
     <div><dt>Open questions</dt><dd>{s.openQuestions+s.openFollowUps}</dd></div>
     <div><dt>Actions done</dt><dd>{s.actionsCompleted}<small> of {s.actionsTotal}</small></dd></div>
    </dl>}
-   <p className="pt-note">Developers report their progress; the Portal doesn’t verify it. The approved plan has no deadlines, so nothing is shown as overdue.</p>
+   <p className="pt-note">Progress is what developers record in Portal as they work; nothing is detected automatically or verified. The plan has no deadlines, so nothing is shown as overdue.</p>
   </section>
   <section className="pt-card" aria-label="Needs attention">
    <h3>{champion?'Needs your attention':'Needs attention'}</h3>

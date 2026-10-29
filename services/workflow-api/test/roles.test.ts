@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import type {Adoption,Finding,HandoffRecord,Opportunities,TeamProgress,Understanding} from '../../../contracts/activation/v1/handoff.ts';
 import {reviewFromAnalysis,reviewIssues,approvalIssues,championPlan} from '../src/activation/handoff/review.ts';
 import type {RepositoryConfig} from '../src/activation/repository.ts';
-import {PRIVATE,approvedPlan,harness,ollamaStub,update} from './support/work-harness.ts';
+import {PRIVATE,approvedPlan,harness,ollamaStub,update,finalizePlan} from './support/work-harness.ts';
 
 const FIXTURE:RepositoryConfig={customerId:'aperture',id:'payments-api',label:'payments-api',repository:'aperture-commerce/payments-api',mode:'fixture',fixture:'aperture-payments-api',services:['payments-api']};
 const ref={sourceId:'s1',type:'conversation' as const,label:'Discovery call',excerpt:'…'};
@@ -65,7 +65,7 @@ test('opportunities: from the approved plan and the Portal’s own observations,
  try{
   await approvedPlan(h.call,false);
   assert.equal((await h.call('aperture','opportunities','alex')).json.error.code,'NO_APPROVED_PLAN');
-  await approvedPlan(h.call);
+  await finalizePlan(h.call);
   const v=await opps(h.call,'alex');
   assert.deepEqual(v.goals.map(g=>[g.text,g.milestones.map(m=>m.id)]),[['Establish a service-readiness baseline for payments-api',['m-alex']]]);
   assert.ok(v.opportunities.length>=3);

@@ -44,7 +44,7 @@ const ISSUE:Record<string,string>={actions_incomplete:'every action is completed
 /** Plain-language messages for the server's codes; no server text is shown. */
 export function workProblem(e:WorkError):string{
  switch(e.code){
-  case 'NO_APPROVED_PLAN':return 'Nothing to work on yet. Work opens when your Champion approves the team’s plan in Dream Day.';
+  case 'NO_APPROVED_PLAN':return 'Nothing to work on yet. Work opens when your team’s onboarding plan is published.';
   case 'NOT_ASSIGNEE':return 'This milestone is assigned to someone else, so you can’t change it.';
   case 'DEVELOPER_IDENTITY_REQUIRED':return 'Your sign-in isn’t linked to your own developer credential, so you can see your work but not update it. Ask your Portal admin to set one up.';
   case 'CHAMPION_REQUIRED':return 'Only your team’s Champion can coordinate and review milestones.';

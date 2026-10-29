@@ -11,7 +11,7 @@ export function MyProgress({work,opps}:{work:MilestoneWorkSession;opps:Opportuni
  return <div className="pt-page">
   <div className="pt-pagebar"><h1>My progress</h1></div>
   <div className="pt-entity" style={{display:'grid',gap:20}}>
-   {!work.progress&&<div className="pt-empty" role="status"><div><h2>{work.loading?'Loading…':'Your team’s plan isn’t approved yet'}</h2></div></div>}
+   {!work.progress&&<div className="pt-empty" role="status"><div><h2>{work.loading?'Loading…':'Your team’s onboarding plan isn’t published yet'}</h2></div></div>}
    {work.progress&&<section className="pt-card" aria-label="Milestones I’m working on">
     <h3>Milestones I’m working on</h3>
     {mine.length?mine.map(m=>{const done=m.actionsCompleted??0,total=m.actionsTotal??0,next=m.detail?.actions.find(a=>a.status!=='completed');return <div key={m.id} className="pt-progress-item" aria-label={`Progress: ${m.title}`}>

@@ -1,10 +1,12 @@
-# Dream Day: Champion review and approval (Phase 4)
+# Dream Day (Phase 4, superseded by the non-blocking flow)
 
-Dream Day is where the customer's Champion (Maya) reviews the technical onboarding plan Chris proposed, refines it and approves it. Approval is the only way a new plan reaches developers. Since the role redesign, owners are optional suggestions and developers choose their work; see [roles-and-opportunities.md](roles-and-opportunities.md).
+> **Current behaviour.** Champion approval has been removed. When Chris clicks **Finalize and publish**, the goals and milestones are published to the Champion and developers straight away. Dream Day is now an optional, read-only view of the published plan. It has no approval checkbox, approve, send-back or save. From there the Champion goes to Team overview to set priorities and recommend opportunities. See [roles-and-opportunities.md](roles-and-opportunities.md).
+>
+> The rest of this page describes the earlier approval flow. The server keeps its routes and states (`submitted`, `resubmitted`, `changes_requested`) only so older records stay readable: Chris can withdraw such a draft and finalize it himself.
 
 ```
-Chris submits → Maya reviews in Dream Day → Maya edits (optionally suggests owners) → Maya approves → developers see the plan and choose
-                                      ↘ optional: Maya sends it back (with a reason) → Chris revises → Chris resubmits ↗
+Current:  Chris finalizes → published to the Champion and developers → developers choose; the Champion prioritises (Dream Day optional)
+Earlier:  Chris submits → Maya reviews, edits, approves (or sends back) → developers see the plan
 ```
 
 ## Where it lives

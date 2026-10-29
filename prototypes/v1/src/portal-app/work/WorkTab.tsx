@@ -13,7 +13,7 @@ const ACTION_LABEL={not_started:'Not started',started:'Started',blocked:'Blocked
  * milestones can be chosen below; another developer's notes and action progress stay theirs. */
 export function WorkTab({work}:{work:MilestoneWorkSession}){
  const {progress,loading,error}=work;
- if(!progress)return <section className="pt-card" role={error&&!loading?'alert':'status'}><h3>{loading?'Loading your work…':error?.code==='NO_APPROVED_PLAN'?'No approved plan yet':'Your work isn’t available'}</h3>{error&&!loading&&<p className="pt-note">{workProblem(error)}</p>}</section>;
+ if(!progress)return <section className="pt-card" role={error&&!loading?'alert':'status'}><h3>{loading?'Loading your work…':error?.code==='NO_APPROVED_PLAN'?'No published plan yet':'Your work isn’t available'}</h3>{error&&!loading&&<p className="pt-note">{workProblem(error)}</p>}</section>;
  const mine=progress.milestones.filter(m=>m.mine),others=progress.milestones.filter(m=>!m.mine),o=progress.objective;
  return <div style={{display:'grid',gap:22}}>
   {error&&!error.milestoneId&&<div className="pt-banner error" role="alert" style={{marginTop:0}}>{workProblem(error)}</div>}

@@ -23,8 +23,8 @@ export function OnboardingPage({session,tab,account,work,opps}:{session:Activati
   <div className="pt-pagebar"><h1><span className="icon"><Flag size={16} aria-hidden="true"/></span>Onboarding</h1>
    <div className="tools"><button className="pt-tool" disabled={busy} onClick={()=>{void session.refresh();void work.reload();void opps.reload();}}><RefreshCw size={15} aria-hidden="true"/>{busy?'Refreshing…':'Refresh'}</button></div></div>
   {!state||!approved?<div className="pt-empty" role={error&&!busy?'alert':'status'}><div>
-   <h2>{busy||work.loading?'Loading your onboarding…':error&&error!=='NOT_FOUND'?loadProblem(error).title:'Your team’s plan isn’t approved yet'}</h2>
-   <p>{error&&error!=='NOT_FOUND'?loadProblem(error).detail:'When your Champion approves the plan in Dream Day, your team’s goals and what you can build or improve appear here.'}</p></div></div>:<div className="pt-entity">
+   <h2>{busy||work.loading?'Loading your onboarding…':error&&error!=='NOT_FOUND'?loadProblem(error).title:'Your team’s onboarding plan isn’t published yet'}</h2>
+   <p>{error&&error!=='NOT_FOUND'?loadProblem(error).detail:'When it’s published, your team’s goals and what you can build or improve appear here.'}</p></div></div>:<div className="pt-entity">
    <div className="pt-entity-head">
     <div><p className="pt-crumb">Onboarding — {account.label}</p><h2>{opps.data?.goals[0]?.text??state.context.agreedGoal.text}</h2></div>
    </div>

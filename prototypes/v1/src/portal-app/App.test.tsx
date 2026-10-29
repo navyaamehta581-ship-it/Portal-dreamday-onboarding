@@ -215,86 +215,46 @@ async function openSection(title:string){
  const head=section(title).querySelector<HTMLButtonElement>(':scope > .pt-section-head')!;
  if(head.getAttribute('aria-expanded')!=='true'){const {act}=await import('react');await act(async()=>{head.click();});}
 }
-const approvedReview=(owners:(string|null)[]=['Alex Rivera','Jordan Lee'])=>{const r=submitted();r.plan!.milestones.forEach((x,i)=>{x.assignee=owners[i]??null;});return {...r,status:'published' as const,approval:{by:'Maya Chen',at:'2026-10-29T10:00:00Z'}};};
+// Chris finalized the plan, which published it: nobody approved it.
+const approvedReview=(owners:(string|null)[]=['Alex Rivera','Jordan Lee'])=>{const r=submitted();r.plan!.milestones.forEach((x,i)=>{x.assignee=owners[i]??null;});return {...r,status:'published' as const,approval:{by:'Chris',at:'2026-10-29T10:00:00Z'},history:[{action:'published' as const,at:'2026-10-29T10:00:00Z',by:'Chris'}]};};
 
-it('before approval developers see that the plan isn’t approved yet, with nothing assigned and no Dream Day',async()=>{
+it('before Chris publishes, developers and the Champion see that the plan isn’t published yet; nothing is assigned',async()=>{
  backend('alex');await render('/portal');
  const home=m.host.querySelector('[aria-label="Your onboarding"]')!.textContent!;
- expect(home).toContain('Your team’s plan isn’t approved yet');expect(home).toMatch(/When your Champion approves it/);
- expect(text()).not.toMatch(/assigned to you|Chris/);
+ expect(home).toContain('Your team’s onboarding plan isn’t published yet');expect(home).toMatch(/When it’s published/);
+ expect(text()).not.toMatch(/assigned to you|Chris|approv/i);
  await m.unmount();await render('/champion');
  expect(text()).toContain('Team Coordination is for your team’s Champion');
  expect(m.host.querySelector('[aria-label="Dream Day"]')).toBeNull();
  expect(calls.some(c=>c.url.includes('/champion-'))).toBe(false);
+ await m.unmount();server.persona='maya';await render('/portal');
+ expect(text()).toContain('Your team’s onboarding plan isn’t published yet');expect(text()).not.toMatch(/approv/i);
+ await m.unmount();await render('/champion');
+ expect(m.host.querySelector('[aria-label="Dream Day review"]')!.textContent).toContain('Chris hasn’t published your team’s onboarding plan yet');
 });
 
-it('Dream Day: Maya sees the plan at a glance first, edits only what she wants, saves, and approves without assigning anyone',async()=>{
- backend('maya',submitted());await render('/portal');
- await click(m.host,'Open Dream Day');await settle();
- expect(window.location.pathname).toBe('/champion');
+it('Dream Day is optional and read-only: Maya sees the published plan at a glance, with no approval, and goes to priorities from there',async()=>{
+ backend('maya',approvedReview(['Alex Rivera',null]));await render('/portal');
+ // Home leads with goals and adoption; Dream Day is not a step she has to take.
+ expect(section('Company goals').textContent).toContain('Establish a readiness baseline for payments-api');
+ await m.unmount();await render('/champion');
  const page=()=>m.host.querySelector('[aria-label="Dream Day"]')!.textContent!;
- expect(page()).toContain('Waiting for your review');
- const overview=()=>section('Proposed plan').textContent!;
- expect(overview()).toContain('Establish a readiness baseline for payments-api');expect(overview()).toContain('Assess payments-api repository readiness');
- expect(overview()).toContain('No suggested owner · anyone can pick it up');expect(overview()).toContain('Proposed by Chris · nothing changed yet');
- // The overview and the editable plan come first, the decision next, the supporting context last and collapsed.
- const order=Array.from(m.host.querySelectorAll('[aria-label="Dream Day"] section[aria-label]')).map(x=>x.getAttribute('aria-label'));
- for(const [a,b] of [['Proposed plan','Technical goals'],['Onboarding milestones','Your decision'],['Your decision','Engineering problems'],['Your decision','Known facts'],['Your decision','Technical stakeholders']])expect(order.indexOf(a),`${a} before ${b}`).toBeLessThan(order.indexOf(b));
+ expect(page()).toContain('Published by Chris');expect(page()).toContain('nothing here needs your approval');
+ const glance=section('Plan at a glance').textContent!;
+ expect(glance).toContain('Establish a readiness baseline for payments-api');expect(glance).toContain('Assess payments-api repository readiness');
+ expect(glance).toContain('Suggested owner: Alex Rivera');expect(glance).toContain('No suggested owner · anyone can pick it up');
+ // Supporting context stays collapsed, with its backing one click away.
  expect(m.host.querySelector('#dd-facts-body')).toBeNull();
  await openSection('Known facts');expect(section('Known facts').textContent).toContain('Source: Conversational Transcript');
- expect(text()).not.toMatch(/Inspect repository|Connect a repository|assignee/i);
- // Targeted edits: one title, one optional suggested owner, one question.
- await click(m.host,'Edit milestone 2');await type(byLabel(m.host,'Milestone 2 title')!,'Independently validate payments-api and docs discoverability');
- await click(m.host,'Edit milestone 1');await type(byLabel<HTMLSelectElement>(m.host,'Milestone 1 suggested owner')!,'Alex Rivera');
- await openSection('Clarification questions');await click(m.host,'Add question');await type(byLabel<HTMLTextAreaElement>(m.host,'Question 2')!,'Who owns the runbooks today?');
- const approve=()=>Array.from(m.host.querySelectorAll('button')).find(b=>b.textContent==='Approve onboarding plan')!;
- const {act}=await import('react');
- await act(async()=>{m.host.querySelector<HTMLInputElement>('[aria-label="Your decision"] .pt-check input')!.click();});
- expect(approve().disabled).toBe(true);expect(text()).toContain('Save your changes first.');
- await click(m.host,'Save draft');await settle();
- const saved=calls.find(c=>c.url.endsWith('/champion-reviews'))!;
- expect(saved.body.expectedRevision).toBe(3);
- expect(saved.body.plan.milestones.map((x:ReviewMilestone)=>[x.assignee,x.title,x.dependsOn])).toEqual([['Alex Rivera','Assess payments-api repository readiness',[]],[null,'Independently validate payments-api and docs discoverability',['m-1']]]);
- expect(saved.body.plan.questions.at(-1)).toMatchObject({text:'Who owns the runbooks today?',origin:'champion'});
- expect(server.review!.status).toBe('submitted');expect(calls.some(c=>c.url.endsWith('/champion-decisions'))).toBe(false);
- expect(overview()).toContain('Your last saved changes: Edited 1 milestone, added 1 question.');
- // Approving needs no owner for every milestone.
- await click(m.host,'Approve onboarding plan');await settle();
- expect(calls.find(c=>c.url.endsWith('/champion-decisions'))!.body).toEqual({draft:1,reviewRevision:4,decision:'approve',confirmed:true});
- expect(page()).toContain('Approved by Maya Chen');
- const table=section('Approved responsibilities').textContent!;
- expect(table).toContain('Alex Rivera');expect(table).toContain('Anyone');expect(table).toContain('Assess payments-api repository readiness');
- // The team overview leads with the goals, the improvements to prioritise and adoption; milestone coordination is one click away.
- await click(m.host,'Team overview');await settle();
- expect(section('Company goals').textContent).toContain('Establish a readiness baseline for payments-api');
- expect(section('Improvement opportunities').textContent).toContain('Record who owns payments-api’s code');
- expect(section('Developer engagement')).not.toBeNull();
- expect(m.host.querySelector('[aria-label="Proposed work"]')).toBeNull();
- await openSection('Milestone progress and discussion');
- expect(m.host.querySelector('[aria-label="Coordination: Assess payments-api repository readiness"]')!.textContent).toContain('Suggested for Alex Rivera');
- expect(m.host.querySelector('[aria-label="Coordination: Independently validate payments-api and docs discoverability"]')!.textContent).toContain('Nobody has picked it up yet');
-});
-
-it('Dream Day: sending it back to Chris is optional and needs a reason; the plan is hidden while Chris revises',async()=>{
- backend('maya',submitted());await render('/champion');
- const back=m.host.querySelector<HTMLDetailsElement>('[aria-label="Your decision"] details')!;
- expect(back.open).toBe(false);expect(back.querySelector('summary')!.textContent).toContain('optional');
- const requestChanges=()=>Array.from(m.host.querySelectorAll('button')).find(b=>b.textContent==='Request changes')!;
- expect(requestChanges().disabled).toBe(true);
- await type(byLabel<HTMLTextAreaElement>(m.host,'What should Chris change?')!,'Confirm which CI system deploys payments-api.');
- await click(m.host,'Request changes');await settle();
- expect(text()).toContain('Changes requested');expect(text()).toContain('Confirm which CI system deploys payments-api.');
- expect(m.host.querySelector('[aria-label="Onboarding milestones"]')).toBeNull();
-});
-
-it('Dream Day: a stale page cannot overwrite or approve; it asks to reload',async()=>{
- backend('maya',submitted());await render('/champion');
- server.review={...server.review!,reviewRevision:9};// Chris withdrew and resubmitted meanwhile.
- await click(m.host,'Edit milestone 1');await type(byLabel(m.host,'Milestone 1 title')!,'Changed');await click(m.host,'Save draft');await settle();
- expect(m.host.querySelector('[role=alert]')!.textContent).toContain('Chris changed this plan since you opened it');
- await click(m.host,'Reload');await settle();
- if(!byLabel(m.host,'Milestone 1 title'))await click(m.host,'Edit milestone 1');
- expect(byLabel<HTMLInputElement>(m.host,'Milestone 1 title')!.value).toBe('Assess payments-api repository readiness');
+ // Nothing to approve, send back or save; no checkbox; no repository inspection.
+ expect(m.host.querySelector('[aria-label="Dream Day"] input[type=checkbox]')).toBeNull();
+ for(const b of ['Approve onboarding plan','Request changes','Save draft'])expect(Array.from(m.host.querySelectorAll('button')).some(x=>x.textContent===b),b).toBe(false);
+ expect(text()).not.toMatch(/Inspect repository|approve it|waiting for your review/i);
+ await click(m.host,'Set priorities and recommend opportunities');await settle();
+ expect(window.location.pathname).toBe('/champion/team');
+ expect(section('Company goals')).not.toBeNull();expect(section('Improvement opportunities').textContent).toContain('Record who owns payments-api’s code');
+ expect(m.host.querySelector('[role=status]')!.textContent).toContain('Published by Chris');
+ expect(calls.filter(c=>c.url.includes('/champion-')&&c.method==='POST')).toEqual([]);
 });
 
 it('after approval developers see every milestone, their suggested one first, and choose what to work on; nothing is assigned',async()=>{

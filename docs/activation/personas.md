@@ -5,7 +5,7 @@ One entry URL serves every persona: `/` (Welcome) → **Get started** → `/logi
 | Persona | Role | Starts at | What opens |
 |---|---|---|---|
 | Chris | `operator` | `/operator` | Customer Onboarding for the customers listed for Chris: Customer Context (PDF upload), Onboarding Draft (the proposed plan) and Progress & updates (read-only) |
-| Maya Chen | `champion` | `/portal` | The developer Portal (Home, Onboarding) plus **Team Coordination**: **Dream Day** review and approval (`/champion`) and the team overview (`/champion/team`): company goals, improvement opportunities she prioritises and recommends, adoption, and milestone coordination |
+| Maya Chen | `champion` | `/portal` | The developer Portal (Home, Onboarding) plus **Team Coordination**: **Dream Day**, an optional read-only view of the plan Chris published (`/champion`), and the team overview (`/champion/team`): company goals, improvement opportunities she prioritises and recommends, adoption, and milestone coordination |
 | Alex Rivera, Jordan Lee | `developer` | `/portal` | The developer Portal: Home with the team's goals, what they can build or improve and their milestones; Onboarding (`/activation`: Overview, My milestones, Guide); **My progress** (`/progress`) and **AiKA** (`/aika`). Nothing is assigned: developers choose |
 
 All surfaces use the existing Portal shell, navigation and components (`src/portal-app/Shell.tsx`, `portal.css`). The sign-in page reuses the existing entry layout; Team Coordination adds one navigation entry for the Champion.
@@ -37,8 +37,8 @@ Choosing a persona is a simulated sign-in for fictional people. It is not authen
 
 ## Placeholders and honest states (not built yet)
 
-- **Approvals** happen in Dream Day; see [dream-day.md](dream-day.md).
-- **Chosen work.** After the Champion approves, every developer sees the whole approved plan and chooses milestones and engineering opportunities; a Champion's suggested owner is only a suggestion. Work is attributed and revision-checked per developer. See [roles-and-opportunities.md](roles-and-opportunities.md) and [developer-work.md](developer-work.md).
+- **No approvals.** Chris's **Finalize and publish** makes the plan available to the Champion and developers at once; see [roles-and-opportunities.md](roles-and-opportunities.md).
+- **Chosen work.** Once Chris publishes, every developer sees the whole plan and chooses milestones and engineering opportunities; a Champion's suggested owner is only a suggestion. Work is attributed and revision-checked per developer. See [roles-and-opportunities.md](roles-and-opportunities.md) and [developer-work.md](developer-work.md).
 - **AiKA, progress and Insights.** AiKA keeps its original page (`/aika`) and its contextual panel on every other page, with `/` commands decided on the server, and can focus on a milestone or an opportunity. Developers have **My progress** (`/progress`); Insights (`/insights` for the Champion, `/operator/insights` for Chris) counts stored records. See [aika-and-insights.md](aika-and-insights.md).
 - **Other features.** Portal entries such as Catalog and Docs keep the existing "isn't available in this demo" page.
-- **Chris's workflow.** PDF upload, background analysis, the draft (overview first, details collapsed) and sending it as a proposed plan are described in [chris-workspace.md](chris-workspace.md) and [roles-and-opportunities.md](roles-and-opportunities.md). Champion review and approval are in [dream-day.md](dream-day.md).
+- **Chris's workflow.** PDF upload, background analysis, the draft (overview first, details collapsed) and finalizing (which publishes) are described in [roles-and-opportunities.md](roles-and-opportunities.md) and, for the earlier steps, [chris-workspace.md](chris-workspace.md).

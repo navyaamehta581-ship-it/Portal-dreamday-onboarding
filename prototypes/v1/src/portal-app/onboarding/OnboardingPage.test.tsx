@@ -27,10 +27,10 @@ const opportunities=(mine=false):Opportunities=>({viewer:{role:'developer',name:
 beforeEach(()=>{vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT',true);api=mockApi();m=mount();window.history.replaceState(null,'','/activation');});
 afterEach(async()=>{await m.unmount();vi.unstubAllGlobals();sessionStorage.clear();});
 
-it('before approval: says the plan isn’t approved yet, with no tabs, credentials, setup or operator fields',async()=>{
+it('before the plan is published: says so, with no tabs, credentials, setup or operator fields',async()=>{
  api.opportunities.mockRejectedValue(new Error('NO_APPROVED_PLAN'));
  await load();
- expect(text()).toContain('Your team’s plan isn’t approved yet');
+ expect(text()).toContain('Your team’s onboarding plan isn’t published yet');expect(text()).not.toMatch(/approv/i);
  expect(m.host.querySelector('[role=tab]')).toBeNull();
  expect(m.host.querySelector('input[type=password],input[type=file]')).toBeNull();
  expect(text()).not.toMatch(/Chris|access token|Raw account/);

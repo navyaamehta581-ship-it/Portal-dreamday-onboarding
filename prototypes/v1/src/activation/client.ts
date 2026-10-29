@@ -53,9 +53,6 @@ export function activationClient(customerId:string,token:string,base='',apiPrefi
     withdrawReview:(draft:number)=>call<HandoffRecord>('/handoff-submissions',{draft,action:'withdraw'}),
     // Dream Day: the Champion's review. The server builds the view and decides who may act.
     championReview:()=>call<ChampionReview>('/champion-review'),
-    saveChampionReview:(draft:number,expectedRevision:number,plan:{goals:ReviewItem[];milestones:ReviewMilestone[];questions:ReviewItem[]})=>call<ChampionReview>('/champion-reviews',{draft,expectedRevision,plan}),
-    requestChanges:(draft:number,reviewRevision:number,comment:string)=>call<ChampionReview>('/champion-decisions',{draft,reviewRevision,decision:'request_changes',comment}),
-    approvePlan:(draft:number,reviewRevision:number)=>call<ChampionReview>('/champion-decisions',{draft,reviewRevision,decision:'approve',confirmed:true}),
     // Phase 5: each developer's attributed work on approved milestones; the server derives who they are.
     milestoneWork:()=>call<TeamProgress>('/milestone-work'),
     updateMilestone:(milestoneId:string,expectedRevision:number,change:MilestoneChange)=>call<TeamProgress>('/milestone-updates',{milestoneId,expectedRevision,...change}),

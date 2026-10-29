@@ -21,7 +21,7 @@ export function AikaDock({aika,repos,persona}:{aika:AikaSession;repos?:Repositor
    <div className="ctl"><button aria-label={expanded?'Restore AiKA size':'Expand AiKA'} onClick={()=>setExpanded(!expanded)}>{expanded?<Minimize2 size={15}/>:<Maximize2 size={15}/>}</button>
     <button aria-label="Minimize AiKA" onClick={()=>setOpen(false)}><Minus size={16}/></button></div></div>
   <div className="pt-aika-panel-body" ref={body}>
-   {aika.turns.length?<Conversation aika={aika} repos={repos}/>:<p className="pt-note">Ask about your approved onboarding work. Type “/” for context.</p>}
+   {aika.turns.length?<Conversation aika={aika} repos={repos}/>:<p className="pt-note">Ask about your onboarding work. Type “/” for context.</p>}
    {aika.error&&<div className="pt-banner error" role="alert">{aikaProblem(aika.error)}</div>}
   </div>
   {aika.turns.length===0&&<div className="pt-aika-suggest">{suggestionsFor(persona).slice(0,3).map(s=>{const p=parseCommand(s,aika.capabilities);

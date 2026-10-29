@@ -1,5 +1,5 @@
 /** Phase 8: Insights. Onboarding progress computed on the server from the records the Portal already keeps
- * (approved milestones and their work, coordination and reviews, repository inspections). Nothing is estimated or
+ * (published milestones and the work developers recorded on them, coordination and reviews, repository observations). Nothing is estimated or
  * invented: every number counts stored records, and anything not recorded is reported as missing.
  *
  * Authorization follows the existing views: the Champion and Chris see everyone's activity; a developer sees the
@@ -42,7 +42,7 @@ export function createInsights(deps:{work:WorkService;repositories:RepositorySer
   }
   const activity=[...people.values()].filter(a=>full||a.name===viewer.name).sort((a,b)=>(b.lastActiveAt??'').localeCompare(a.lastActiveAt??''));
   return {generatedAt:new Date(now()).toISOString(),viewer,plan,summary:all.summary??null,
-   milestones:mine.milestones.map(m=>({id:m.id,title:m.title,assignee:m.assignee,status:m.status,reviewState:m.reviewState??null,actionsCompleted:m.actionsCompleted??0,actionsTotal:m.actionsTotal??0,
+   milestones:mine.milestones.map(m=>({id:m.id,title:m.title,assignee:m.assignee,workingOn:m.workingOn??[],status:m.status,reviewState:m.reviewState??null,actionsCompleted:m.actionsCompleted??0,actionsTotal:m.actionsTotal??0,
     openBlockers:m.openBlockers,openQuestions:m.openQuestions??0,lastActivityAt:full||m.mine?last.get(m.id)??null:null})),
    activity,reportedReferences:full?references:0,evidence:ev};
  }};

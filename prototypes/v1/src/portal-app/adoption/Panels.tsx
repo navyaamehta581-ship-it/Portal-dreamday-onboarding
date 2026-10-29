@@ -7,10 +7,10 @@ import {STATUS_LABEL,statusTone} from '../work/useMilestoneWork';
 const BASIS:Record<OpportunityBasis,[string,string,string]>={
  verified:['Verified','green','Backed by a live, read-only observation of the repository.'],
  sample:['Sample data','amber','Backed by sample data for this fictional demo, not a live repository.'],
- hypothesis:['Hypothesis','blue','Suggested by the approved plan; nothing has confirmed it yet.']};
+ hypothesis:['Hypothesis','blue','Suggested by the onboarding plan; nothing has confirmed it yet.']};
 const KIND:Record<Opportunity['kind'],string>={integration:'Integration',migration:'Migration',new_build:'New build',improvement:'Improvement'};
 const PRIORITY:Record<Priority,string>={high:'High priority',normal:'Normal priority',later:'Later'};
-export const opportunityProblem=(code:string)=>code==='NO_APPROVED_PLAN'?'Nothing to show until your team’s plan is approved in Dream Day.':code==='CHAMPION_REQUIRED'||code==='FORBIDDEN'?'Your role can’t change this.':code==='DEVELOPER_IDENTITY_REQUIRED'?'Sign in with your own developer persona to choose work.':`Something went wrong (${code}). Try again.`;
+export const opportunityProblem=(code:string)=>code==='NO_APPROVED_PLAN'?'Nothing to show until your team’s onboarding plan is published.':code==='CHAMPION_REQUIRED'||code==='FORBIDDEN'?'Your role can’t change this.':code==='DEVELOPER_IDENTITY_REQUIRED'?'Sign in with your own developer persona to choose work.':`Something went wrong (${code}). Try again.`;
 
 export function BasisPill({basis}:{basis:OpportunityBasis}){
  const [label,tone,title]=BASIS[basis];
@@ -52,7 +52,7 @@ export function OpportunityCard({o,mode,session,onAsk}:{o:Opportunity;mode:'cham
 
 /** Company goals with progress from the milestones that serve them; the Champion can set priorities. */
 export function GoalsList({goals,session,champion}:{goals:GoalView[];session?:OpportunitiesSession;champion?:boolean}){
- if(!goals.length)return <p className="pt-note">No technical goals in the approved plan yet.</p>;
+ if(!goals.length)return <p className="pt-note">No technical goals in the plan yet.</p>;
  return <ul className="pt-goals">{goals.map(g=>{const pct=g.total?Math.round(g.completed/g.total*100):0;return <li key={g.id} aria-label={`Goal: ${g.text}`}>
   <div className="pt-goal-head"><strong>{g.text}</strong>
    {champion&&session?<select className="pt-input" aria-label={`Priority: ${g.text}`} value={g.priority??''} disabled={session.busy===g.id} onChange={e=>void session.prioritize(g.id,{priority:(e.target.value||null) as Priority|null})}>
@@ -73,18 +73,18 @@ export function AdoptionSummary({a}:{a:Adoption}){
    <div><dt>Goals with progress</dt><dd>{a.goals.withProgress}<small> of {a.goals.total}</small></dd></div>
    <div><dt>Milestones completed</dt><dd>{a.milestones.completed}<small> of {a.milestones.total}</small></dd></div>
    <div><dt>Opportunities pursued</dt><dd>{a.opportunities.pursued}<small> of {a.opportunities.total}</small></dd></div>
-   <div><dt>Developers active this week</dt><dd>{active}<small> of {a.developers.length} engaged</small></dd></div>
+   <div><dt>Developers with recorded activity this week</dt><dd>{active}<small> of {a.developers.length} engaged</small></dd></div>
   </dl>
-  <p className="pt-label" style={{marginTop:20}}>Developer activity per week</p>
-  <div className="pt-trend" role="img" aria-label={`Developer activity per week, last ${a.weekly.length} weeks`}>
+  <p className="pt-label" style={{marginTop:20}}>Activity recorded in Portal per week</p>
+  <div className="pt-trend" role="img" aria-label={`Activity recorded in Portal per week, last ${a.weekly.length} weeks`}>
    {a.weekly.map(w=><div key={w.weekStart} className="pt-trend-col" title={`Week of ${week(w.weekStart)}: ${w.events} recorded action${w.events===1?'':'s'} by ${w.activeDevelopers} developer${w.activeDevelopers===1?'':'s'}`}>
     <span className="pt-trend-bar" style={{height:`${Math.max(w.events?6:0,w.events/max*100)}%`}}/><small>{week(w.weekStart)}</small></div>)}
   </div>
-  <table className="pt-sr"><caption>Developer activity per week</caption><thead><tr><th>Week of</th><th>Recorded actions</th><th>Active developers</th></tr></thead>
+  <table className="pt-sr"><caption>Activity recorded in Portal per week</caption><thead><tr><th>Week of</th><th>Recorded actions</th><th>Active developers</th></tr></thead>
    <tbody>{a.weekly.map(w=><tr key={w.weekStart}><td>{week(w.weekStart)}</td><td>{w.events}</td><td>{w.activeDevelopers}</td></tr>)}</tbody></table>
   {a.developers.length>0&&<><p className="pt-label" style={{marginTop:18}}>Who is engaged</p>
    <ul className="pt-plain-list">{a.developers.map(d=><li key={d.name}><strong>{d.name}</strong> · {d.workingOn} milestone{d.workingOn===1?'':'s'}, {d.pursuing} opportunit{d.pursuing===1?'y':'ies'}{d.lastActiveAt?` · last active ${new Date(d.lastActiveAt).toLocaleDateString()}`:''}{d.activeThisWeek?'':' · not active this week'}</li>)}</ul></>}
   {a.suggestions.length>0&&<><p className="pt-label" style={{marginTop:18}}>Where engagement could improve</p><ul className="pt-plain-list">{a.suggestions.map(s=><li key={s}>{s}</li>)}</ul></>}
-  <p className="pt-note">From activity recorded in this onboarding (chosen milestones, recorded work and pursued opportunities). No wider Portal usage data is connected in this demo, so team-level usage isn’t shown.</p>
+  <p className="pt-note">Counted from what developers recorded in Portal for this onboarding: milestones they chose, steps they marked and opportunities they pursued. Nothing is detected automatically from repositories or tools, and no wider Portal usage data is connected in this demo.</p>
  </div>;
 }

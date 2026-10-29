@@ -91,7 +91,7 @@ test('hosted interpretation is validated; invented quotes fall back to the rule-
  assert.equal((await hostedInterpreter({},reply(good) as typeof fetch).interpret(sources)).interpreter,'rule_based','no model configured');
 });
 
-test('HTTP: Chris drafts and submits, the Champion approves (Dream Day); developers get only the projected view on every route',async()=>{
+test('HTTP: Chris drafts and finalizes, which publishes it; developers get only the projected view on every route',async()=>{
  const {createApp}=await import('../src/app.ts');const {openGoalStore}=await import('../src/store.ts');
  const {openActivationStore}=await import('../src/activation/store.ts');const {createIntake}=await import('../src/activation/intake.ts');
  const {createBlockerReports}=await import('../src/activation/reports.ts');
@@ -113,29 +113,28 @@ test('HTTP: Chris drafts and submits, the Champion approves (Dream Day); develop
   const m=draft.proposal.milestones[0];
   // The pre-Dream Day direct publication is closed on the server, whatever the body says.
   assert.equal((await call('handoff-publications','op',{draft:1,milestones:[m],outcome:'Prepare payments-api',agreedBy:'Maya',agreementConfirmed:true})).status,403);
-  // Chris names the developer who will do the work, then submits.
-  const review={...draft.review,stakeholders:[...draft.review.stakeholders,{id:'p-alex',name:'Alex Rivera',role:'Developer',responsibilities:'Repository readiness',basis:'chris',sources:[],technical:true}],
-   milestones:[{...draft.review.milestones[0],assignee:'Alex Rivera'}]};
-  assert.equal((await call('handoff-reviews','op',{draft:1,expectedRevision:0,review})).status,200);
-  assert.equal((await call('handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true})).status,200);
-  // The Champion's edits are screened at approval: a commercial remark blocks it, with a field label.
-  const view=await clean(await call('champion-review','champ'),'champion review');
-  const leaky=await call('champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision,plan:{goals:view.plan.goals,questions:view.plan.questions,milestones:[{...view.plan.milestones[0],description:'Prove value before the $480K renewal.'}]}});
-  assert.equal(leaky.status,200);
-  const refused=await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+1,decision:'approve',confirmed:true});
+  // Chris names the developer suggested for the work. Finalizing is screened: a commercial remark blocks it, with a field label.
+  const people=[...draft.review.stakeholders,{id:'p-alex',name:'Alex Rivera',role:'Developer',responsibilities:'Repository readiness',basis:'chris',sources:[],technical:true}];
+  const leaky={...draft.review,stakeholders:people,milestones:[{...draft.review.milestones[0],assignee:'Alex Rivera',description:'Prove value before the $480K renewal.'}]};
+  assert.equal((await call('handoff-reviews','op',{draft:1,expectedRevision:0,review:leaky})).status,200);
+  const refused=await call('handoff-submissions','op',{draft:1,reviewRevision:1,action:'submit',confirmed:true});
   assert.equal(refused.status,400);assert.equal((await refused.json()).error.code,'CONFIDENTIAL_CONTENT');
-  await call('champion-reviews','champ',{draft:1,expectedRevision:view.reviewRevision+1,plan:{goals:view.plan.goals,questions:view.plan.questions,milestones:[view.plan.milestones[0]]}});
-  const approved=await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+2,decision:'approve',confirmed:true});
-  assert.equal(approved.status,200);assert.equal((await approved.json()).status,'published');
-  assert.equal((await call('champion-decisions','champ',{draft:1,reviewRevision:view.reviewRevision+3,decision:'approve',confirmed:true})).status,409,'no second approval');
-  const opState=await (await call('state','op')).json();assert.equal(opState.context.agreedGoal.agreedBy,'Riley Champion (Champion), Dream Day approval');
+  assert.equal((await call('state','dev')).status,404,'nothing published');
+  const review={...draft.review,stakeholders:people,milestones:[{...draft.review.milestones[0],assignee:'Alex Rivera'}]};
+  assert.equal((await call('handoff-reviews','op',{draft:1,expectedRevision:1,review})).status,200);
+  // Finalizing publishes: no Champion approval in between.
+  const finalized=await call('handoff-submissions','op',{draft:1,reviewRevision:2,action:'submit',confirmed:true});
+  assert.equal(finalized.status,200);assert.equal((await finalized.json()).status,'published');
+  assert.equal((await call('handoff-submissions','op',{draft:1,reviewRevision:3,action:'submit',confirmed:true})).status,409,'published once');
+  await clean(await call('champion-review','champ'),'champion review');
+  const opState=await (await call('state','op')).json();assert.equal(opState.context.agreedGoal.agreedBy,'Chris (Spotify account operator), finalized onboarding');
   const dev=await clean(await call('state','dev'),'GET state');
   assert.equal(dev.plan.selectedMilestone.outcome,m.objective);
   assert.equal(dev.handoff.milestones[0].system.repository,'aperture/payments-api');assert.equal(dev.handoff.milestones[0].proposedAssignee,'Alex Rivera');
-  assert.deepEqual(dev.handoff.approval.by,'Riley Champion');
+  assert.deepEqual(dev.handoff.approval.by,'Chris');
   const progress=await call('progress-reports','dev',{id:'progress:1',expectedRevision:dev.revision,planRevision:0,message:'Checked the repository root.',needsChris:false});
   const afterProgress=await clean(progress,'progress report');
   await clean(await call('blocker-reports','dev',{id:'developer:b1',expectedRevision:afterProgress.revision,planRevision:0,message:'No read access to aperture/payments-api.'}),'blocker report');
-  const overview=await (await call('handoff','op')).json();assert.equal(overview.drafts[0].status,'published');assert.equal(overview.drafts[0].approvals.champion.by,'Riley Champion');
+  const overview=await (await call('handoff','op')).json();assert.equal(overview.drafts[0].status,'published');assert.equal(overview.drafts[0].approvals.chris.by,'Chris');
  }finally{await new Promise<void>(r=>server.close(()=>r()));store.close();handoffs.close();goals.close();}
 });

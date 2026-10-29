@@ -10,20 +10,20 @@ import {describe,modelProblem} from './InformationTab';
 const REASONS:Record<string,string>={unassigned:'needs an assignee',missing:'needs content',no_milestone:'add at least one milestone',not_a_technical_stakeholder:'isn’t one of the technical stakeholders',unknown_milestone:'depends on a milestone that no longer exists',
  circular_dependencies:'milestones depend on each other in a loop',commercial_text:'mentions commercial or deal details',company_statistic:'mentions company size figures',private_comment:'contains an executive or private comment',
  deal_stage:'mentions the deal stage or evaluation timeline',internal_text:'restates one of your private notes',private_name:'names someone outside the technical team'};
-const SUBMIT_ERRORS:Record<string,string>={ALREADY_APPROVED:'The Champion already approved this plan.',AWAITING_CHAMPION_REVIEW:'This draft is with the Champion. Withdraw it to make changes.',REVIEW_INCOMPLETE:'Some parts of the draft need attention before it can go to the Champion:',CONFIDENTIAL_CONTENT:'The Champion must not receive internal or commercial information. Edit these parts first:',
+const SUBMIT_ERRORS:Record<string,string>={ALREADY_APPROVED:'This plan is already published.',AWAITING_CHAMPION_REVIEW:'This draft was sent for review under an earlier version of the Portal. Withdraw it to make changes.',REVIEW_INCOMPLETE:'Some parts of the draft need attention before it can be published:',CONFIDENTIAL_CONTENT:'The Champion and developers must not receive internal or commercial information. Edit these parts first:',
  REVISION_CONFLICT:'This draft was saved in another tab. Reload to see the latest version.',NOT_LATEST_DRAFT:'A newer analysis exists. Reload to review the latest draft.',INVALID_TRANSITION:'The draft’s status changed in another tab. Reload to see it.'};
 const id=newId;
 
-/** Onboarding Draft: Chris checks what the analysis proposed, edits what he wants, and hands the proposal to the
- * Champion. The page starts with a short overview; every section opens on demand, and a section with something
- * that must be fixed opens by itself. Unknowns may stay: the Champion can complete or change the plan. */
+/** Onboarding Draft: Chris checks what the analysis proposed, edits what he wants, and finalizes it, which publishes
+ * it to the Champion and developers. The page starts with a short overview; every section opens on demand, and a
+ * section with something that must be fixed opens by itself. Unknowns may stay open. */
 export function ReviewTab({ws,state}:{ws:CustomerWorkspace;state:ActivationState|null}){
  if(state)return <PublishedSummary state={state} record={ws.latest}/>;
  const record=ws.latest,r=ws.review;
  if(!record||!r)return <section className="pt-card"><h3>{ws.running?'Analysis is running':'Upload the customer’s PDF first'}</h3>
   <p className="pt-note">{ws.running?'The draft appears here when the analysis finishes.':'The onboarding draft is generated from your saved customer information, then you review and edit it here.'}</p>
   <div className="pt-actions"><button className="pt-btn sm" onClick={()=>navigate('/operator')}>Go to Customer Context</button></div></section>;
- // Chris edits while drafting and after the Champion requested changes; under review or approved, the draft is locked.
+ // Chris edits until he finalizes; a finalized (or, from the earlier flow, submitted) draft is locked.
  const submitted=record.status==='submitted'||record.status==='resubmitted'||record.status==='approved',locked=submitted||ws.running;
  const feedback=record.status==='changes_requested'?[...(record.history??[])].reverse().find(e=>e.action==='changes_requested'):null;
  const set=(next:Partial<ReviewDraft>)=>ws.setReview({...r,...next});
@@ -63,7 +63,7 @@ export function ReviewTab({ws,state}:{ws:CustomerWorkspace;state:ActivationState
    <Section id="draft-goals" title="Technical goals" count={r.goals.length} defaultOpen forceOpen={has('goals')} summary="What the onboarding should achieve. Customer requirements come from the customer’s sources.">
     <Items label="Goal" title="" items={r.goals} suggestion={suggestion} customerLabel="Customer requirement" onChange={goals=>set({goals})}/>
    </Section>
-   <Section id="draft-milestones" title="Onboarding milestones" count={r.milestones.length} defaultOpen forceOpen={has('milestones')} summary="Proposed outcomes, in order. Owners and dependencies are optional; the Champion can decide them.">
+   <Section id="draft-milestones" title="Onboarding milestones" count={r.milestones.length} defaultOpen forceOpen={has('milestones')} summary="Proposed outcomes, in order. Suggested owners and dependencies are optional; developers choose what to work on.">
     <Milestones milestones={r.milestones} open={openMilestones} people={r.stakeholders.filter(s=>s.technical&&s.name.trim()).map(s=>s.name.trim())} suggestion={suggestion} onChange={milestones=>set({milestones})}/>
    </Section>
    <Section id="draft-facts" title="Known facts" count={r.facts.length} forceOpen={has('facts')} summary="What the sources state, each with its backing: verified, reported or unconfirmed.">
@@ -138,7 +138,7 @@ function Stakeholders({items,onChange}:{items:ReviewStakeholder[];onChange:(x:Re
   <span className="pt-person-avatar" aria-hidden="true">{(s.name.trim()||'?').charAt(0).toUpperCase()}</span>
   <div className="pt-person-main">
    <p><strong>{s.name||'Unnamed'}</strong> · {s.role||'Role not stated'} <span className={'pt-pill '+(s.basis==='chris'?'green':s.basis==='stated'?'':'amber')}>{BASIS[s.basis]}</span></p>
-   <p className="pt-note" style={{marginTop:2}}>{s.responsibilities.trim()||'Responsibility not specified in the sources. The Champion can add it.'}{s.sources.length?` · Source: ${s.sources.join(', ')}`:''}</p>
+   <p className="pt-note" style={{marginTop:2}}>{s.responsibilities.trim()||'Responsibility not specified in the sources.'}{s.sources.length?` · Source: ${s.sources.join(', ')}`:''}</p>
    {open&&<div className="pt-person-edit">
     <div className="pt-person">
      <input className="pt-input" aria-label={`Stakeholder ${i+1} name`} value={s.name} maxLength={80} onChange={e=>edit(i,{name:e.target.value})}/>
@@ -163,13 +163,13 @@ function Internal({record}:{record:HandoffRecord}){
  const internal=record.understanding.findings.filter(f=>f.audience==='internal');
  return <section className="pt-card" aria-label="Kept internal">
   <details className="pt-details" style={{marginTop:0}}><summary>Kept internal ({internal.length}) · only you see this</summary>
-   <p className="pt-note">Commercial details, people notes and your private notes found in the information. They are never submitted for Champion review or shown to developers.</p>
+   <p className="pt-note">Commercial details, people notes and your private notes found in the information. They are never published to the Champion or developers.</p>
    <ul className="pt-findings compact">{internal.map(f=><li key={f.id}><span className="pt-pill">{INTERNAL_LABEL[f.category]??'Note'}</span><span className="pt-clamp">{f.statement}</span></li>)}</ul>
   </details>
  </section>;
 }
 
-const ACTION:Record<string,string>={edited:'Changed by the Champion',submitted:'Submitted for Champion review',resubmitted:'Resubmitted for Champion review',withdrawn:'Withdrawn',changes_requested:'Changes requested',approved:'Approved',published:'Published to developers'};
+const ACTION:Record<string,string>={edited:'Changed by the Champion',submitted:'Sent for Champion review',resubmitted:'Sent again for Champion review',withdrawn:'Withdrawn',changes_requested:'Sent back by the Champion',approved:'Finalized',published:'Published to the Champion and developers'};
 /** What the Champion changed since Chris sent the plan. Information only: Chris doesn't approve these again. */
 function ChampionUpdates({record}:{record:HandoffRecord}){
  const history=record.history??[];
@@ -183,12 +183,12 @@ function ChampionUpdates({record}:{record:HandoffRecord}){
   <p className="pt-note" style={{marginTop:6}}>Their changes are marked “Added by Champion” or “edited” below. You don’t need to approve them.</p></div></div>;
 }
 
-/** The Dream Day review steps so far, with the Champion's comments. */
+/** The plan's history so far (finalizing, and any steps from the earlier review flow). */
 export function ReviewHistory({record}:{record:HandoffRecord|null}){
  const history=record?.history??[];
  if(!history.length)return null;
- return <section className="pt-card" aria-label="Dream Day review history">
-  <h3>Dream Day review history</h3>
+ return <section className="pt-card" aria-label="Plan history">
+  <h3>Plan history</h3>
   <ol className="pt-milestones">{history.map((e,i)=><li key={i}><span className={'pt-pill '+(e.action==='changes_requested'?'amber':e.action==='approved'||e.action==='published'||e.action==='edited'?'green':'blue')}>{ACTION[e.action]}</span>
    <div><strong>{e.by}</strong><p>{new Date(e.at).toLocaleString()}</p>{e.comment&&<p style={{whiteSpace:'pre-wrap'}}>“{e.comment}”</p>}</div></li>)}</ol>
  </section>;
@@ -198,44 +198,45 @@ function Submission({ws,record,unknowns}:{ws:CustomerWorkspace;record:HandoffRec
  const [confirmed,setConfirmed]=useState(false);
  const err=ws.error?.scope==='submit'?ws.error:null;
  const history=<ReviewHistory record={record}/>;
- if(record.status==='approved')return <>{history}<section className="pt-card" aria-label="Champion review">
-  <h3>Champion approval complete</h3>
-  <p style={{marginTop:12}}>Approved by {record.approvals?.champion.by} on {record.approvals?.champion.at?new Date(record.approvals.champion.at).toLocaleString():''}. Publishing to developers isn’t enabled on this server, so developers don’t see it yet.</p>
+ if(record.status==='approved')return <>{history}<section className="pt-card" aria-label="Finalized">
+  <h3>Onboarding plan finalized</h3>
+  <p style={{marginTop:12}}>Finalized by {record.approvals?.chris.by} on {record.approvals?.chris.at?new Date(record.approvals.chris.at).toLocaleString():''}. Publishing isn’t enabled on this server, so the Champion and developers don’t see it yet.</p>
  </section></>;
- if(record.status==='submitted'||record.status==='resubmitted')return <>{history}<section className="pt-card" aria-label="Champion review">
-  <h3>{record.status==='resubmitted'?'Resubmitted for Champion review':'Submitted for Champion review'}</h3>
-  <p style={{marginTop:12}}>Sent {record.submittedAt?new Date(record.submittedAt).toLocaleString():''}. Your Champion reviews it in Dream Day and can edit, add or remove items, suggest owners and approve it. You’ll see their changes here; you don’t need to approve them. Nothing reaches developers until it’s approved.</p>
+ // A draft sent for Champion review under the earlier flow: Chris withdraws it, then finalizes it himself.
+ if(record.status==='submitted'||record.status==='resubmitted')return <>{history}<section className="pt-card" aria-label="Finalize onboarding plan">
+  <h3>Sent for review under an earlier version</h3>
+  <p style={{marginTop:12}}>This draft was sent for Champion review before plans were published directly. Withdraw it to make changes and publish it yourself; nobody needs to approve it.</p>
   <div className="pt-actions"><button className="pt-btn sm ghost" disabled={ws.busy==='submit'} onClick={()=>void ws.withdraw()}>Withdraw to make changes</button></div>
   {err&&<div className="pt-banner error" role="alert">{SUBMIT_ERRORS[err.code]??describe(err.code)}</div>}
  </section></>;
  const blocked=ws.reviewDirty||ws.running||ws.busy!=='';
- const again=record.status==='changes_requested'||(record.history??[]).some(e=>e.action==='submitted'||e.action==='resubmitted');
- return <>{history}<section className="pt-card" aria-label="Submit for Champion review">
-  <h3>{again?'Send the revised plan to your Champion':'Send this proposed plan to your Champion'}</h3>
-  <p className="pt-note">You’re sending a <strong>proposed</strong> plan for the Champion to review, not certifying that every stakeholder, responsibility or technical detail is complete. The Champion can edit, add or remove items; you’ll see their changes without approving them again. Technical setup (repositories, wiki, SSO) stays with Spotify’s solutions engineers.</p>
-  {unknowns>0&&<p className="pt-note">{unknowns} open question{unknowns===1?'':'s'} or unknown{unknowns===1?'':'s'} can stay open; the Champion can answer them.</p>}
-  <label className="pt-check"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I checked this proposal. It contains no commercial details, internal notes or private comments.</label>
-  <div className="pt-actions"><button className="pt-btn sm" disabled={!confirmed||blocked} onClick={()=>void ws.submit()}>{ws.busy==='submit'?'Sending…':again?'Resubmit for Champion review':'Send to Champion for review'}</button>
+ return <>{history}<section className="pt-card" aria-label="Finalize onboarding plan">
+  <h3>Finalize the onboarding plan</h3>
+  <p className="pt-note">Finalizing publishes the goals and milestones to your customer’s Champion and developers straight away. Nobody needs to approve it, and developers choose what to work on. Technical setup (repositories, wiki, SSO) stays with Spotify’s solutions engineers.</p>
+  {unknowns>0&&<p className="pt-note">{unknowns} open question{unknowns===1?'':'s'} or unknown{unknowns===1?'':'s'} can stay open; the team can answer them later.</p>}
+  <label className="pt-check"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I checked this plan. It contains no commercial details, internal notes or private comments.</label>
+  <div className="pt-actions"><button className="pt-btn sm" disabled={!confirmed||blocked} onClick={()=>void ws.submit()}>{ws.busy==='submit'?'Publishing…':'Finalize and publish'}</button>
    {ws.reviewDirty&&<span className="pt-note" style={{marginTop:0}}>Save your changes first.</span>}</div>
   {err&&<div className="pt-banner error" role="alert"><div>{SUBMIT_ERRORS[err.code]??describe(err.code)}{err.issues?.length?<ul className="pt-list">{err.issues.map(x=><li key={x.path}>{x.label}: {REASONS[x.reason]??x.reason}</li>)}</ul>:null}</div></div>}
  </section></>;
 }
 
 function PublishedSummary({state,record}:{state:ActivationState;record:HandoffRecord|null}){
- const approval=record?.approvals?.champion.status==='approved'?record.approvals.champion:null;
+ // Who published it: Chris when he finalized it (older records: the Champion's Dream Day approval).
+ const published=record?.developer?.approval??(record?.approvals?.champion.status==='approved'?{by:record.approvals.champion.by!,at:record.approvals.champion.at!}:null);
  const team=(record?.review?.milestones??[]).filter(m=>m.assignee);
  return <><section className="pt-card" aria-label="Agreed outcome">
-  <div className="pt-card-head"><h3>Agreed activation outcome</h3><span className={'pt-pill '+(approval?'green':'')}>{approval?'Approved · Published to developers':'Published before Dream Day'}</span></div>
-  {approval?<div className="pt-banner" role="status">Champion approval complete: approved by {approval.by} in Dream Day on {new Date(approval.at!).toLocaleString()}.</div>
-   :<div className="pt-banner warn" role="status">This plan was published before Dream Day. No Champion approval is recorded for it.</div>}
+  <div className="pt-card-head"><h3>Published onboarding plan</h3><span className={'pt-pill '+(published?'green':'')}>{published?'Published to the Champion and developers':'Published before Dream Day'}</span></div>
+  {published?<div className="pt-banner" role="status">Published by {published.by} on {new Date(published.at).toLocaleString()}. The Champion and developers can see it; you don’t need to do anything else.</div>
+   :<div className="pt-banner warn" role="status">This plan was published by an earlier version of the Portal.</div>}
   <dl className="pt-fields">
    <div className="pt-field wide"><dt>Outcome</dt><dd>{state.context.agreedGoal.text}</dd></div>
-   <div className="pt-field"><dt>Agreed by</dt><dd>{state.context.agreedGoal.agreedBy}</dd></div>
+   <div className="pt-field"><dt>Finalized by</dt><dd>{state.context.agreedGoal.agreedBy}</dd></div>
    <div className="pt-field"><dt>Recorded</dt><dd>{new Date(state.context.agreedGoal.agreedAt).toLocaleString()}</dd></div>
    <div className="pt-field wide"><dt>First milestone</dt><dd>{state.plan.selectedMilestone.outcome}</dd></div>
   </dl>
-  {approval&&team.length>0&&<><p className="pt-label" style={{marginTop:22}}>Approved responsibilities</p>
-   <ul className="pt-list" aria-label="Approved responsibilities">{team.map(m=><li key={m.id}><span><strong>{m.assignee}</strong> · {m.title}</span></li>)}</ul></>}
+  {published&&team.length>0&&<><p className="pt-label" style={{marginTop:22}}>Suggested owners</p>
+   <ul className="pt-list" aria-label="Suggested owners">{team.map(m=><li key={m.id}><span><strong>{m.assignee}</strong> · {m.title}</span></li>)}</ul></>}
   <p className="pt-label" style={{marginTop:22}}>Completion criteria</p>
   <ul className="pt-list">{state.plan.selectedMilestone.successCriteria.map(c=><li key={c}>{c}</li>)}</ul>
  </section><ReviewHistory record={record}/></>;
