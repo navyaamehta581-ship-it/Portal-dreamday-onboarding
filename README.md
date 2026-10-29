@@ -1,4 +1,4 @@
-# Spotify Portal Activation Intelligence
+# Spotify Portal Onboarding Intelligence / Dream Day
 
 A shared activation workspace for Chris and the developer: turn a customer briefing and separately agreed goal into a relevant next action, recover when the developer gets blocked, and show evidence-linked progress toward the first useful outcome.
 
