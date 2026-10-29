@@ -24,9 +24,18 @@ const MAX_RESPONSE=2_000_000;
 async function problem(r:Response){
  try{const t=(await r.text()).slice(0,20_000);const j=JSON.parse(t),details:any[]=Array.isArray(j?.error?.details)?j.error.details:[];
   const delay=/^(\d+(?:\.\d+)?)s$/.exec(String(details.find(d=>typeof d?.retryDelay==='string')?.retryDelay??''));
-  return {reason:String(details.find(d=>typeof d?.reason==='string')?.reason??j?.error?.status??''),retryMs:delay?Math.ceil(Number(delay[1])*1000):null};}catch{return {reason:'',retryMs:null};}
+  return {reason:String(details.find(d=>typeof d?.reason==='string'&&d.reason)?.reason||j?.error?.status||''),retryMs:delay?Math.ceil(Number(delay[1])*1000):null};}catch{return {reason:'',retryMs:null};}
 }
 const reason=async(r:Response)=>(await problem(r)).reason;
+/** Why Google refused the key or model, as a detail code. Only for refusals that retrying can't fix. */
+function refusal(status:number,why:string):string|null{
+ if(/API_KEY_INVALID/.test(why)||status===401)return 'invalid_api_key';
+ // For example "User location is not supported for the API use", or a model that needs billing on the key's project.
+ if(/FAILED_PRECONDITION/.test(why))return 'precondition_failed';
+ if(status===403)return 'permission_denied';
+ if(status===404)return 'model_not_found';
+ return null;
+}
 
 export function createGemini(config:GeminiConfig,fetchImpl:typeof fetch=fetch):JsonModel{
  const origin=config.apiOrigin??GEMINI_ORIGIN;
@@ -58,16 +67,16 @@ export function createGemini(config:GeminiConfig,fetchImpl:typeof fetch=fetch):J
   if(content.length>(task.maxChars??60000))throw new ModelError('CONTEXT_LIMIT');
   let r=await request(task,maxTokens,schemaSupported);
   if(r.status===400&&schemaSupported){
-   const why=await reason(r);
-   if(/API_KEY_INVALID/.test(why))throw new ModelError('MODEL_NOT_CONFIGURED','invalid_api_key');
+   const why=await reason(r),refused=refusal(400,why);
+   if(refused)throw new ModelError('MODEL_NOT_CONFIGURED',refused);
    // The model didn't accept the schema: keep plain JSON mode for this process; validation is unchanged.
    schemaSupported=false;r=await request(task,maxTokens,false);
   }
   if(!r.ok){
    const {reason:why,retryMs}=await problem(r);
    if(r.status===429){blockedUntil=clock()+Math.min(retryMs??60_000,15*60_000);throw new ModelError('MODEL_RATE_LIMITED');}
-   if(/API_KEY_INVALID/.test(why)||r.status===401||r.status===403)throw new ModelError('MODEL_NOT_CONFIGURED',r.status===403?'permission_denied':'invalid_api_key');
-   if(r.status===404)throw new ModelError('MODEL_NOT_CONFIGURED','model_not_found');
+   const refused=refusal(r.status,why);
+   if(refused&&(r.status===400||r.status===401||r.status===403||r.status===404))throw new ModelError('MODEL_NOT_CONFIGURED',refused);
    throw new ModelError(r.status>=500?'MODEL_UNAVAILABLE':'INVALID_MODEL_OUTPUT',r.status>=500?null:'request_rejected');
   }
   const text=await r.text();
@@ -89,7 +98,20 @@ export function createGemini(config:GeminiConfig,fetchImpl:typeof fetch=fetch):J
   return task.validate(fit(parsed,task.schema));
  }
 
- return {provider:'gemini',model:config.model,maxCtx:32768,async run<T>(task:JsonTask<T>){
+ return {provider:'gemini',model:config.model,maxCtx:32768,
+  /** GET models/{model}: confirms the key and the model without generating text, so no tokens are spent. */
+  async check(){
+   if(!usable)return {ok:false,code:'MODEL_NOT_CONFIGURED',detail:config.apiKey?'invalid_settings':'missing_api_key'};
+   let r:Response;
+   try{r=await fetchImpl(`${origin}/v1beta/models/${config.model}`,{redirect:'error',signal:AbortSignal.timeout(Math.min(config.timeoutMs,15_000)),headers:{'x-goog-api-key':config.apiKey!}});}
+   catch{return {ok:false,code:'MODEL_UNAVAILABLE',detail:'unreachable'};}
+   if(r.ok){await r.body?.cancel();return {ok:true};}
+   const {reason:why}=await problem(r);
+   if(r.status===429)return {ok:false,code:'MODEL_RATE_LIMITED',detail:null};
+   const refused=refusal(r.status,why);
+   return refused?{ok:false,code:'MODEL_NOT_CONFIGURED',detail:refused}:{ok:false,code:'MODEL_UNAVAILABLE',detail:`http_${r.status}`};
+  },
+  async run<T>(task:JsonTask<T>){
   if(!usable)throw new ModelError('MODEL_NOT_CONFIGURED');
   const started=Date.now();let last:ModelError=new ModelError('MODEL_UNAVAILABLE');
   const stats:StageStats={name:task.name,ms:0,attempts:0,attemptErrors:[],promptTokens:null,outputTokens:null,promptEvalMs:null,evalMs:null,loadMs:null,tokensPerSecond:null,thinkingChars:0,numCtx:0,truncated:false};

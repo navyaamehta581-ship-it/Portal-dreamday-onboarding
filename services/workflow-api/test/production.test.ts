@@ -7,7 +7,7 @@ import {mkdtempSync,rmSync,existsSync} from 'node:fs';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {configFromEnv,startProduction} from '../src/production.ts';
+import {cleanKey,configFromEnv,startProduction} from '../src/production.ts';
 import {aperturePdf} from './support/sample-pdf.mjs';
 
 const SECRET='s'.repeat(48),PASS='correct horse battery';
@@ -141,12 +141,16 @@ test('hosted analysis through Gemini (loopback stand-in) with the daily cap; sta
  // A stand-in for generateContent: answers every task with output that fails validation, so analysis falls back to
  // the labelled rule-based result. What matters here is that requests go out with the key header, and stop at the cap.
  const stub=createServer((req,res)=>{let body='';req.on('data',d=>body+=d);req.on('end',()=>{requests.push({key:req.headers['x-goog-api-key'] as string,path:req.url!});
-  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({candidates:[{content:{parts:[{text:'{}'}]},finishReason:'STOP'}]}));});});
+  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(req.method==='GET'?{name:'models/gemini-2.5-flash'}:{candidates:[{content:{parts:[{text:'{}'}]},finishReason:'STOP'}]}));});});
  await new Promise<void>(r=>stub.listen(0,'127.0.0.1',r));
  try{
   const app=await boot(dir,{GEMINI_API_KEY:'test-key-not-real',GEMINI_API_ORIGIN:`http://127.0.0.1:${(stub.address() as {port:number}).port}`,PORTAL_AI_DAILY_REQUEST_LIMIT:'1'});
   const a=client(app.origin);
   assert.equal((await a.call('/healthz')).json.checks.ai,'gemini:gemini-2.5-flash');
+  for(let i=0;i<50&&(await a.call('/healthz')).json.checks.aiCheck==='pending';i++)await new Promise(r=>setTimeout(r,10));
+  assert.equal((await a.call('/healthz')).json.checks.aiCheck,'ok','the startup check found the key and model accepted');
+  // The startup check reads the model's metadata only; it generates nothing and isn't counted.
+  assert.deepEqual(requests.splice(0),[{key:'test-key-not-real',path:'/v1beta/models/gemini-2.5-flash'}]);
   await a.enter();await a.signIn('chris');
   await a.call(op('handoff-workspace'),{method:'POST',body:JSON.stringify({expectedRevision:0,sources:[{type:'conversation',label:'Discovery call',text:'Maya Chen: Nobody can tell who owns payments-api. Let’s pilot with payments-api on GitHub.'}]})});
   assert.equal((await a.call(op('handoff-analyses'),{method:'POST',body:JSON.stringify({workspaceRevision:1})})).status,202);
@@ -166,6 +170,38 @@ test('hosted analysis through Gemini (loopback stand-in) with the daily cap; sta
   await app.close();
   assert.ok(!logs.lines.join('').includes('test-key-not-real'),'the key is never logged');
  }finally{logs.restore();stub.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('a key Google rejects is reported at startup in /healthz and the log, and the analysis says why',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'prod-'));
+ const logs=captureLogs();
+ let generate=0;
+ // Google's real answer to a bad key (checked against the live API): 400 INVALID_ARGUMENT, reason API_KEY_INVALID.
+ const stub=createServer((req,res)=>{req.resume();req.on('end',()=>{if(req.method==='POST')generate++;res.writeHead(400,{'Content-Type':'application/json'});
+  res.end(JSON.stringify({error:{code:400,message:'API key not valid. Please pass a valid API key.',status:'INVALID_ARGUMENT',details:[{'@type':'type.googleapis.com/google.rpc.ErrorInfo',reason:'API_KEY_INVALID',domain:'googleapis.com'}]}}));});});
+ await new Promise<void>(r=>stub.listen(0,'127.0.0.1',r));
+ try{
+  // Pasted with quotes and a trailing line break: cleaned, never part of a key.
+  const app=await boot(dir,{GEMINI_API_KEY:'"wrong-key"\n',GEMINI_API_ORIGIN:`http://127.0.0.1:${(stub.address() as {port:number}).port}`});
+  const a=client(app.origin);
+  let h;for(let i=0;i<50;i++){h=(await a.call('/healthz')).json;if(h.checks.aiCheck!=='pending')break;await new Promise(r=>setTimeout(r,10));}
+  assert.equal(h.status,'ok','the demo still works (rule-based), so the deploy stays healthy');
+  assert.equal(h.checks.aiCheck,'MODEL_NOT_CONFIGURED:invalid_api_key');
+  assert.ok(logs.lines.some(l=>l.includes('"event":"ai_check"')&&l.includes('"level":"warn"')&&l.includes('MODEL_NOT_CONFIGURED:invalid_api_key')));
+  await a.enter();await a.signIn('chris');
+  await a.call(op('handoff-workspace'),{method:'POST',body:JSON.stringify({expectedRevision:0,sources:[{type:'conversation',label:'Call',text:'Maya Chen: we want payments-api in the Catalog.'}]})});
+  await a.call(op('handoff-analyses'),{method:'POST',body:JSON.stringify({workspaceRevision:1})});
+  let job;for(let i=0;i<200;i++){job=(await a.call(op('handoff-analyses'))).json.job;if(job.status!=='running')break;await new Promise(r=>setTimeout(r,20));}
+  assert.deepEqual([job.status,job.modelOk,job.modelError,job.modelErrorDetail],['succeeded',false,'MODEL_NOT_CONFIGURED','invalid_api_key']);
+  assert.equal(generate,1,'a rejected key is not retried');
+  await app.close();
+  assert.ok(!logs.lines.join('').includes('wrong-key'),'the key is never logged');
+ }finally{logs.restore();stub.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('pasted keys are cleaned of spaces, line breaks and surrounding quotes',()=>{
+ assert.equal(cleanKey('  AIzaKey \n'),'AIzaKey');assert.equal(cleanKey('"AIzaKey"'),'AIzaKey');assert.equal(cleanKey("'AIzaKey'"),'AIzaKey');
+ assert.equal(cleanKey(''),null);assert.equal(cleanKey('  '),null);assert.equal(cleanKey(undefined),null);assert.equal(cleanKey('"'),'"');
 });
 
 test('render.yaml and the server agree: every variable the Blueprint sets is read, and the Blueprint never holds a secret value',async()=>{

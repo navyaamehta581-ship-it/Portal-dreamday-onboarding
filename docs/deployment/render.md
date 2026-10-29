@@ -101,10 +101,27 @@ If the passphrase or the secret is missing or too short, the server still starts
   - `"status":"ok"`, `"storage":"ok"` and `"storageMode":"ephemeral"`;
   - `"ai":"gemini:gemini-2.5-flash"`, or `not_configured` without a key;
   - `"aiRequestsPerMinute":8`.
+  - `"aiCheck":"ok"`: at startup the server asks Gemini whether it accepts the key and model (a metadata request; nothing is generated). Anything else names the problem; see *AI troubleshooting* below.
 - `https://<your-service>.onrender.com/` should open the welcome screen with the fictional-data and temporary-data notices. Choose **Get started**, enter the passphrase, then choose a persona.
 - To check real AI: as Chris, upload the fictional sample PDF (link under the upload area). The analysis starts by itself.
   - The banner should say "produced by the AI model".
   - If it says rule-based, the banner names the reason code. For example, `MODEL_RATE_LIMITED` means the free quota is in use, and `AI_DAILY_LIMIT` means the service's own daily cap was reached.
+
+## AI troubleshooting
+
+If Chris's analysis says *"The AI model isn't set up correctly on this server … (MODEL_NOT_CONFIGURED: …)"*, Google refused the key or model, so the draft came from rule-based analysis. Trying again won't help until the setting is fixed. Open `/healthz` and read `checks.aiCheck`:
+
+| `aiCheck` | Meaning | Fix |
+|---|---|---|
+| `ok` | Key and model accepted | — |
+| `not_configured` | No `GEMINI_API_KEY` | Add the key under Render → Environment |
+| `MODEL_NOT_CONFIGURED:invalid_api_key` | Google doesn't recognise the key | Copy the key again from AI Studio (**Get API key**), the whole value, with nothing else. Spaces, line breaks and surrounding quotes are removed automatically. Make sure it wasn't deleted or regenerated since. |
+| `MODEL_NOT_CONFIGURED:permission_denied` | The key exists but can't use the Gemini API | Create the key in AI Studio, or enable the *Generative Language API* in the key's Google Cloud project and remove API restrictions that exclude it |
+| `MODEL_NOT_CONFIGURED:model_not_found` | `GEMINI_MODEL` isn't available to this key | Use `gemini-2.5-flash` (the Blueprint's value) or another model listed in AI Studio |
+| `MODEL_NOT_CONFIGURED:precondition_failed` | Google won't serve this key from here, for example the free tier isn't offered in the server's region | Check Google's list of available regions; the Blueprint runs in Frankfurt |
+| `MODEL_RATE_LIMITED` / `MODEL_UNAVAILABLE:…` | Quota in use, or Google unreachable | Usually temporary |
+
+After changing a variable, Render restarts the service, which runs the check again. On the free plan the restart also clears demo rooms.
 
 ## Day-to-day
 

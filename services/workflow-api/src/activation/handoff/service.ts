@@ -133,7 +133,7 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
     // A new analysis while revising keeps the review history (the Champion's feedback) with the new draft.
     const record=addRecord(p,sources,analysis,{basedOnWorkspaceRevision:saved.revision,...(current?.history?.length?{history:current.history}:{})});
     const model=analysis.understanding.model;
-    Object.assign(entry.job,{status:'succeeded',draft:record.draft,interpreter:analysis.understanding.interpreter,modelOk:model?model.ok:null,modelError:model&&!model.ok?model.error:null});
+    Object.assign(entry.job,{status:'succeeded',draft:record.draft,interpreter:analysis.understanding.interpreter,modelOk:model?model.ok:null,modelError:model&&!model.ok?model.error:null,modelErrorDetail:model&&!model.ok?model.errorDetail??null:null});
    }catch(error){
     // Codes only: the reason never carries customer content.
     Object.assign(entry.job,{status:'failed',error:error instanceof ActivationError?error.code:'ANALYSIS_FAILED'});

@@ -23,6 +23,19 @@ const ERRORS:Record<string,string>={REVISION_CONFLICT:'This information was chan
  ANALYSIS_LIMIT:'This demo room has reached today’s analysis limit. Start a new room from the Fictional demo menu, or try again tomorrow.',
  RATE_LIMITED:'Too many requests in a short time. Wait a minute, then try again.',
  ACTIVATION_UNAVAILABLE:'The upload didn’t reach the server. Check your connection and try again.',ACTIVATION_API_UNREACHABLE:'The customer’s activation API isn’t reachable. Check that the demo API is running.'};
+/** Why the AI model wasn't used, and whether trying again can help. Configuration problems are for the site owner. */
+const SETUP:Record<string,string>={
+ invalid_api_key:'Google rejected the API key (GEMINI_API_KEY): it’s wrong, revoked or incomplete',
+ permission_denied:'the API key isn’t allowed to use the Gemini API (check the key’s project and API restrictions)',
+ model_not_found:'the model in GEMINI_MODEL doesn’t exist or isn’t available to this key',
+ precondition_failed:'Google won’t serve this key from where the server runs (for example, the free tier isn’t offered in the server’s region)',
+ missing_api_key:'no API key is set'};
+export function modelProblem(code:string|null|undefined,detail?:string|null):{text:string;retry:boolean}{
+ if(code==='MODEL_NOT_CONFIGURED')return {retry:false,text:`The AI model isn’t set up correctly on this server: ${SETUP[detail??'']??'the model provider refused its configuration'} (MODEL_NOT_CONFIGURED${detail?`: ${detail}`:''}). The site owner needs to fix it; trying again won’t help until then.`};
+ if(code==='AI_DAILY_LIMIT')return {retry:true,text:'The AI model wasn’t used because the demo’s daily AI limit was reached (AI_DAILY_LIMIT). Try again tomorrow.'};
+ if(code==='MODEL_RATE_LIMITED')return {retry:true,text:'The AI model wasn’t used because the AI provider is rate limiting requests (MODEL_RATE_LIMITED). Try again in a few minutes.'};
+ return {retry:true,text:`The AI model wasn’t available (${code??'MODEL_UNAVAILABLE'}${detail?`: ${detail}`:''}). Try again later.`};
+}
 export const describe=(code:string)=>ERRORS[code]??`Something went wrong (${code}). Your saved work is unchanged.`;
 export const elapsed=(ms:number)=>{const s=Math.floor(ms/1000);return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;};
 const label=(type:string)=>CATEGORIES.find(([v])=>v===type)?.[1]??type;
@@ -109,7 +122,8 @@ function EarlierInformation({ws}:{ws:CustomerWorkspace}){
 function AnalysisPanel({ws,waiting}:{ws:CustomerWorkspace;waiting:boolean}){
  const job=ws.analysis,running=ws.running,current=job?STAGES.findIndex(([s])=>s===job.stage):-1;
  // A retry only where it helps: a failed run, a rule-based fallback, or information saved without a finished run.
- const retry=!running&&!waiting&&ws.sources.length>0&&(job?.status==='failed'||job?.modelOk===false||(!job&&!ws.latest));
+ const problem=job?.modelOk===false?modelProblem(job.modelError,job.modelErrorDetail):null;
+ const retry=!running&&!waiting&&ws.sources.length>0&&(job?.status==='failed'||!!problem?.retry||(!job&&!ws.latest));
  return <section className="pt-card pt-span" aria-label="Analysis">
   <div className="pt-card-head"><h3>Analysis</h3>
    {retry&&<button className="pt-btn sm ghost" disabled={ws.starting} onClick={()=>void ws.analyze()}>{ws.starting?'Starting…':'Analyze again'}</button>}</div>
@@ -122,7 +136,7 @@ function AnalysisPanel({ws,waiting}:{ws:CustomerWorkspace;waiting:boolean}){
    <p className="pt-note">Elapsed {elapsed(ws.elapsedMs)}. Analysis can take a minute or two; you can leave this page and come back. The server reports which stage is running; it can’t estimate how much is left.</p>
   </div>}
   {!running&&job?.status==='succeeded'&&<>
-   {job.modelOk===false?<div className="pt-banner warn" role="status">The AI model wasn’t available ({job.modelError}{job.modelError==='AI_DAILY_LIMIT'?': the demo’s daily AI limit was reached':job.modelError==='MODEL_RATE_LIMITED'?': the AI provider is rate limiting requests':''}), so this draft comes from rule-based analysis, not the model. The information from your PDF is saved; analyze again later.</div>
+   {problem?<div className="pt-banner warn" role="status">{problem.text} This draft comes from rule-based analysis, not the model. The information from your PDF is saved.</div>
     :<div className="pt-banner" role="status">Analysis ready{job.interpreter==='hosted_model'?' · produced by the AI model':' · rule-based analysis (no model configured)'} · took {elapsed(job.elapsedMs)}.</div>}
    {ws.document&&!ws.document.complete&&<p className="pt-note">This analysis is based on a partly read PDF (see above).</p>}
    <div className="pt-actions"><button className="pt-btn sm" onClick={()=>navigate('/operator/draft')}>Review the onboarding draft</button></div>
