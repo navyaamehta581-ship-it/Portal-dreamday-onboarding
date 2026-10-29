@@ -9,6 +9,8 @@ COPY prototypes/v1/package.json prototypes/v1/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY prototypes/v1/ ./
 COPY contracts/ /app/contracts/
+# Frontend typechecking includes tests that import backend source.
+COPY services/workflow-api/src/ /app/services/workflow-api/src/
 RUN npm run build
 
 # ---- Runtime: no npm packages; Node 24 runs the API's TypeScript directly ----
