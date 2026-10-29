@@ -15,7 +15,8 @@
     "demo:token": "node scripts/demo.ts token",
     "demo:operator-token": "node scripts/demo.ts operator-token",
     "demo:handoff": "node scripts/demo.ts handoff",
-    "handoff:scenarios": "node scripts/handoff-scenarios.ts"
+    "handoff:scenarios": "node scripts/handoff-scenarios.ts",
+    "verify:gemini": "node scripts/verify-gemini.ts"
   },
   "devDependencies": {
     "@types/node": "24.10.0",

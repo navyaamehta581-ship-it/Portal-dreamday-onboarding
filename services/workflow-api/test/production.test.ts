@@ -292,6 +292,55 @@ test('Chris’s PDF through the whole hosted path: session layer pass-through, r
  }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
+test('one Gemini model powers both Chris’s analysis and AiKA on the hosted server (loopback stand-in): sample PDF → finalize → AiKA answers',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'prod-'));
+ const logs=captureLogs();
+ const calls:{task:'analysis'|'aika';key:string|null;path:string;schema:boolean}[]=[];
+ // The stand-in answers AiKA with a valid answer and every analysis task with {} (so the analysis is the labelled
+ // rule-based fallback). What this checks is the wiring: both go to Gemini's generateContent with the key header.
+ const stub=createServer((req,res)=>{let body='';req.on('data',d=>body+=d);req.on('end',()=>{
+  res.writeHead(200,{'Content-Type':'application/json'});
+  if(req.method==='GET'){res.end(JSON.stringify({name:'models/gemini-2.5-flash'}));return;}
+  const b=JSON.parse(body),system=String(b.systemInstruction?.parts?.[0]?.text??''),aika=system.startsWith('You are AiKA');
+  calls.push({task:aika?'aika':'analysis',key:req.headers['x-goog-api-key'] as string,path:req.url!,schema:!!b.generationConfig?.responseJsonSchema});
+  const user=String(b.contents?.[0]?.parts?.[0]?.text??'');
+  const text=aika?JSON.stringify({sections:[{kind:'known',text:user.includes('ONBOARDING PLAN (published by Chris')?'Your team’s onboarding plan was published by Chris.':'No plan in the context.',citations:[]},
+   {kind:'suggestion',text:'Choose a milestone on the Overview tab, then ask me about it.',citations:[]}],next_step:'Open the Overview tab.'}):'{}';
+  res.end(JSON.stringify({candidates:[{content:{parts:[{text}]},finishReason:'STOP'}],usageMetadata:{promptTokenCount:10,candidatesTokenCount:10}}));});});
+ await new Promise<void>(r=>stub.listen(0,'127.0.0.1',r));
+ try{
+  const app=await boot(dir,{GEMINI_API_KEY:'test-key-not-real',GEMINI_API_ORIGIN:`http://127.0.0.1:${(stub.address() as {port:number}).port}`});
+  const chris=client(app.origin);await chris.enter();await chris.signIn('chris');
+  const up=await fetch(app.origin+op('handoff-documents'),{method:'POST',body:new Blob([aperturePdf() as Uint8Array<ArrayBuffer>]),
+   headers:{'Content-Type':'application/pdf','X-File-Name':encodeURIComponent('aperture-commerce-discovery-notes-fictional.pdf'),Origin:app.origin,Cookie:[...chris.jar].map(([k,v])=>`${k}=${v}`).join('; ')}});
+  assert.equal(up.status,202);
+  for(let i=0;i<300&&(await chris.call(op('handoff-analyses'))).json.job.status==='running';i++)await new Promise(x=>setTimeout(x,10));
+  const draft=(await chris.call(op('handoff'))).json.drafts[0];
+  assert.equal(draft.understanding.model.provider,'gemini','the analysis went to Gemini');
+  assert.ok(calls.some(c=>c.task==='analysis'));
+  // Chris finalizes: published, no approval.
+  const fin=await chris.call(op('handoff-submissions'),{method:'POST',body:JSON.stringify({draft:draft.draft,reviewRevision:draft.reviewRevision??0,action:'submit',confirmed:true})});
+  assert.equal(fin.json.status,'published',fin.text);
+  // Alex, in the same room, asks AiKA: the same Gemini model answers from the published plan's context.
+  const alex=client(app.origin);alex.jar.clear();for(const [k,v] of chris.jar)if(k!=='portal_session'&&!/session/i.test(k))alex.jar.set(k,v);
+  await alex.signIn('alex');
+  const dev=(path:string)=>`/portal-api/activation/v1/customers/${CUSTOMER}/${path}`;
+  const caps=(await alex.call(dev('aika-capabilities'))).json;
+  assert.equal(caps.modelConfigured,true,'AiKA is connected to the model');
+  const asked=await alex.call(dev('aika-questions'),{method:'POST',body:JSON.stringify({question:'Where should I start?'})});
+  assert.equal(asked.status,202,asked.text);
+  let job;for(let i=0;i<300;i++){job=(await alex.call(dev('aika-questions'))).json.job;if(job&&job.status!=='running')break;await new Promise(x=>setTimeout(x,10));}
+  assert.equal(job.status,'succeeded',JSON.stringify(job));assert.equal(job.model,'gemini-2.5-flash');
+  assert.deepEqual(job.answer.sections.map((x:{kind:string})=>x.kind),['known','suggestion']);
+  assert.match(job.answer.sections[0].text,/published by Chris/);
+  const aika=calls.filter(c=>c.task==='aika');
+  assert.equal(aika.length,1);assert.deepEqual(aika[0],{task:'aika',key:'test-key-not-real',path:'/v1beta/models/gemini-2.5-flash:generateContent',schema:true});
+  assert.match((await alex.call('/healthz')).json.checks.aiRequestsToday,new RegExp(`^${calls.length}/`),'AiKA counts against the same daily allowance');
+  await app.close();
+  assert.ok(!logs.lines.join('').includes('test-key-not-real'),'the key is never logged');
+ }finally{logs.restore();stub.close();rmSync(dir,{recursive:true,force:true});}
+});
+
 test('free tier: visitors are told data is temporary; a restart that clears storage ends rooms honestly',async()=>{
  const first=mkdtempSync(join(tmpdir(),'prod-')),second=mkdtempSync(join(tmpdir(),'prod-'));
  try{
