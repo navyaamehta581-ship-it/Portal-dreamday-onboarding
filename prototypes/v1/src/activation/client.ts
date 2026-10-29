@@ -1,6 +1,9 @@
 import type { ActivationState } from '../../../../contracts/activation/v1/state';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types';
-import type { AnalysisJob, ChampionReview, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
+import type { AikaJob, AnalysisJob, ChampionReview, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
+
+/** One change per request, as the server accepts it. */
+export type MilestoneChange={action:{index:number;status:'not_started'|'started'|'blocked'|'completed'}}|{note:{kind:'update'|'blocker'|'question';text:string;evidence?:string|null}}|{resolve:string}|{status:'in_progress'|'ready_for_review'|'completed'};
 
 export class ActivationRequestError extends Error {
   /** Server details such as which review fields failed a check (labels and reason codes, never content). */
@@ -43,6 +46,12 @@ export function activationClient(customerId:string,token:string,base='',apiPrefi
     saveChampionReview:(draft:number,expectedRevision:number,plan:{goals:ReviewItem[];milestones:ReviewMilestone[];questions:ReviewItem[]})=>call<ChampionReview>('/champion-reviews',{draft,expectedRevision,plan}),
     requestChanges:(draft:number,reviewRevision:number,comment:string)=>call<ChampionReview>('/champion-decisions',{draft,reviewRevision,decision:'request_changes',comment}),
     approvePlan:(draft:number,reviewRevision:number)=>call<ChampionReview>('/champion-decisions',{draft,reviewRevision,decision:'approve',confirmed:true}),
+    // Phase 5: each developer's attributed work on approved milestones; the server derives who they are.
+    milestoneWork:()=>call<TeamProgress>('/milestone-work'),
+    updateMilestone:(milestoneId:string,expectedRevision:number,change:MilestoneChange)=>call<TeamProgress>('/milestone-updates',{milestoneId,expectedRevision,...change}),
+    // AiKA runs in the background on the server; asking returns at once and the answer is polled.
+    askAika:(question:string,milestoneId?:string|null)=>call<{job:AikaJob;duplicate:boolean}>('/aika-questions',{question,...(milestoneId?{milestoneId}:{})}),
+    aikaStatus:()=>call<{job:AikaJob|null}>('/aika-questions'),
     draftHandoff:(sources:{type:SourceType;label:string;text:string}[])=>call<HandoffRecord>('/handoff-drafts',{sources},300000),
     publishHandoff:(body:{draft:number;milestones:MilestoneDraft[];outcome:string;agreedBy:string;agreementConfirmed:true})=>request('/handoff-publications',body),
     intake:(briefing:string,outcome:string,agreedBy:string,agreementConfirmed:boolean)=>request('/intake',{briefing,outcome,agreedBy,agreementConfirmed}),

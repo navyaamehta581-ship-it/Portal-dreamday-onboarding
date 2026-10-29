@@ -4,13 +4,14 @@ import type {Persona} from './session';
 import {Link,navigate} from './router';
 import {loadProblem} from './onboarding/model';
 import {onboardingSteps} from './onboarding/steps';
+import {STATUS_LABEL,statusTone,type MilestoneWorkSession} from './work/useMilestoneWork';
 
 /** “Welcome to Portal” with the Setup Guide card (011, 036), filled from the developer's onboarding steps. */
-export function Home({session,persona}:{session:ActivationSession;persona:Persona}){
+export function Home({session,persona,work}:{session:ActivationSession;persona:Persona;work:MilestoneWorkSession}){
  const {state,busy,error}=session;
  return <div className="pt-home">
   <h1>Welcome to Portal</h1>
-  {persona.role==='champion'?<ChampionCard session={session}/>:state&&<AssignedWork session={session} persona={persona}/>}
+  {persona.role==='champion'?<ChampionCard session={session}/>:state&&<AssignedWork session={session} persona={persona} work={work}/>}
   {!state?<section className="pt-guide" aria-label="Your onboarding">
    <div className="pt-guide-head"><span className="icon"><BookOpenText size={20} aria-hidden="true"/></span><h2>Get started with your onboarding</h2></div>
    <div className="pt-step" role={error?'alert':'status'}><h3>{busy||!error?'Loading your onboarding…':loadProblem(error).title}</h3>{error&&!busy&&<p>{loadProblem(error).detail}</p>}{error&&!busy&&<button className="pt-btn" onClick={()=>void session.refresh()}>Try again</button>}</div>
@@ -49,7 +50,7 @@ function HomeGuide({session}:{session:ActivationSession}){
 
 /** Work approved for this developer in Dream Day. The server sends each developer only their own approved
  * milestones, so everything here is theirs; before approval nothing is assigned. */
-function AssignedWork({session,persona}:{session:ActivationSession;persona:Persona}){
+function AssignedWork({session,persona,work}:{session:ActivationSession;persona:Persona;work:MilestoneWorkSession}){
  const h=session.state?.handoff;
  const mine=(h?.milestones??[]).filter(m=>m.assignmentStatus==='approved'&&m.proposedAssignee===persona.name);
  return <section className="pt-guide" aria-label="Your assigned work">
@@ -58,11 +59,12 @@ function AssignedWork({session,persona}:{session:ActivationSession;persona:Perso
    {h?.approval&&<p className="pt-note" style={{margin:'14px 0 0'}}>Approved by {h.approval.by} in Dream Day on {new Date(h.approval.at).toLocaleDateString()}.</p>}
    {mine.map(m=><div key={m.id} className="pt-step assigned" aria-label={`Assigned: ${m.objective}`}>
     <h3>{m.objective}</h3>
+    {(()=>{const s=work.progress?.milestones.find(x=>x.id===m.id)?.status;return s&&<p><span className={'pt-pill '+statusTone(s)}>{STATUS_LABEL[s]}</span></p>;})()}
     {m.why&&m.why!==m.objective&&<p>{m.why}</p>}
     <p className="pt-label" style={{marginTop:16}}>Actions</p><ol className="pt-plain-list">{m.actions.map(a=><li key={a}>{a}</li>)}</ol>
     <p className="pt-label" style={{marginTop:14}}>Done when</p><ul className="pt-plain-list">{m.completionCriteria.map(c=><li key={c}>{c}</li>)}</ul>
     {m.dependencies.length>0&&<p className="pt-note">Starts after: {m.dependencies.join(', ')}</p>}
-    <Link className="pt-btn" to="/activation">Open your onboarding</Link>
+    <Link className="pt-btn" to="/activation/work">Open my work</Link>
    </div>)}</>
    :<div className="pt-step"><h3>Nothing is assigned to you yet</h3><p>{h?.approval?'Your Champion approved the team’s plan, but none of its milestones are assigned to you. Ask your Champion if you expected work.':'Work is assigned when your Champion approves the team’s onboarding plan in Dream Day.'}</p></div>}
  </section>;

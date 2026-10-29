@@ -148,3 +148,22 @@ test('configuration: personas validated, legacy account arrays still work, demo 
 });
 
 test.after(() => rmSync(dir, {recursive: true, force: true}));
+
+test('each developer uses their own developer credential when one exists; otherwise the shared one, which the API lets read but not update work', async () => {
+  const own = 'f'.repeat(64), file = join(dir, 'developer-token-alex');
+  writeFileSync(file, own);
+  const h = await harness();
+  try {
+    const alex = await h.signIn('alex');
+    for (const route of ['milestone-work', 'aika-questions']) {
+      assert.equal((await h.call(`/portal-api/activation/v1/customers/fictional-north/${route}`, {headers: alex})).status, 200);
+      assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${own}`);
+    }
+    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-north/milestone-updates', {method: 'POST', headers: {...alex, Origin: h.origin}, body: '{}'})).status, 200);
+    assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${own}`);
+    // Sam has no own token file: the shared developer credential, never Alex's.
+    const sam = await h.signIn('sam');
+    assert.equal((await h.call('/portal-api/activation/v1/customers/fictional-other/milestone-work', {headers: sam})).status, 200);
+    assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${devB}`);
+  } finally {await h.close(); rmSync(file);}
+});

@@ -2,9 +2,11 @@ import type {ActivationState} from '../../../../contracts/activation/v1/state';
 import {championPlan} from '../activation/champion';
 import {milestoneTone} from '../portal-app/onboarding/model';
 import {planLabel} from './versions';
+import {TeamProgressList} from '../portal-app/work/WorkTab';
+import type {MilestoneWorkSession} from '../portal-app/work/useMilestoneWork';
 
 /** Developer Progress: what developers reported, what was observed, and what needs Chris's decision. */
-export function ProgressTab({state}:{state:ActivationState|null}){
+export function ProgressTab({state,work}:{state:ActivationState|null;work?:MilestoneWorkSession}){
  if(!state)return <section className="pt-card"><h3>Nothing published yet</h3><p className="pt-note">Developer progress appears here after you publish the customer context.</p></section>;
  const reports=state.evidence.filter(e=>e.kind==='developer_report').sort((a,b)=>b.observedAt.localeCompare(a.observedAt));
  const observed=[...state.evidence,...state.plan.evidence].filter((e,i,all)=>e.kind==='github_observation'&&all.findIndex(x=>x.id===e.id)===i);
@@ -24,6 +26,11 @@ export function ProgressTab({state}:{state:ActivationState|null}){
    </dl>
    {state.outcome.summary&&<p className="pt-note">Latest reported outcome text: “{state.outcome.summary.slice(0,300)}”</p>}
   </section>
+
+  {work?.progress&&<section className="pt-card pt-span" aria-label="Approved milestone progress">
+   <h3>Approved milestone progress</h3>
+   <TeamProgressList work={work}/>
+  </section>}
 
   <section className="pt-card pt-span" aria-label="Follow-up">
    <div className="pt-card-head"><h3>Follow-up decision</h3>{helping&&<span className="pt-pill amber">Chris intervention requested</span>}</div>

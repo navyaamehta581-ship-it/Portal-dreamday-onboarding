@@ -15,7 +15,7 @@ export ACTIVATION_DEMO_CUSTOMER_ID=fictional-northstar-commerce
 PORTAL_LLM_PROVIDER=ollama OLLAMA_MODEL=qwen3:1.7b npm run demo:handoff --prefix services/workflow-api
 ```
 
-Leave out `PORTAL_LLM_PROVIDER` and `OLLAMA_MODEL` to use rule-based analysis without a model.
+Leave out `PORTAL_LLM_PROVIDER` and `OLLAMA_MODEL` to use rule-based analysis without a model; AiKA then says it isn't connected. To use the model for AiKA only, set `AIKA_LLM_PROVIDER=ollama` instead of `PORTAL_LLM_PROVIDER`. The launcher creates a personal developer credential for each of `ACTIVATION_DEMO_DEVELOPERS` (default `alex=Alex Rivera,jordan=Jordan Lee`).
 
 Terminal 2, the Portal (same `ACTIVATION_DEMO_DIR` and customer ID):
 
@@ -38,6 +38,7 @@ Then:
    - select **Save draft**;
    - then either **Request changes** (Chris sees your reason and resubmits) or confirm and **Approve onboarding plan**.
 7. Sign out and choose **Alex** or **Jordan**: each sees only the work assigned to them. **Chris** sees that Champion approval is complete.
+8. As **Alex**, select **Open my work**: set action statuses, record an update or blocker (with an optional reference), and mark the milestone ready for review once every action is completed and no blocker is open. Select **Ask AiKA about this milestone** to ask AiKA. As **Jordan**, work on the dependent milestone: it can't be marked completed until Alex's is. **Maya** (Team overview) and **Chris** (Developer Progress) see the consolidated progress.
 
 No tokens are copied or pasted: the Portal's local session layer reads them from `ACTIVATION_DEMO_DIR` on the server side.
 

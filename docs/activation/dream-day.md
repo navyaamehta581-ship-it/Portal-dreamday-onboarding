@@ -59,6 +59,8 @@ Edits, comments, assignments, history and decisions are stored with the operator
   - **Champion's state view:** the whole approved plan.
   - **Chris:** sees everything, as before.
 
+After approval, developers work on their milestones in **My work**; see [developer-work.md](developer-work.md).
+
 ## Approval publishes; the bypass is closed
 
 - **Approval publishes.** Approval runs the completeness and privacy checks; every milestone also needs an assignee from the technical team. It then publishes through the existing publication path with the approved milestones and `assignmentStatus: approved`. The developer handoff records `approval: {by, at}`.

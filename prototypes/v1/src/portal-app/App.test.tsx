@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {App} from './App';
-import {click,fixtureState,flush,mount} from '../activation/testing';
+import {byLabel,click,fixtureState,flush,mount,type} from '../activation/testing';
 import type {Persona} from './session';
 import type {ChampionReview,MilestoneDraft,ReviewMilestone} from '../../../../contracts/activation/v1/handoff';
 
@@ -35,9 +35,20 @@ function approvedFor(persona:Persona){
  return fixtureState('orbit',{handoff:{version:1,publishedAt:'2026-10-29T10:00:00Z',interpreter:'hosted_model',summary:'s',context:[],unknowns:[],milestones:mine,approval:server.review!.approval!,
   team:[{name:'Maya Chen',role:'Champion',status:'reported'},{name:'Alex Rivera',role:'Developer',status:'reported'},{name:'Jordan Lee',role:'Developer',status:'reported'}]}});
 }
-let m:ReturnType<typeof mount>,server:{persona:string|null;review?:ChampionReview},calls:{method:string;url:string;persona:string|null;body?:any}[];
+type FakeWork={revision:number;explicit:string|null;actions:{status:string;at:string|null;by:string|null}[];updates:{id:string;at:string;by:string;kind:string;text:string;evidence:string|null;resolved:{at:string;by:string}|null}[];updatedAt:string|null;updatedBy:string|null};
+const workOf=(id:string)=>server.work[id]??=({revision:0,explicit:null,actions:server.review!.plan!.milestones.find(x=>x.id===id)!.actions.map(()=>({status:'not_started',at:null,by:null})),updates:[],updatedAt:null,updatedBy:null});
+const statusOf=(id:string)=>{const w=workOf(id);return w.explicit??(w.updates.some(u=>u.kind==='blocker'&&!u.resolved)||w.actions.some(a=>a.status==='blocked')?'blocked':w.actions.some(a=>a.status!=='not_started')||w.updates.length?'in_progress':'not_started');};
+function workView(me:Persona){
+ const r=server.review!,ms=r.plan!.milestones,title=(id:string)=>ms.find(x=>x.id===id)!.title;
+ return {viewer:{role:me.role,name:me.name},approval:r.approval,objective:{problem:r.plan!.problem.summary,goals:r.plan!.goals.map(g=>g.text),questions:r.plan!.questions.map(q=>q.text)},
+  milestones:ms.map(x=>{const w=workOf(x.id),mine=me.role==='developer'&&x.assignee===me.name;
+   return {id:x.id,title:x.title,assignee:x.assignee,status:statusOf(x.id),openBlockers:w.updates.filter(u=>u.kind==='blocker'&&!u.resolved).length,mine,
+    dependsOn:x.dependsOn.map(d=>({id:d,title:title(d),assignee:ms.find(y=>y.id===d)!.assignee,status:statusOf(d)})),
+    detail:mine||me.role!=='developer'?{description:x.description,system:x.system,actions:x.actions.map((text,index)=>({index,text,...w.actions[index]})),completionCriteria:x.completionCriteria,updates:w.updates,revision:w.revision,updatedAt:w.updatedAt,updatedBy:w.updatedBy}:null};})};
+}
+let m:ReturnType<typeof mount>,server:{persona:string|null;review?:ChampionReview;work:Record<string,FakeWork>},calls:{method:string;url:string;persona:string|null;body?:any}[];
 function backend(signedIn:string|null=null,review:ChampionReview|undefined=undefined){
- server={persona:signedIn,review};calls=[];
+ server={persona:signedIn,review,work:{}};calls=[];
  vi.stubGlobal('fetch',vi.fn(async(url:string,init?:RequestInit)=>{
   const headers=(init?.headers??{}) as Record<string,string>;
   calls.push({method:init?.method??'GET',url,persona:headers['X-Portal-Persona']??null,body:init?.body?JSON.parse(String(init.body)):undefined});
@@ -62,6 +73,28 @@ function backend(signedIn:string|null=null,review:ChampionReview|undefined=undef
    if(r.plan!.milestones.some(x=>!x.assignee))return json({error:{code:'REVIEW_INCOMPLETE',details:{issues:r.plan!.milestones.flatMap((x,i)=>x.assignee?[]:[{path:`milestones[${i}].assignee`,label:`Milestone ${i+1} · assignee`,reason:'unassigned'}])}}},400);
    server.review={...r,status:'published',reviewRevision:r.reviewRevision+1,approval:{by:me.name,at:'2026-10-29T10:00:00Z'},history:[...r.history,{action:'approved',at:'2026-10-29T10:00:00Z',by:me.name},{action:'published',at:'2026-10-29T10:00:00Z',by:me.name}]};
    return json(server.review);
+  }
+  // Phase 5 routes, with the server's rules: approved plans only, assignee and revision checks, no completing ahead
+  // of a dependency, and another developer's workspace reduced to title and status.
+  if(/\/(milestone-work|milestone-updates|aika-questions)$/.test(url)){
+   if(server.review?.status!=='published')return json({error:{code:'NO_APPROVED_PLAN'}},404);
+   if(url.endsWith('/aika-questions'))return me.role==='operator'?json({error:{code:'FORBIDDEN'}},403):json({job:null});
+   if(url.endsWith('/milestone-updates')){
+    const body=JSON.parse(String(init!.body)),ms=server.review.plan!.milestones.find(x=>x.id===body.milestoneId);
+    if(me.role!=='developer')return json({error:{code:'DEVELOPER_IDENTITY_REQUIRED'}},403);
+    if(!ms)return json({error:{code:'NOT_FOUND'}},404);
+    if(ms.assignee!==me.name)return json({error:{code:'NOT_ASSIGNEE'}},403);
+    const w=workOf(ms.id);if(w.revision!==body.expectedRevision)return json({error:{code:'REVISION_CONFLICT'}},409);
+    if(body.action){w.actions[body.action.index]={status:body.action.status,at:'2026-10-29T11:00:00Z',by:me.name};w.explicit=null;}
+    else if(body.note)w.updates.push({id:`u${w.updates.length+1}`,at:'2026-10-29T11:00:00Z',by:me.name,kind:body.note.kind,text:body.note.text,evidence:body.note.evidence??null,resolved:null});
+    else if(body.resolve)w.updates=w.updates.map(u=>u.id===body.resolve?{...u,resolved:{at:'2026-10-29T11:05:00Z',by:me.name}}:u);
+    else{const issues=[...(w.actions.some(a=>a.status!=='completed')?['actions_incomplete']:[]),...(w.updates.some(u=>u.kind==='blocker'&&!u.resolved)?['open_blockers']:[]),
+      ...(body.status==='completed'&&ms.dependsOn.some(d=>statusOf(d)!=='completed')?['dependencies_incomplete']:[])];
+     if(body.status!=='in_progress'&&issues.length)return json({error:{code:'MILESTONE_NOT_READY',details:{issues}}},409);
+     w.explicit=body.status==='in_progress'?null:body.status;}
+    w.revision++;w.updatedBy=me.name;w.updatedAt='2026-10-29T11:00:00Z';
+   }
+   return json(workView(me));
   }
   if(url.startsWith('/portal-api/'))return server.review?.status==='published'?json(approvedFor(me)):server.review?json({error:{code:'NOT_FOUND'}},404):json(published());
   if(url.startsWith('/operator-api/'))return me.role!=='operator'?json({error:{code:'FORBIDDEN'}},403):url.endsWith('/handoff')?json({drafts:[]}):json(published());
@@ -187,6 +220,57 @@ it('after approval each developer sees only the work assigned to them, with who 
  await m.unmount();server.persona='jordan';await render('/portal');
  const assigned=()=>Array.from(m.host.querySelectorAll('[aria-label^="Assigned: "]')).map(x=>x.getAttribute('aria-label'));
  expect(assigned()).toEqual(['Assigned: Validate payments-api and docs discoverability']);expect(work()).toContain('Starts after: Assess payments-api repository readiness');
+});
+
+it('Phase 5: Alex and Jordan each work on their own approved milestone, attributed; dependencies and blockers hold',async()=>{
+ const r=submitted();r.plan!.milestones[0].assignee='Alex Rivera';r.plan!.milestones[1].assignee='Jordan Lee';
+ backend('alex',{...r,status:'published',approval:{by:'Maya Chen',at:'2026-10-29T10:00:00Z'}});await render('/portal');
+ await click(m.host,'Open my work');await settle();
+ expect(window.location.pathname).toBe('/activation/work');
+ const card=()=>m.host.querySelector('[aria-label="Milestone: Assess payments-api repository readiness"]')!;
+ expect(m.host.querySelector('[aria-label="Milestone: Validate payments-api and docs discoverability"]')).toBeNull();
+ expect(m.host.querySelector('[aria-label="Team milestones"]')!.textContent).toContain('Jordan Lee');
+ expect(text()).toContain('Nobody can tell who owns a service.');expect(text()).toContain('Which CI system deploys payments-api?');
+ await type(byLabel<HTMLSelectElement>(card() as HTMLElement,'Status of action 1')!,'completed');await settle();
+ expect(calls.at(-1)!.body).toEqual({milestoneId:'m-1',expectedRevision:0,action:{index:0,status:'completed'}});
+ expect(card().textContent).toContain('Completed by Alex Rivera');
+ await type(byLabel<HTMLSelectElement>(card() as HTMLElement,'Note type')!,'blocker');
+ await type(byLabel<HTMLTextAreaElement>(card() as HTMLElement,'Short note')!,'No read access to payments-api');
+ await type(byLabel(card() as HTMLElement,'Evidence reference')!,'https://example.test/ticket/42');
+ await click(card() as HTMLElement,'Record blocker');await settle();
+ expect(card().querySelector('[data-testid=milestone-status]')!.textContent).toBe('Blocked');
+ expect(card().textContent).toContain('Reference (reported, not verified)');
+ await click(card() as HTMLElement,'Mark ready for review');await settle();
+ expect(card().textContent).toMatch(/every action is completed, and open blockers are resolved/);
+ await click(card() as HTMLElement,'Mark blocker resolved');await settle();
+ expect(card().querySelector('[data-testid=milestone-status]')!.textContent).toBe('In progress');
+
+ // Jordan: Alex's milestone by status only; can't complete ahead of it.
+ await m.unmount();server.persona='jordan';calls=[];await render('/activation/work');
+ const team=m.host.querySelector('[aria-label="Team milestones"]')!.textContent!;
+ expect(team).toContain('Assess payments-api repository readiness');expect(team).toContain('In progress');
+ expect(text()).not.toContain('No read access to payments-api');
+ const jcard=()=>m.host.querySelector('[aria-label="Milestone: Validate payments-api and docs discoverability"]') as HTMLElement;
+ expect(jcard().textContent).toContain('can only be completed after Alex Rivera’s work');
+ for(const i of [1,2]){await type(byLabel<HTMLSelectElement>(jcard(),`Status of action ${i}`)!,'completed');await settle();}
+ await click(jcard(),'Mark completed');await settle();
+ expect(jcard().textContent).toContain('the work it depends on is completed by its owner');
+ expect(jcard().querySelector('[data-testid=milestone-status]')!.textContent).toBe('In progress');
+ expect(server.work['m-1'].updates[0].by).toBe('Alex Rivera');expect(server.work['m-2'].actions.every(a=>a.by==='Jordan Lee')).toBe(true);
+
+ // Maya sees consolidated, attributed progress.
+ await m.unmount();server.persona='maya';await render('/champion/team');
+ const progress=m.host.querySelector('[aria-label="Team progress"]')!.textContent!;
+ expect(progress).toContain('Alex Rivera · 1 of 2 actions completed');expect(progress).toContain('Jordan Lee · 2 of 2 actions completed');
+});
+
+it('Phase 5: before approval there is no My work tab, and AiKA is in the Portal navigation',async()=>{
+ backend('alex',submitted());await render('/activation/work');
+ expect(m.host.querySelector('[role=tab]#tab-work')).toBeNull();
+ expect(m.host.querySelector('a[href="/aika"]')).not.toBeNull();
+ await m.unmount();await render('/aika');
+ expect(text()).toContain('Ask about your approved onboarding work');
+ expect(calls.some(c=>/11434|ollama/i.test(c.url))).toBe(false);
 });
 
 it('a reload keeps the persona; typed URLs for another surface explain instead of switching persona',async()=>{

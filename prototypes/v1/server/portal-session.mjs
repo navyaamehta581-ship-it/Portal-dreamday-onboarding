@@ -5,7 +5,10 @@
  * authentication: anyone who can open this local page can choose any persona. What a persona can do is decided
  * on the server, never by the browser:
  *   - the session cookie names a persona; the browser never holds a token;
- *   - each persona maps to one server-held credential: developers use their customer's developer token, the
+ *   - each persona maps to one server-held credential: each developer uses their own developer token
+ *     (`developer-token-<persona id>` next to the customer's token file), so the API knows who changed their
+ *     work; without one they fall back to the customer's shared developer token, which can read but not update
+ *     milestone work. The
  *     Champion uses the customer's Champion token (Dream Day review and approval), the operator persona uses each
  *     listed customer's operator token;
  *   - forwarded requests name the signed-in persona (X-Portal-Actor) so the API can record who approved and show
@@ -21,7 +24,7 @@ import {join} from 'node:path';
 
 const COOKIE = 'portal_demo_session';
 const SESSION_MS = 8 * 3600_000;
-const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions)$/;
+const ROUTES = /^\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|blocker-reports|progress-reports|github-preparations|setup-approvals|intake|progress|blockers|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|aika-questions)$/;
 const LOOPBACK = /^http:\/\/127\.0\.0\.1:\d{1,5}$/;
 const ROLES = ['operator', 'champion', 'developer'];
 // Model-assisted drafting can take minutes on a laptop; every other route keeps the short limit.
@@ -99,7 +102,8 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
   // The credential a persona uses for one customer, or null when it has none for that surface.
   const credential = (p, c, surface) => surface === 'operator'
     ? (p.role === 'operator' ? readToken(c.operatorTokenFile) : null)
-    : p.role === 'champion' ? readToken(c.championTokenFile) : p.role === 'developer' ? readToken(c.tokenFile) : null;
+    : p.role === 'champion' ? readToken(c.championTokenFile)
+    : p.role === 'developer' ? (readToken(join(c.tokenFile, '..', `developer-token-${p.id}`)) ?? readToken(c.tokenFile)) : null;
   const available = p => p.customers.some(id => credential(p, customer(id), p.role === 'operator' ? 'operator' : 'portal'));
 
   const sessions = new Map();
