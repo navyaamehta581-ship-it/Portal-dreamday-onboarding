@@ -26,8 +26,13 @@ export function useAika(api:ReturnType<typeof activationClient>|null){
 /** Plain-language messages for AiKA's failure codes; nothing from the model or the server is shown raw. */
 export function aikaProblem(code:string):string{
  switch(code){
-  case 'AIKA_UNAVAILABLE':case 'MODEL_NOT_CONFIGURED':return 'AiKA isn’t connected to a model on this Portal. Ask your Portal admin to configure the local model provider.';
-  case 'MODEL_UNAVAILABLE':return 'AiKA couldn’t reach its model. Check that the local model service is running, then ask again.';
+  case 'AIKA_UNAVAILABLE':case 'MODEL_NOT_CONFIGURED':return 'AiKA isn’t connected to a model on this Portal. Ask your Portal admin to configure the AI model provider.';
+  case 'MODEL_UNAVAILABLE':return 'AiKA couldn’t reach its AI model. Try again in a moment.';
+  case 'MODEL_RATE_LIMITED':return 'The AI provider is limiting requests right now. Try again in a minute.';
+  case 'AI_DAILY_LIMIT':return 'This demo has reached its daily AI limit. AiKA will be available again tomorrow (UTC).';
+  case 'AIKA_QUESTION_LIMIT':return 'This demo room has reached its daily number of AiKA questions.';
+  case 'RATE_LIMITED':return 'Too many requests from this demo room. Wait a minute, then try again.';
+  case 'DEMO_GATE_REQUIRED':return 'Your demo room has ended. Reload the page to enter the demo again.';
   case 'MODEL_TIMEOUT':return 'AiKA took too long to answer and stopped. Try a shorter or more specific question.';
   case 'INVALID_MODEL_OUTPUT':return 'AiKA’s answer didn’t pass its checks, so it isn’t shown. Try asking again or rephrasing.';
   case 'CONTEXT_LIMIT':return 'There’s too much context for AiKA to answer in one go. Ask about one milestone.';

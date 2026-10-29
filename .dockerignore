@@ -1,0 +1,18 @@
+# Only what the Dockerfile copies is needed; keep secrets, local data and dependencies out of the build context.
+**/node_modules
+**/dist
+**/data
+**/*.sqlite
+**/*.sqlite-*
+**/.env
+**/.env.*
+.git
+archive
+docs
+tests
+examples
+packages
+plugins
+V1_SOURCE_HANDOFF.zip
+services/workflow-api/test
+prototypes/v1/e2e

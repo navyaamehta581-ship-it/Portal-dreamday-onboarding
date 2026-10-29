@@ -2,7 +2,8 @@
  * and later AiKA). Each call supplies its own system prompt, JSON schema and validator; the client never
  * logs prompts or responses. Only loopback HTTP or HTTPS endpoints are accepted. */
 
-export type ModelErrorCode='MODEL_NOT_CONFIGURED'|'MODEL_UNAVAILABLE'|'MODEL_TIMEOUT'|'INVALID_MODEL_OUTPUT'|'CONTEXT_LIMIT';
+/** MODEL_RATE_LIMITED: the provider refused for quota or rate; AI_DAILY_LIMIT: this deployment's own daily cap. */
+export type ModelErrorCode='MODEL_NOT_CONFIGURED'|'MODEL_UNAVAILABLE'|'MODEL_TIMEOUT'|'INVALID_MODEL_OUTPUT'|'CONTEXT_LIMIT'|'MODEL_RATE_LIMITED'|'AI_DAILY_LIMIT';
 export class ModelError extends Error {
  readonly code:ModelErrorCode;readonly detail:string|null;
  constructor(code:ModelErrorCode,detail:string|null=null){super(code);this.code=code;this.detail=detail;}
@@ -49,7 +50,7 @@ export function fit(value:unknown,schema:any):unknown{
 export type StageStats={name:string;ms:number;attempts:number;attemptErrors:string[];promptTokens:number|null;outputTokens:number|null;
  promptEvalMs:number|null;evalMs:number|null;loadMs:number|null;tokensPerSecond:number|null;thinkingChars:number;numCtx:number;truncated:boolean};
 export type JsonTask<T>={name:string;system:string;user:string|object;schema:Record<string,unknown>;validate:(value:unknown)=>T;maxChars?:number;numCtx?:number;numPredict?:number};
-export type JsonModel={provider:'ollama';model:string;maxCtx:number;run<T>(task:JsonTask<T>):Promise<{value:T;durationMs:number;stats:StageStats}>};
+export type JsonModel={provider:'ollama'|'gemini';model:string;maxCtx:number;run<T>(task:JsonTask<T>):Promise<{value:T;durationMs:number;stats:StageStats}>};
 
 const ms=(ns:unknown)=>typeof ns==='number'?Math.round(ns/1e6):null;
 const add=(a:number|null,b:number|null)=>a===null&&b===null?null:(a??0)+(b??0);

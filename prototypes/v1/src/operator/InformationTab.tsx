@@ -63,8 +63,8 @@ function AnalysisPanel({ws,filled}:{ws:CustomerWorkspace;filled:boolean}){
    <p className="pt-note">Elapsed {elapsed(ws.elapsedMs)}. Local analysis may take 1–2 minutes. The server reports which stage is running; it can’t estimate how much is left. You can keep editing: this run uses the information you saved before starting.</p>
   </div>}
   {!running&&job?.status==='succeeded'&&<>
-   {job.modelOk===false?<div className="pt-banner warn" role="status">The local model wasn’t available ({job.modelError}), so this draft comes from rule-based analysis, not the model. Check that Ollama is running, then analyze again.</div>
-    :<div className="pt-banner" role="status">Analysis ready{job.interpreter==='hosted_model'?' · produced by the local model':' · rule-based analysis (no model configured)'} · took {elapsed(job.elapsedMs)}.</div>}
+   {job.modelOk===false?<div className="pt-banner warn" role="status">The AI model wasn’t available ({job.modelError}{job.modelError==='AI_DAILY_LIMIT'?': the demo’s daily AI limit was reached':job.modelError==='MODEL_RATE_LIMITED'?': the AI provider is rate limiting requests':''}), so this draft comes from rule-based analysis, not the model. Your information is saved; analyze again later.</div>
+    :<div className="pt-banner" role="status">Analysis ready{job.interpreter==='hosted_model'?' · produced by the AI model':' · rule-based analysis (no model configured)'} · took {elapsed(job.elapsedMs)}.</div>}
    {stale&&<p className="pt-note">Your information changed after this analysis. Analyze again to include the changes.</p>}
    <div className="pt-actions"><button className="pt-btn sm ghost" onClick={()=>navigate('/operator/draft')}>Review the onboarding draft</button></div>
   </>}

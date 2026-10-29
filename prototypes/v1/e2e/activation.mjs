@@ -318,7 +318,7 @@ try{
  assert.deepEqual(modelCalls,[],'the browser never talks to the model');
  aikaMode='down';
  await dev.getByLabel('Question for AiKA').fill('What does my milestone depend on?');await dev.getByRole('button',{name:'Ask AiKA',exact:true}).click();
- await answer.getByRole('alert').filter({hasText:'AiKA couldn’t reach its model'}).waitFor({timeout:20000});aikaMode='ok';
+ await answer.getByRole('alert').filter({hasText:'AiKA couldn’t reach its AI model'}).waitFor({timeout:20000});aikaMode='ok';
  // Back to work: resolve the blocker, finish the actions, mark ready for review.
  await dev.goto(url+'/activation/work');await card.waitFor();
  await card.getByRole('button',{name:'Mark blocker resolved'}).click();await card.getByText(/resolved by Alex Rivera/).waitFor();

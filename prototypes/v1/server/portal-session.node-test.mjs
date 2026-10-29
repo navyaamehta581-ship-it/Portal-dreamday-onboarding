@@ -194,3 +194,38 @@ test('repository evidence routes pass through with the persona’s credential; o
     assert.equal(h.calls.at(-1).init.headers.Authorization, `Bearer ${opA}`);
   } finally {await h.close();}
 });
+
+test('hosted options: signed sessions survive a new instance, are bound to the demo room, and need the https origin', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {calls.push({url, init}); return new Response('{}', {status: 200});};
+  const directory = loadDirectory({PORTAL_DEMO_ACCOUNTS: config({customers, personas})});
+  let currentRoom = 'ROOM1';
+  const make = () => createPortalSession({directory, fetchImpl, secret: 'k'.repeat(40), secure: true, room: () => currentRoom});
+  const serve = async handle => {const server = createServer((req, res) => {void handle(req, res, () => {res.writeHead(418); res.end();});});
+    await new Promise(r => server.listen(0, '127.0.0.1', r)); return {server, origin: `http://127.0.0.1:${server.address().port}`};};
+  let {server, origin} = await serve(make());
+  const host = new URL(origin).host;
+  try {
+    assert.equal((await fetch(origin + '/portal-auth/login', {method: 'POST', headers: {Origin: origin}, body: '{"personaId":"alex"}'})).status, 403, 'http origin refused when secure');
+    const login = await fetch(origin + '/portal-auth/login', {method: 'POST', headers: {Origin: `https://${host}`}, body: '{"personaId":"alex"}'});
+    assert.equal(login.status, 200);
+    const setCookie = login.headers.get('set-cookie');
+    assert.match(setCookie, /; Secure/); assert.match(setCookie, /portal_demo_session=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+;/);
+    const jar = {Cookie: setCookie.split(';')[0]};
+    // A new instance (restart) accepts the signed cookie; the room travels with forwarded requests.
+    await new Promise(r => server.close(r)); ({server, origin} = await serve(make()));
+    assert.equal((await (await fetch(origin + '/portal-auth/session', {headers: jar})).json()).persona.id, 'alex');
+    assert.equal((await fetch(origin + '/portal-api' + STATE, {headers: jar})).status, 200);
+    assert.equal(calls.at(-1).init.headers['X-Portal-Room'], 'ROOM1');
+    // Another room: the session doesn't count; no room at all: the gate is required.
+    currentRoom = 'ROOM2';
+    assert.equal((await fetch(origin + '/portal-auth/session', {headers: jar})).status, 401);
+    currentRoom = null;
+    assert.equal((await (await fetch(origin + '/portal-auth/personas')).json()).error.code, 'DEMO_GATE_REQUIRED');
+    // A tampered cookie is rejected.
+    currentRoom = 'ROOM1';
+    const mac = jar.Cookie.split('=')[1].split('.')[1];
+    const forged = Buffer.from(JSON.stringify({p: 'chris', r: 'ROOM1', e: Date.now() + 1e6})).toString('base64url');
+    assert.equal((await fetch(origin + '/portal-auth/session', {headers: {Cookie: `portal_demo_session=${forged}.${mac}`}})).status, 401);
+  } finally {await new Promise(r => server.close(r));}
+});

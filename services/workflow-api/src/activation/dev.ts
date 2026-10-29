@@ -1,23 +1,10 @@
-import {setupApprovalPolicy,type SetupApprovalGrant} from './approval.ts';
-import {createGitHubPreparation,type GitHubReadScope} from './github.ts';
-import {createBlockerReports} from './reports.ts';
-import type {ActivationStore} from './store.ts';
-import { createIntake } from './intake.ts';
-import { interpreterFromEnv } from './interpretation/provider.mjs';
-import { isDeepStrictEqual } from 'node:util';
+import type {SetupApprovalGrant} from './approval.ts';
+import type {GitHubReadScope} from './github.ts';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { registryPolicy, type AdmissionBundle } from './admission.ts';
-import { openActivationStore } from './store.ts';
-import { createReplanWorker } from './worker.ts';
-import { openHandoffStore } from './handoff/store.ts';
-import { createHandoffService } from './handoff/service.ts';
-import { createWorkService, openWorkStore } from './handoff/work.ts';
-import { createAika } from './handoff/aika.ts';
-import { createRepositoryService, openRepositoryStore, parseRepositoryConfig } from './repository.ts';
-import { hostedInterpreter } from './handoff/hosted.ts';
-import { analyzeWithModel } from './handoff/intelligence.ts';
-import { proposeMilestones } from './handoff/milestones.ts';
+import type { AdmissionBundle } from './admission.ts';
+import { parseRepositoryConfig } from './repository.ts';
+import { createActivationServices } from './services.ts';
 import { createOllama, ollamaConfigFromEnv } from '../llm/ollama.ts';
 /** Explicit loopback development mode, not production authentication. */
 export function developmentActivation(goalFilename:string) {
@@ -37,42 +24,24 @@ export function developmentActivation(goalFilename:string) {
   if(!Array.isArray(bundles)||bundles.length!==1)throw new Error('Development mode requires exactly one scoped bundle');
   const filename=resolve(process.env.ACTIVATION_DATABASE_PATH||'data/activation-dev.sqlite');
   if(filename===resolve(goalFilename))throw new Error('Activation and Goal databases must differ');
-  const intake=createIntake(registryPolicy(bundles),interpreterFromEnv());
-  let store:ActivationStore;
-  const reports=createBlockerReports(intake.policy,()=>store);
-  const github=createGitHubPreparation(reports.policy,()=>store,process.env.ACTIVATION_GITHUB_READ_SCOPES?JSON.parse(readFileSync(process.env.ACTIVATION_GITHUB_READ_SCOPES,'utf8')) as GitHubReadScope[]:[],{token:process.env.GITHUB_READ_TOKEN});
-  store=openActivationStore(filename,setupApprovalPolicy(github.policy,process.env.ACTIVATION_SETUP_APPROVAL_GRANTS?JSON.parse(readFileSync(process.env.ACTIVATION_SETUP_APPROVAL_GRANTS,'utf8')) as SetupApprovalGrant[]:[]));
-  // Server-built report replacements or exact operator-reviewed plans; both remain suggestions.
-  const handoffs=openHandoffStore(filename);
-  // PORTAL_LLM_PROVIDER=ollama uses the local model; otherwise an OpenAI-compatible endpoint if configured, else rules.
+  // PORTAL_LLM_PROVIDER=ollama uses the local model for analysis and AiKA; AIKA_LLM_PROVIDER=ollama for AiKA alone
+  // (same OLLAMA_* settings). Otherwise an OpenAI-compatible interpreter if configured, else rules.
   const ollama=ollamaConfigFromEnv();
-  const hosted=hostedInterpreter();
-  type Sources=import('../../../../contracts/activation/v1/handoff.ts').SourceInput[];type OnStage=import('./handoff/intelligence.ts').StageListener;
-  const analyze=ollama?(s:Sources,onStage?:OnStage)=>analyzeWithModel(createOllama(ollama),s,onStage):async(s:Sources,onStage?:OnStage)=>{onStage?.('interpreting',null);const understanding=await hosted.interpret(s);onStage?.('planning',null);return {understanding,proposal:proposeMilestones(understanding)};};
-  const handoff=createHandoffService({handoffs,store:()=>store,analyze,stage:intake.stage,release:intake.release,publishEnabled:process.env.ACTIVATION_INTAKE==='1'});
-  const workStore=openWorkStore(filename);
-  // Verified evidence is only what the backend itself observed on GitHub; developer references stay "reported".
-  const repositoryEvidence=(p:import('./store.ts').Principal)=>{try{const s=store.get(p);return [...s.evidence,...s.plan.evidence].filter((e,i,all)=>e.kind==='github_observation'&&all.findIndex(x=>x.id===e.id)===i).map(e=>e.claim);}catch{return [];}};
-  const work=createWorkService({published:p=>handoffs.published(p),work:workStore,verifiedEvidence:repositoryEvidence});
-  // AiKA uses the local model when PORTAL_LLM_PROVIDER=ollama, or AIKA_LLM_PROVIDER=ollama for AiKA alone (same
-  // OLLAMA_* settings); without either AiKA reports it is unavailable. The browser never reaches the model.
+  const aikaModel=ollama??ollamaConfigFromEnv({...process.env,PORTAL_LLM_PROVIDER:process.env.AIKA_LLM_PROVIDER});
   // Phase 7: repositories the operator configured per customer, live (read-only GitHub) or fixture (labelled sample).
   const repositoryConfig=process.env.ACTIVATION_REPOSITORIES_PATH?parseRepositoryConfig(JSON.parse(readFileSync(process.env.ACTIVATION_REPOSITORIES_PATH,'utf8'))):[];
   const apiOrigin=process.env.ACTIVATION_GITHUB_API_ORIGIN;
   // Only GitHub itself, or a loopback stand-in for tests; never an arbitrary host.
   if(apiOrigin&&apiOrigin!=='https://api.github.com'&&!/^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(apiOrigin))throw new Error('ACTIVATION_GITHUB_API_ORIGIN must be https://api.github.com or a loopback test origin');
-  const repositoryStore=openRepositoryStore(filename);
-  const repositories=createRepositoryService({config:repositoryConfig,store:repositoryStore,published:p=>handoffs.published(p),
-   github:{token:process.env.ACTIVATION_GITHUB_REPOSITORY_TOKEN||undefined,...(apiOrigin?{apiOrigin}:{})},maxAgeHours:Number(process.env.ACTIVATION_EVIDENCE_MAX_AGE_HOURS??24),cooldownMs:Number(process.env.ACTIVATION_INSPECTION_COOLDOWN_SECONDS??30)*1000});
-  const aikaModel=ollama??ollamaConfigFromEnv({...process.env,PORTAL_LLM_PROVIDER:process.env.AIKA_LLM_PROVIDER});
-  const aika=createAika({model:aikaModel?createOllama(aikaModel):null,work,publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,
-   // Phase 7 observations carry ids AiKA must cite; older inspection-packet evidence is live GitHub evidence too.
-   repositoryEvidence:(p,viewer)=>{const r=repositories.forAika(p,viewer);let legacy:string[]=[];try{legacy=repositoryEvidence(p);}catch{legacy=[];}
-    return {lines:[...r.lines,...legacy.map((claim,i)=>({id:`obs-packet-${i+1}`,mode:'live' as const,status:'observed' as const,line:`[obs-packet-${i+1}] OBSERVED (live, read-only inspection packet): ${claim}`}))],inspected:r.inspected||legacy.length>0};}});
-  const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);
-  const stop=worker.start();
+  const services=createActivationServices({filename,bundles,handoffMode:process.env.ACTIVATION_INTAKE==='1',
+   analysisModel:ollama?createOllama(ollama):null,aikaModel:aikaModel?createOllama(aikaModel):null,
+   repositories:repositoryConfig,github:{token:process.env.ACTIVATION_GITHUB_REPOSITORY_TOKEN||undefined,...(apiOrigin?{apiOrigin}:{})},
+   evidenceMaxAgeHours:Number(process.env.ACTIVATION_EVIDENCE_MAX_AGE_HOURS??24),inspectionCooldownMs:Number(process.env.ACTIVATION_INSPECTION_COOLDOWN_SECONDS??30)*1000,
+   githubReadScopes:process.env.ACTIVATION_GITHUB_READ_SCOPES?JSON.parse(readFileSync(process.env.ACTIVATION_GITHUB_READ_SCOPES,'utf8')) as GitHubReadScope[]:[],githubReadToken:process.env.GITHUB_READ_TOKEN,
+   setupApprovalGrants:process.env.ACTIVATION_SETUP_APPROVAL_GRANTS?JSON.parse(readFileSync(process.env.ACTIVATION_SETUP_APPROVAL_GRANTS,'utf8')) as SetupApprovalGrant[]:[]});
+  const {store,intake,reports,github,handoff,work,aika,repositories}=services;
   const bearer=(request:import('node:http').IncomingMessage,t:string|undefined)=>!!t&&request.headers.authorization===`Bearer ${t}`;
   // Dream Day applies whenever the handoff workflow can publish: only a Champion approval publishes new plans.
   const developerName=(request:import('node:http').IncomingMessage)=>developers.find(d=>request.headers.authorization===`Bearer ${d.token}`)?.name??null;
-  return {options:{handoff,work,aika,repositories,developerName,championApproval:process.env.ACTIVATION_INTAKE==='1',isChampion:(request:import('node:http').IncomingMessage)=>bearer(request,championToken),isOperator:(request:import('node:http').IncomingMessage)=>!!operatorToken&&request.headers.authorization===`Bearer ${operatorToken}`,store,prepareGitHub:github.prepare,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:(p:import('./store.ts').Principal,context:import('../../../../contracts/activation/v1/types.ts').CustomerContext)=>bundles.find(b=>isDeepStrictEqual(b.principal,p)&&isDeepStrictEqual(b.context,context))?.plans.find(plan=>plan.contextRevision===context.revision&&plan.revision===0&&plan.supersedesRevision===null)??null,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>(request.headers.authorization===`Bearer ${token}`||bearer(request,operatorToken)||bearer(request,championToken)||!!developerName(request))&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},async close(){await stop();handoffs.close();workStore.close();repositoryStore.close();store.close();}};
+  return {options:{handoff,work,aika,repositories,developerName,championApproval:process.env.ACTIVATION_INTAKE==='1',isChampion:(request:import('node:http').IncomingMessage)=>bearer(request,championToken),isOperator:(request:import('node:http').IncomingMessage)=>!!operatorToken&&request.headers.authorization===`Bearer ${operatorToken}`,store,prepareGitHub:github.prepare,reportProgress:reports.progress,reportBlocker:reports.submit,...(process.env.ACTIVATION_INTAKE==='1'?{intake:async(p:import('./store.ts').Principal,input:unknown)=>{try {const prepared=await intake.prepare(p,input);return store.initialize(p,prepared.context,prepared.plan);}finally{intake.release(p);}}}:{}),initialPlan:services.initialPlan,authorize:(request:import('node:http').IncomingMessage,customerId:string)=>(request.headers.authorization===`Bearer ${token}`||bearer(request,operatorToken)||bearer(request,championToken)||!!developerName(request))&&Date.parse(bundles[0].expiresAt)>Date.now()&&bundles[0].principal.customerId===customerId?bundles[0].principal:null},close:services.close};
 }

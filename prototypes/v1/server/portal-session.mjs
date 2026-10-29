@@ -18,7 +18,7 @@
  * Requests carry the persona the page believes is signed in; if another tab signed in as someone else, the
  * request is refused instead of silently acting as the new persona.
  */
-import {randomBytes} from 'node:crypto';
+import {createHmac, randomBytes, timingSafeEqual} from 'node:crypto';
 import {existsSync, readFileSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -94,7 +94,15 @@ function readToken(file) {
   return token.length >= 32 ? token : null;
 }
 
-export function createPortalSession({directory, now = () => Date.now(), fetchImpl = fetch} = {}) {
+/**
+ * Options for the hosted deployment (all optional; local development uses none of them):
+ *   - secret: sign session cookies (HMAC-SHA256) instead of keeping them in memory, so sign-ins survive a restart;
+ *   - secure: the page is served over HTTPS (Secure cookies; same-origin checks expect https://);
+ *   - room: (req) => the visitor's demo room id from the server-verified gate cookie, or null. When set, every
+ *     sign-in and API request needs a room, a session belongs to the room it was made in, and forwarded requests
+ *     name the room (X-Portal-Room) so the API keeps each room's data apart.
+ */
+export function createPortalSession({directory, now = () => Date.now(), fetchImpl = fetch, secret = null, secure = false, room = null} = {}) {
   const {customers, personas} = directory;
   const customer = id => customers.find(c => c.id === id);
   const publicPersona = p => ({id: p.id, name: p.name, role: p.role, title: p.title,
@@ -112,16 +120,38 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
     res.end(JSON.stringify(value));
   };
   const fail = (res, status, code) => send(res, status, {error: {code}});
+  const sign = value => createHmac('sha256', secret).update(value).digest('base64url');
   const cookieSession = req => {
-    const match = /(?:^|;\s*)portal_demo_session=([a-f0-9]{64})(?:;|$)/.exec(req.headers.cookie ?? '');
-    const entry = match && sessions.get(match[1]);
-    if (!entry) return null;
-    if (entry.expires <= now()) {sessions.delete(match[1]); return null;}
+    const raw = /(?:^|;\s*)portal_demo_session=([A-Za-z0-9_.-]{1,600})(?:;|$)/.exec(req.headers.cookie ?? '')?.[1];
+    if (!raw) return null;
+    let entry;
+    if (secret) {
+      // Stateless: the cookie carries persona, room and expiry, signed with the server secret.
+      const [data, mac] = raw.split('.');
+      const expected = data && sign(data);
+      if (!mac || !expected || mac.length !== expected.length || !timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return null;
+      try {entry = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));} catch {return null;}
+      entry = {personaId: entry.p, room: entry.r ?? null, expires: entry.e};
+    } else {
+      entry = /^[a-f0-9]{64}$/.test(raw) ? sessions.get(raw) : null;
+      if (entry && entry.expires <= now()) {sessions.delete(raw); entry = null;}
+    }
+    if (!entry || !(entry.expires > now())) return null;
+    // A session made in another demo room (or before entering one) doesn't count here.
+    if (room && entry.room !== room(req)) return null;
     const persona = personas.find(p => p.id === entry.personaId);
-    return persona ? {sid: match[1], persona} : null;
+    return persona ? {sid: raw, persona} : null;
   };
+  const issue = (persona, req) => {
+    const entry = {personaId: persona.id, room: room ? room(req) : null, expires: now() + SESSION_MS};
+    if (secret) {const data = Buffer.from(JSON.stringify({p: entry.personaId, r: entry.room, e: entry.expires})).toString('base64url'); return `${data}.${sign(data)}`;}
+    const sid = randomBytes(32).toString('hex');
+    sessions.set(sid, entry);
+    return sid;
+  };
+  const cookie = (value, maxAge) => `${COOKIE}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
   // State-changing requests must come from this page's own origin.
-  const sameOrigin = req => req.headers.origin === `http://${req.headers.host}`;
+  const sameOrigin = req => req.headers.origin === `${secure ? 'https' : 'http'}://${req.headers.host}`;
   async function body(req) {
     const chunks = [];
     let size = 0;
@@ -134,7 +164,7 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
     try {
       upstream = await fetchImpl(`${c.apiOrigin}/api${route}`, {
         method: req.method,
-        headers: {Authorization: `Bearer ${token}`, 'X-Portal-Actor': persona.name, ...(payload === undefined ? {} : {'Content-Type': 'application/json'})},
+        headers: {Authorization: `Bearer ${token}`, 'X-Portal-Actor': persona.name, ...(room ? {'X-Portal-Room': room(req)} : {}), ...(payload === undefined ? {} : {'Content-Type': 'application/json'})},
         body: payload,
         signal: AbortSignal.timeout(timeoutFor(route)),
       });
@@ -159,6 +189,8 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
     const url = new URL(req.url ?? '/', 'http://local');
     const path = url.pathname;
     try {
+      // Hosted demo: nothing here works outside a demo room (the gate decides who has one).
+      if (room && (path.startsWith('/portal-auth/') || path.startsWith('/portal-api/') || path.startsWith('/operator-api/')) && !room(req)) return fail(res, 401, 'DEMO_GATE_REQUIRED');
       if (path === '/portal-auth/personas' && req.method === 'GET') return send(res, 200, {personas: personas.map(publicPersona)});
       if (path === '/portal-auth/session' && req.method === 'GET') {
         const s = cookieSession(req);
@@ -174,15 +206,13 @@ export function createPortalSession({directory, now = () => Date.now(), fetchImp
         // Signing in replaces any earlier session in this browser.
         const previous = cookieSession(req);
         if (previous) sessions.delete(previous.sid);
-        const sid = randomBytes(32).toString('hex');
-        sessions.set(sid, {personaId: persona.id, expires: now() + SESSION_MS});
-        return send(res, 200, {persona: publicPersona(persona)}, {'Set-Cookie': `${COOKIE}=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MS / 1000}`});
+        return send(res, 200, {persona: publicPersona(persona)}, {'Set-Cookie': cookie(issue(persona, req), SESSION_MS / 1000)});
       }
       if (path === '/portal-auth/logout' && req.method === 'POST') {
         if (!sameOrigin(req)) return fail(res, 403, 'ORIGIN_NOT_ALLOWED');
         const s = cookieSession(req);
         if (s) sessions.delete(s.sid);
-        return send(res, 200, {}, {'Set-Cookie': `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`});
+        return send(res, 200, {}, {'Set-Cookie': cookie('', 0)});
       }
       // Customer personas: their single customer; developer or Champion credential.
       if (path.startsWith('/portal-api/')) {

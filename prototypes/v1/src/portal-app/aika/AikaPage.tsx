@@ -10,7 +10,7 @@ const KIND:Record<AikaSection['kind'],[string,string]>={known:['Known','green'],
 const SUGGESTIONS=['What should I do next on this milestone?','What does this milestone depend on, and is it ready?','What is still unknown, and who could answer it?'];
 
 /** AiKA inside the Portal. The server builds its context from the approved, developer-safe plan and this
- * person's own progress, runs the local model, and checks the answer; the browser never talks to the model. */
+ * person's own progress, runs the configured model, and checks the answer; the browser never talks to the model. */
 export function AikaPage({api,work,repos}:{api:ReturnType<typeof activationClient>;work:MilestoneWorkSession;repos?:RepositoryEvidenceSession}){
  const aika=useAika(api);
  const options=(work.progress?.milestones??[]).filter(m=>m.detail);
@@ -41,7 +41,7 @@ export function AikaPage({api,work,repos}:{api:ReturnType<typeof activationClien
     </section>
     {job&&<section className="pt-card" aria-label="AiKA answer" aria-busy={job.status==='running'}>
      <div className="pt-card-head"><h3>{job.question}</h3><span className="pt-note" style={{marginTop:0}}>{job.status==='running'?`Thinking… ${Math.round(job.elapsedMs/1000)}s`:`Answered in ${Math.round(job.elapsedMs/1000)}s`}</span></div>
-     {job.status==='running'&&<p className="pt-note" role="status">AiKA is working on your question with the local model. This can take a minute on a laptop; you can keep using the Portal.</p>}
+     {job.status==='running'&&<p className="pt-note" role="status">AiKA is working on your question. This can take up to a minute; you can keep using the Portal.</p>}
      {job.status==='failed'&&<div className="pt-banner error" role="alert">{aikaProblem(job.error??'AIKA_FAILED')}</div>}
      {job.answer&&<>
       <ul className="pt-aika-sections">{job.answer.sections.map((s,i)=><li key={i}><span className={'pt-pill '+KIND[s.kind][1]}>{KIND[s.kind][0]}</span><div><p>{s.text}</p>
