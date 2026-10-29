@@ -124,7 +124,7 @@ function ProblemEditor({index,total,problem:p,suggestion,forceOpen,onChange,onRe
 
 const peopleSummary=(xs:ReviewStakeholder[])=>{const t=xs.filter(s=>s.technical).length,i=xs.length-t;return `${t} on the customer’s technical team${i?` · ${i} kept with you (not shared)`:''}`;};
 
-const provenance=(rec:HandoffRecord)=>{const m=rec.understanding.model;return m?.ok?`Local model · ${m.model}`:m?`Rule-based fallback · model unavailable (${m.error})`:rec.understanding.interpreter==='hosted_model'?'Model-assisted analysis':'Rule-based analysis · no model';};
+const provenance=(rec:HandoffRecord)=>{const m=rec.understanding.model;return m?.ok?`${m.provider==='gemini'?'Gemini':'Local model'} · ${m.model}`:m?`Rule-based fallback · model unavailable (${m.error})`:rec.understanding.interpreter==='hosted_model'?'Model-assisted analysis':'Rule-based analysis · no model';};
 
 const BASIS:Record<ReviewStakeholder['basis'],string>={stated:'Named in sources',inferred:'Inferred from sources',role_default:'Role only',chris:'Added by you'};
 /** People, grouped: the customer's technical team (who the Champion sees) and anyone kept with Chris. Each row says

@@ -2,7 +2,15 @@
 
 A shared activation workspace for Chris and the developer: turn a customer briefing and separately agreed goal into a relevant next action, recover when the developer gets blocked, and show evidence-linked progress toward the first useful outcome.
 
-This is a local review prototype. Customer and Portal records are simulated fixtures. The GitHub inspector makes real, read-only, commit-pinned observations when authorized access is available. A repository observation does not prove a passing check, deployment, customer adoption or ROI. There is no live AiKA/Spotify Portal integration and no verified deployment or adoption.
+This repository contains one runnable fictional demo, with a React/Vite frontend and a Node 24 backend. It can run locally or as one Docker service on Render Free. The hosted demo has been verified on Render, including a real Gemini analysis request; it is not a native Spotify Portal integration or evidence of real customer adoption. Customer, persona and repository records are fictional. The optional GitHub inspector makes real, read-only, commit-pinned observations when authorized access is available. A repository observation does not prove a passing check, deployment, adoption or ROI.
+
+## Start here
+
+- **Hosted demo and deployment:** [Render guide](docs/deployment/render.md). The backend serves the demo gate, persona sessions, API routes and built frontend together. State is temporary.
+- **Local persona demo:** [local bootstrap](services/workflow-api/LOCAL_DEMO.md).
+- **Current source:** `prototypes/v1/` is the active frontend despite its historical directory name; `services/workflow-api/` is the active backend; `contracts/` contains shared contracts.
+- **Earlier versions and audit records:** [repository cleanup map](docs/repository-cleanup.md). `archive/` and `docs/v1/` are historical references, not competing release candidates.
+- **Deployment target:** Render Free. The earlier [Vercel evaluation](docs/deployment/vercel-evaluation.md) is historical reference; migration is no longer planned.
 
 ## Six-step journey
 
@@ -19,17 +27,18 @@ The [active blueprint](docs/blueprint/activation-intelligence.md) records implem
 
 | Path | Role |
 | --- | --- |
-| `prototypes/v1/src/activation/` | React activation page and separate API client; `/` and `/activation` are the product entry points |
+| `prototypes/v1/src/operator/`, `src/portal/`, `src/activation/` | Active operator, Portal and onboarding UI; hosted entry goes through the demo gate and persona sign-in |
 | `services/workflow-api/src/activation/` | SQLite canonical state/history, revision checks, idempotency, exact-record admission, intake and durable replanning |
 | `contracts/activation/v1/` | Provisional versioned types, schema, validators, fixtures and evidence semantics |
-| `prototypes/v1/server/` | Read-only GitHub inspector and conversation/interpretation service; hosted interpretation is optional and server-side |
-| `prototypes/v1/src/portal/`, `src/phase-a/` | Preserved supporting fixture workspace at `/portal`, conversation and repository diagnosis; Navyaa’s frontend remains available |
+| `services/workflow-api/src/production.ts`, `prototypes/v1/server/portal-session.mjs` | Hosted entry point, gate, room isolation, persona sessions, API forwarding and static frontend serving |
+| Other files in `prototypes/v1/server/` | Supporting local GitHub inspector and conversation/interpretation service |
+| `prototypes/v1/src/phase-a/` | Supporting conversation and repository diagnosis UI |
 | `prototypes/v1/src/logic/` | Reusable deterministic workflow, validation, generation, simulation and evidence rules with regression tests |
 | `services/workflow-api/src/{app,store,server}.ts`, `contracts/goals.ts` | Preserved Goal API foundation and shared contract |
 | `plugins/`, `packages/` | Integration planning markers, not installed managed Portal packages |
 | `archive/`, `docs/v1/`, historical blueprint JSON/register | Provenance and earlier designs, not the current product roadmap |
 
-Vite proxies activation requests to port 7007 and inspector/conversation requests to 8787. The backend owns authoritative state; browser text, model output and fixture policy never establish production authority. Package names such as `@portal-architect/*` are retained compatibility identifiers, not a second product.
+In local development, Vite proxies activation requests to port 7007 and inspector/conversation requests to 8787. On Render, the production server serves the frontend and API under one origin; Vite development proxies do not run. The backend owns authoritative state; browser text, model output and fixture policy never establish production authority. Package names such as `@portal-architect/*` are retained compatibility identifiers, not a second product.
 
 ## Run locally
 
@@ -46,6 +55,10 @@ cd Spotify-portal-solution
 npm ci --prefix prototypes/v1
 npm ci --ignore-scripts --prefix services/workflow-api
 ```
+
+### Lower-level development services
+
+The commands below start the individual development services. For the full persona journey, use the local bootstrap linked above; for hosted operation, use the Docker/Render guide.
 
 In separate terminals from the repository root:
 
@@ -87,6 +100,6 @@ The build includes frontend typechecking. HTTP tests need loopback listeners. Bl
 
 Main incorporated PR #13 (`3b37899165d57d4b7808666106344bee55709bf5`) before this cleanup. The [current handoff](docs/activation/handoff.md) supersedes earlier session status reports. The original [Workflow Architect snapshot](archive/workflow-architect-v1/README.md), handoff ZIP, 516-atom register and hashes are retained for traceability. No historical atom is promoted to complete by this narrative update.
 
-Production identity, actual Chris/customer agreement, independent artifact/check receipts, native Portal/AiKA contracts and customer outcome evidence remain acceptance gates. Hosted interpretation has not been established as live acceptance. Deterministic blocker recovery remains available without a hosted model. No source license has been selected; historical branding/redistribution notes remain in the V1 handoff.
+Production identity, actual Chris/customer agreement, independent artifact/check receipts, native Portal/AiKA contracts and customer outcome evidence remain acceptance gates. Hosted Gemini analysis has been smoke-tested on the fictional Render demo. Native Portal integration and real customer acceptance remain unverified. Deterministic blocker recovery remains available without a hosted model. No source license has been selected; historical branding/redistribution notes remain in the V1 handoff.
 
 See [contributing](CONTRIBUTING.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md) and the [cleanup record](docs/narrative-cleanup.md) for scope, retained legacy references and verification.

@@ -2,7 +2,9 @@
 
 One Render **free** web service runs the whole prototype from `./Dockerfile`, as described in `render.yaml`. There is no persistent disk and no paid AI. Deploys are manual (`autoDeploy: false`).
 
-**Status:** nothing has been deployed, and no secrets have been configured anywhere.
+**Status checked 29 October 2026:** `spotify-portal-demo` is deployed on Render Free. Its health check and a real Gemini PDF analysis succeeded. Credentials are configured only in the hosting dashboard; never copy values into this guide. This is a dated observation, not a live status guarantee.
+
+The working service reported `GEMINI_MODEL=gemini-3.5-flash-lite`; `render.yaml` currently defaults to `gemini-2.5-flash`. When recreating the service, explicitly select a model available on your Gemini project’s free tier and verify a real generation request. Do not assume a Blueprint default matches an existing dashboard setting.
 
 ## What it costs
 
@@ -11,7 +13,7 @@ One Render **free** web service runs the whole prototype from `./Dockerfile`, as
 | Render web service | `plan: free` | $0. No payment method is needed for a free web service. |
 | Storage | SQLite in `/tmp/spotify-portal-demo`, inside the container | $0. No disk is declared. |
 | PDF reading | pdf.js (Mozilla, open source), installed in the image; runs inside the service | $0. No document-processing service. A worker thread with a 192 MB memory cap and a 20 s limit; one PDF at a time. |
-| AI | Gemini API free tier (`gemini-2.5-flash`), optional | $0 when the key's Google Cloud project has **no billing enabled**. |
+| AI | Gemini API free tier (model selected with `GEMINI_MODEL`), optional | $0 when the key's Google Cloud project has **no billing enabled**. |
 
 Nothing in `render.yaml` or the server turns on a paid service. Keep billing off on the key's Google project: with billing off, Google refuses requests above the free quota rather than charging for them.
 

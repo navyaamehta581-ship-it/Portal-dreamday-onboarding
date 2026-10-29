@@ -100,7 +100,9 @@ test('unsupported adapter and empty criterion rejected; client narrative never p
   x.store.initialize(principal,x.context,x.plan);x.progress.valueDemonstrated='Deployed to Portal, ROI verified';
   assert.equal(x.store.progress(principal,x.progress).outcome.status,'unassessed');x.store.close();
 });
-test('HTTP authenticated init/reload/update, no-store and ETag; legacy Goal API still works',async()=>{
+test('HTTP authenticated init/reload/update, no-store and ETag; legacy Goal API still works',async t=>{
+  // Keep proof timestamps stable while the HTTP server starts under load.
+  t.mock.timers.enable({apis:['Date'],now:Date.now()});
   const x=setup(),goals=openGoalStore(':memory:');
   const app=createApp(goals,undefined,{store:x.store,isOperator:()=>true,authorize:(r,c)=>r.headers.authorization==='Bearer test'&&c==='ledger'?principal:null});
   await new Promise<void>(resolve=>app.listen(0,'127.0.0.1',resolve));

@@ -23,3 +23,11 @@ test-results/
 
 # Local Phase A conversations (may contain developer context)
 prototypes/v1/server/phase-a/.data/
+
+# Local SQLite databases and journal files, wherever a demo is started
+*.sqlite
+*.sqlite-*
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

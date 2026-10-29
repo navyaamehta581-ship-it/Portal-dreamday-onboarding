@@ -1,6 +1,6 @@
 # Evaluation: could the demo run on Vercel Hobby later?
 
-**Status:** evaluation only. Nothing was migrated, no Vercel project exists, and Render (free) stays the deployment (`render.yaml`, [render.md](render.md)).
+**Status, 29 October 2026:** migration is no longer planned. Render Free remains the deployment target (`render.yaml`, [render.md](render.md)). This earlier evaluation is retained as historical reference; nothing was migrated by this work.
 
 **What was checked:**
 - Everything about *our* code below was checked against the repository.
