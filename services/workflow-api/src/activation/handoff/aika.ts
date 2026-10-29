@@ -52,7 +52,7 @@ export function createAika(deps:Deps){
    for(const a of m.detail!.actions)add(`  Action ${a.index+1} [${a.status.replace('_',' ')}]: ${a.text}`);
    for(const c of m.detail!.completionCriteria)add(`  Done when: ${c}`);
    for(const d of m.dependsOn)add(`  Depends on: ${d.title} — ${d.assignee??'unassigned'} — status ${d.status.replace(/_/g,' ')}`);
-   for(const u of m.detail!.updates)add(`  ${u.kind==='blocker'?(u.resolved?'Resolved blocker':'Open blocker'):u.kind==='question'?'Question':'Update'} reported by ${u.by}: ${u.text}${u.evidence?` (reference reported, not verified: ${u.evidence})`:''}`);
+   for(const u of m.detail!.updates)add(`  ${u.kind==='blocker'?(u.resolved?'Resolved blocker':'Open blocker'):u.kind==='question'?'Question':u.kind==='response'?'Reply':u.kind==='coordination'?'Champion coordination note':u.kind==='follow_up'?'Champion follow-up request':'Update'} ${u.role==='champion'?'from the Champion':'reported by'} ${u.by}: ${u.text}${u.evidence?` (reference reported, not verified: ${u.evidence})`:''}`);
   }
   for(const m of team.milestones.filter(m=>!own.includes(m)))add(`TEAM MILESTONE: ${m.title} — ${m.assignee??'unassigned'} — status ${m.status.replace(/_/g,' ')}`);
   const evidence=deps.repositoryEvidence(p);

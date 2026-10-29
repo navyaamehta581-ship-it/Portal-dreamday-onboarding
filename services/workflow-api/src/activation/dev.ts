@@ -50,12 +50,14 @@ export function developmentActivation(goalFilename:string) {
   const analyze=ollama?(s:Sources,onStage?:OnStage)=>analyzeWithModel(createOllama(ollama),s,onStage):async(s:Sources,onStage?:OnStage)=>{onStage?.('interpreting',null);const understanding=await hosted.interpret(s);onStage?.('planning',null);return {understanding,proposal:proposeMilestones(understanding)};};
   const handoff=createHandoffService({handoffs,store:()=>store,analyze,stage:intake.stage,release:intake.release,publishEnabled:process.env.ACTIVATION_INTAKE==='1'});
   const workStore=openWorkStore(filename);
-  const work=createWorkService({published:p=>handoffs.published(p),work:workStore});
+  // Verified evidence is only what the backend itself observed on GitHub; developer references stay "reported".
+  const repositoryEvidence=(p:import('./store.ts').Principal)=>{try{const s=store.get(p);return [...s.evidence,...s.plan.evidence].filter((e,i,all)=>e.kind==='github_observation'&&all.findIndex(x=>x.id===e.id)===i).map(e=>e.claim);}catch{return [];}};
+  const work=createWorkService({published:p=>handoffs.published(p),work:workStore,verifiedEvidence:repositoryEvidence});
   // AiKA uses the local model when PORTAL_LLM_PROVIDER=ollama, or AIKA_LLM_PROVIDER=ollama for AiKA alone (same
   // OLLAMA_* settings); without either AiKA reports it is unavailable. The browser never reaches the model.
   const aikaModel=ollama??ollamaConfigFromEnv({...process.env,PORTAL_LLM_PROVIDER:process.env.AIKA_LLM_PROVIDER});
   const aika=createAika({model:aikaModel?createOllama(aikaModel):null,work,publishedRecord:p=>handoffs.all(p).filter(r=>r.status==='published').at(-1)??null,
-   repositoryEvidence:p=>{try{const s=store.get(p);return [...s.evidence,...s.plan.evidence].filter((e,i,all)=>e.kind==='github_observation'&&all.findIndex(x=>x.id===e.id)===i).map(e=>e.claim);}catch{return [];}}});
+   repositoryEvidence});
   const worker=createReplanWorker(store,async(p,state,intent)=>reports.replacement(state,intent)??bundles.find(b=>isDeepStrictEqual(b.principal,p))?.plans.find(plan=>plan.contextRevision===state.contextRevision&&plan.revision===state.planRevision+1&&plan.supersedesRevision===state.planRevision&&plan.blockerIds.includes(intent.id))??null);
   const stop=worker.start();
   const bearer=(request:import('node:http').IncomingMessage,t:string|undefined)=>!!t&&request.headers.authorization===`Bearer ${t}`;

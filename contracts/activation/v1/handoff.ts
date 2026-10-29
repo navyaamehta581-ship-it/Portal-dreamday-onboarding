@@ -80,21 +80,48 @@ export type DeveloperHandoff = {
 // ---- Phase 5: developers working on approved milestones. Attributed by server-side developer identity.
 export type ActionStatus = 'not_started' | 'started' | 'blocked' | 'completed';
 export type WorkStatus = 'not_started' | 'in_progress' | 'blocked' | 'ready_for_review' | 'completed';
-/** A note on a milestone. `evidence` is a reference the developer reported (a link, commit or PR); it is not verified. */
-export type WorkUpdate = { id: string; at: string; by: string; kind: 'update' | 'blocker' | 'question'; text: string; evidence: string | null; resolved: { at: string; by: string } | null };
+/** An entry in a milestone's record and discussion, attributed to the person whose credential made it.
+ * Developers (the assignee) write updates, blockers, questions and replies; the Champion writes coordination notes,
+ * responses and follow-up requests (Phase 6). `evidence` is a reference the developer reported; it is not verified.
+ * `replyTo` names the entry this one answers. Older records have no `role` or `replyTo` and are read as a developer's. */
+export type WorkUpdate = { id: string; at: string; by: string; role?: 'developer' | 'champion';
+  kind: 'update' | 'blocker' | 'question' | 'response' | 'coordination' | 'follow_up'; text: string; evidence: string | null;
+  replyTo?: string | null; resolved: { at: string; by: string } | null };
+/** The Champion's review of a milestone the assignee marked ready for review (or completed). Recorded separately from
+ * the developer's status: reviewing never completes a milestone. `developerRevision` is the developer work it saw. */
+export type MilestoneReview = { decision: 'reviewed'; at: string; by: string; note: string | null; developerRevision: number };
 /** Stored per approved milestone. `explicit` is a status the assignee set (ready for review, completed); otherwise
- * the status is derived from the actions and open blockers. */
+ * the status is derived from the actions and open blockers. `revision` changes on every write (anyone's);
+ * `developerRevision` only when the assignee changes the work itself (actions, status, a new blocker or update). */
 export type MilestoneWorkRecord = { milestoneId: string; revision: number; explicit: 'ready_for_review' | 'completed' | null;
-  actions: { status: ActionStatus; at: string | null; by: string | null }[]; updates: WorkUpdate[]; updatedAt: string | null; updatedBy: string | null };
+  actions: { status: ActionStatus; at: string | null; by: string | null }[]; updates: WorkUpdate[]; updatedAt: string | null; updatedBy: string | null;
+  developerRevision?: number; review?: MilestoneReview | null };
 export type MilestoneDependency = { id: string; title: string; assignee: string | null; status: WorkStatus };
+/** Review state, derived on the server: awaiting the Champion once the assignee marks it ready (or completed);
+ * `reviewed_outdated` when the developer changed the work after the review. */
+export type ReviewState = 'none' | 'awaiting_review' | 'reviewed' | 'reviewed_outdated';
+/** Why a milestone needs the Champion's attention. */
+export type AttentionReason = 'blocked' | 'open_blocker' | 'open_question' | 'awaiting_review' | 'review_outdated' | 'waiting_on_dependency';
 /** One approved milestone as a viewer may see it. `detail` is present for the viewer's own milestones (and for the
- * Champion and Chris); other developers' milestones show only title, assignee and status. */
+ * Champion and Chris); other developers' milestones show only title, assignee and status. Counts are computed on
+ * the server so every view shows the same numbers. */
 export type MilestoneProgress = { id: string; title: string; assignee: string | null; status: WorkStatus; openBlockers: number; mine: boolean;
   dependsOn: MilestoneDependency[];
+  openQuestions?: number; openFollowUps?: number; actionsCompleted?: number; actionsTotal?: number;
+  reviewState?: ReviewState; review?: MilestoneReview | null; attention?: AttentionReason[];
+  latest?: { at: string; by: string; kind: WorkUpdate['kind'] } | null;
   detail: { description: string; system: string | null; actions: { index: number; text: string; status: ActionStatus; at: string | null; by: string | null }[];
     completionCriteria: string[]; updates: WorkUpdate[]; revision: number; updatedAt: string | null; updatedBy: string | null } | null };
+/** Team totals, computed on the server from the same records as each milestone. */
+export type ProgressSummary = { milestones: number; notStarted: number; inProgress: number; blocked: number; readyForReview: number; completed: number;
+  reviewed: number; awaitingReview: number; openBlockers: number; openQuestions: number; openFollowUps: number; actionsCompleted: number; actionsTotal: number;
+  /** The approved plan carries no deadlines, so nothing can be overdue; this stays null until one exists. */
+  overdue: null };
 export type TeamProgress = { viewer: { role: 'developer' | 'champion' | 'operator'; name: string | null };
-  approval: { by: string; at: string } | null; objective: DeveloperHandoff['objective'] | null; milestones: MilestoneProgress[] };
+  approval: { by: string; at: string } | null; objective: DeveloperHandoff['objective'] | null; milestones: MilestoneProgress[];
+  summary?: ProgressSummary;
+  /** What the Portal backend itself observed on GitHub (verified evidence); Champion and Chris only. */
+  verifiedEvidence?: string[] };
 
 // ---- Phase 5: AiKA. Answers come from the approved, developer-safe context only.
 export type AikaSection = { kind: 'known' | 'reported' | 'suggestion' | 'unknown'; text: string };
