@@ -9,9 +9,11 @@ COPY prototypes/v1/package.json prototypes/v1/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY prototypes/v1/ ./
 COPY contracts/ /app/contracts/
+# Frontend typechecking includes tests that import backend source.
+COPY services/workflow-api/src/ /app/services/workflow-api/src/
 RUN npm run build
 
-# ---- Runtime: no npm packages; Node 24 runs the API's TypeScript directly ----
+# ---- Runtime: Node 24 runs the API's TypeScript directly; one npm package (pdf.js, for PDF text) ----
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production \
     PORT=10000 \
@@ -19,7 +21,9 @@ ENV NODE_ENV=production \
     PORTAL_DATA_DIR=/tmp/spotify-portal-demo
 WORKDIR /app
 COPY contracts/ contracts/
-COPY services/workflow-api/package.json services/workflow-api/package.json
+COPY services/workflow-api/package.json services/workflow-api/package-lock.json services/workflow-api/
+# Production dependencies only, without install scripts or pdf.js's optional native canvas (text extraction needs neither).
+RUN npm ci --prefix services/workflow-api --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund
 COPY services/workflow-api/src/ services/workflow-api/src/
 COPY services/workflow-api/fixtures/ services/workflow-api/fixtures/
 COPY prototypes/v1/server/portal-session.mjs prototypes/v1/server/portal-session.mjs

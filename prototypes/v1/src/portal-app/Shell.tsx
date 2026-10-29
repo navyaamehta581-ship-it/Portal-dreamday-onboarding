@@ -2,6 +2,7 @@ import {useEffect,useRef,useState,type ReactNode} from 'react';
 import {ArrowRightLeft,Bell,BookOpen,Bookmark,ChartColumn,CheckCheck,ChevronRight,Container,Flag,Folder,Globe,GraduationCap,History,House,LayoutGrid,ListChecks,Lock,Newspaper,Plus,Puzzle,Radar,ScrollText,Search,Settings,Triangle,type LucideIcon} from 'lucide-react';
 import {Logo} from './Logo';
 import {Link} from './router';
+import {DemoMenu} from './DemoRoom';
 
 export type NavItem={slug:string;label:string;icon:LucideIcon;to?:string;tag?:string;dot?:boolean;chevron?:boolean;solid?:boolean};
 /** Navigation as shown in references 053–061. Only Home and Onboarding are functional in this demo. */
@@ -63,7 +64,7 @@ export function Shell({active,user,homeHref='/portal',primaryNav=PRIMARY_NAV,hre
   <header className="pt-top">
    <Link to={homeHref} aria-label="Spotify Portal home"><Logo/></Link>
    <div className="pt-search" aria-disabled="true" title="Search is not available in this demo"><Search size={17} strokeWidth={2.6} aria-hidden="true"/>Search in Portal</div>
-   <AccountMenu user={user}/>
+   <div className="pt-top-end"><DemoMenu/><AccountMenu user={user}/></div>
   </header>
   <div className="pt-body">
    <nav className="pt-side" aria-label="Portal">

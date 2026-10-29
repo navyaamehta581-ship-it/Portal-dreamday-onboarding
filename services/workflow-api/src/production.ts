@@ -66,29 +66,55 @@ function limiter(max:number,windowMs:number,now:()=>number){
  };
 }
 
-const TYPES:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2','.json':'application/json; charset=utf-8','.txt':'text/plain; charset=utf-8'};
+const TYPES:Record<string,string>={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.ico':'image/x-icon','.woff':'font/woff','.woff2':'font/woff2','.json':'application/json; charset=utf-8','.pdf':'application/pdf','.txt':'text/plain; charset=utf-8'};
 const SECURITY={'X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY','Cross-Origin-Opener-Policy':'same-origin',
  'Content-Security-Policy':"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"};
 
 const esc=(s:string)=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!));
-function gatePage(message:string|null,closed:string|null,notes:{ephemeral:boolean;gemini:boolean;ended?:boolean}={ephemeral:false,gemini:false}){
- return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spotify Portal · Fictional demo</title>
-<style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#121212;color:#fff;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-main{width:min(440px,calc(100vw - 32px));background:#181818;border:1px solid #2a2a2a;border-radius:8px;padding:32px}h1{font-size:22px;margin:0 0 6px}
-p{color:#b3b3b3;font-size:14px;margin:0 0 18px}label{display:grid;gap:6px;margin-top:16px;font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#bdbdbd}
-input{width:100%;font:inherit;padding:12px 14px;border-radius:6px;border:1px solid #3a3a3a;background:#242424;color:#fff}button{margin-top:22px;width:100%;height:48px;border:0;border-radius:999px;background:#1ed760;color:#000;font:700 16px system-ui;cursor:pointer}
-.err{margin-top:16px;padding:12px 14px;border-left:3px solid #f15e6c;background:#1f1f1f;color:#fff;font-size:14px}.note{font-size:13px;color:#b3b3b3;border-left:3px solid #ffd27a;padding-left:10px}.tag{display:inline-block;margin-bottom:14px;padding:2px 10px;border-radius:12px;background:#3d2f12;color:#ffd27a;font-size:12px;font-weight:700}</style></head>
-<body><main><span class="tag">Fictional demo</span><h1>Spotify Portal onboarding demo</h1>
-<p>A prototype for the Spotify Backstage × TKS Ignition Challenge. Every customer, person and repository here is invented; sample repository data is labelled as sample. Enter the passphrase you were given.</p>
-${notes.ended?'<div class="err" role="status">Your previous demo room is no longer available. On free hosting, demo data is cleared when the service restarts, redeploys or sleeps. Enter again to start a fresh room.</div>':''}
-${notes.ephemeral?'<p class="note"><strong>Temporary demo data.</strong> This free deployment keeps rooms and work only while the service is running. They are lost when it restarts, redeploys or sleeps after about 15 minutes without visitors.</p>':''}
-${notes.gemini?'<p class="note"><strong>Fictional data only.</strong> AI features use Gemini’s free tier, where Google may use submitted text to improve its products. Don’t enter real customer information.</p>':''}
-${closed?`<div class="err" role="alert">${esc(closed)}</div>`:`<form method="post" action="/demo-gate">
-<label>Demo passphrase<input name="passphrase" type="password" autocomplete="current-password" required minlength="1" maxlength="200"></label>
-<label>Room code (optional)<input name="room" placeholder="Join a shared room, e.g. K7M2Q-9XRTB" maxlength="11" autocomplete="off"></label>
+type GateNotes={ephemeral:boolean;gemini:boolean;ended?:boolean};
+const GATE_CSS=`*{box-sizing:border-box;margin:0}html{color-scheme:dark}body{min-height:100vh;background:#121212;color:#fff;font:16px/1.5 Figtree,system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:hidden}
+.entry{position:relative;min-height:100vh;display:grid;grid-template-columns:minmax(0,50vw) minmax(0,1fr);gap:4vw;padding:15px 17px 4px}
+.art{position:relative;border-radius:10px;overflow:hidden;min-height:calc(100vh - 19px);background:linear-gradient(90deg,rgba(0,0,0,.45),transparent 10%,transparent 90%,rgba(0,0,0,.45)),repeating-linear-gradient(90deg,rgba(255,255,255,.05) 0 26px,rgba(0,35,0,.07) 26px 30px,rgba(0,0,0,.03) 30px 47px),radial-gradient(ellipse 430px 175px at 50% 53%,rgba(30,95,40,.85),rgba(30,95,40,.5) 55%,transparent 100%),radial-gradient(circle 455px at 50% 57%,rgba(180,242,170,.62) 0 72%,rgba(120,210,120,.4) 88%,rgba(40,90,40,.2) 97%,transparent 100%),linear-gradient(180deg,#93df7d 0%,#80d674 30%,#4f9f4d 66%,#27471d 88%,#1a2a10 100%)}
+.logo{position:absolute;top:22px;right:18px;display:inline-flex;align-items:center;gap:9px;color:#0d1d08;font-size:22px;white-space:nowrap}.logo svg{width:33px;height:33px}.logo b{font-weight:700}.beta{margin-left:8px;border:1.5px solid currentColor;border-radius:12px;padding:1px 8px;font-size:11px;font-weight:600;line-height:16px}
+.copy{align-self:center;width:min(520px,100%);padding:48px 0}h1{font-size:48px;line-height:1.08;font-weight:800;letter-spacing:-1.6px}
+.lead{margin-top:21px;font-size:16.6px;line-height:29px;font-weight:500;color:#f3f3f3}
+.btn{display:inline-flex;align-items:center;justify-content:center;margin-top:27px;height:54px;padding:0 34px;border:0;border-radius:999px;background:#1ed760;color:#000;font-family:inherit;font-size:17px;font-weight:700;line-height:1;text-decoration:none;cursor:pointer}.btn:hover{background:#3be477}
+.btn:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.actions{display:flex;align-items:center;gap:22px;flex-wrap:wrap}.actions .btn{margin-top:27px}.back{margin-top:27px;color:#fff;font-weight:600;text-decoration:none}.back:hover{text-decoration:underline}
+label{display:grid;gap:8px;margin-top:24px;font-size:14px;font-weight:700;color:#fff}
+input{width:100%;font:inherit;padding:13px 14px;border-radius:6px;border:1px solid #3a3a3a;background:#1c1c1c;color:#fff}input:hover{border-color:#5a5a5a}
+details{margin-top:18px;color:#b3b3b3;font-size:14px}summary{cursor:pointer;font-weight:600;color:#fff;width:max-content;max-width:100%}details p{margin-top:6px}
+.err{margin-top:18px;padding:12px 14px;border-radius:6px;background:#3a1714;color:#ffd2cc;font-size:14px}
+.notes{margin-top:28px;display:grid;gap:10px}.note{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:20px;color:#b3b3b3}.note strong{color:#fff;font-weight:600}
+.chip{flex:none;margin-top:1px;padding:0 8px;border-radius:10px;background:#3d2f12;color:#ffd27a;font-size:12px;font-weight:700;line-height:18px}
+@media (max-width:860px){.entry{grid-template-columns:1fr;gap:0;padding:12px 16px}.art{min-height:200px}.logo{font-size:15px}.logo svg{width:24px;height:24px}.copy{padding:32px 0 48px}h1{font-size:36px}}`;
+const LOGO='<span class="logo"><svg viewBox="0 0 34 34" aria-hidden="true"><circle cx="18" cy="16" r="14" fill="currentColor"/><circle cx="16" cy="18" r="14.5" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span><b>Spotify Portal</b> for Backstage</span><span class="beta">BETA</span></span>';
+/** What visitors are told before entering, and again in the Portal's demo menu. */
+function gateNotes(notes:GateNotes){
+ return `<div class="notes" aria-label="About this demo">
+<p class="note"><span class="chip">Fictional</span><span><strong>Every customer, person and repository here is invented.</strong> Sample repository data is labelled as sample.${notes.gemini?' AI features use Gemini’s free tier, where Google may use submitted text to improve its products. Don’t enter real customer information.':' Don’t enter real customer information.'}</span></p>
+${notes.ephemeral?'<p class="note"><span class="chip">Temporary</span><span><strong>Temporary demo data.</strong> This free deployment keeps your work only while the service is running. It is lost when it restarts, redeploys or sleeps after about 15 minutes without visitors.</span></p>':''}
+</div>`;
+}
+/** The hosted entry, in the Portal's welcome design (reference 010): welcome, then passphrase. Persona selection
+ * follows in the Portal itself. Server-rendered without scripts, so it works under the strict CSP. */
+function gatePage(message:string|null,closed:string|null,notes:GateNotes={ephemeral:false,gemini:false},step:'welcome'|'passphrase'='passphrase',joining=''){
+ const head=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spotify Portal</title><style>${GATE_CSS}</style></head>
+<body><main class="entry"><div class="art" role="img" aria-label="Portal artwork">${LOGO}</div><section class="copy">`;
+ const tail='</section></main></body></html>';
+ if(closed)return `${head}<h1>Portal isn’t available</h1><div class="err" role="alert">${esc(closed)}</div>${tail}`;
+ const ended=notes.ended?'<div class="err" role="status">Your previous demo room is no longer available. On free hosting, demo data is cleared when the service restarts, redeploys or sleeps. Enter again to start a fresh room.</div>':'';
+ if(step==='welcome')return `${head}<h1>Portal is ready for you</h1>
+<p class="lead">Portal restores order to your microservices and infrastructure and enables your product teams to ship high-quality code quickly.</p>
+${ended}<a class="btn" href="/demo-gate?step=passphrase">Get started</a>${gateNotes(notes)}${tail}`;
+ return `${head}<form method="post" action="/demo-gate"><h1>Enter the demo</h1>
+<p class="lead">Enter the passphrase you were given. Next, you’ll choose who to sign in as.</p>
+${ended}
+<label>Demo passphrase<input name="passphrase" type="password" autocomplete="current-password" required maxlength="200" autofocus></label>
+<details${joining?' open':''}><summary>Join a shared room</summary><p>Someone in the demo can share their room code with you to work in the same room. Leave it empty for your own room.</p>
+<label>Room code<input name="room" placeholder="e.g. K7M2Q-9XRTB" maxlength="11" autocomplete="off" value="${esc(joining)}"></label></details>
 ${message?`<div class="err" role="alert">${esc(message)}</div>`:''}
-<button type="submit">Enter the demo</button></form>
-<p style="margin-top:18px">Without a room code you get your own demo room. Share its code to work in the same room with others.</p>`}</main></body></html>`;
+<div class="actions"><button class="btn" type="submit">Continue</button><a class="back" href="/demo-gate">Back</a></div></form>${gateNotes(notes)}${tail}`;
 }
 
 export async function startProduction(config:ProductionConfig,{now=()=>Date.now(),fetchImpl=fetch,log=stdoutLog}:{now?:()=>number;fetchImpl?:typeof fetch;log?:Log}={}){
@@ -98,7 +124,7 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
  const budget=openAiBudget(filename,config.aiDailyLimit,now,config.aiPerMinute);
  // What visitors are told on the gate and in the room bar.
  const notes={ephemeral:config.storage==='ephemeral',gemini:config.provider==='gemini'};
- const page=(message:string|null,closed:string|null,ended=false)=>gatePage(message,closed,{...notes,ended});
+ const page=(message:string|null,closed:string|null,ended=false,step:'welcome'|'passphrase'='passphrase',joining='')=>gatePage(message,closed,{...notes,ended},step,joining);
  // Hosted inference; without a key the analysis is rule-based (labelled as such) and AiKA reports it is unavailable.
  let model:JsonModel|null=null;
  if(config.provider==='gemini'&&config.geminiKey)model=createGemini({apiKey:config.geminiKey,model:config.geminiModel,timeoutMs:90_000,retries:1,maxOutputTokens:8192,apiOrigin:config.geminiOrigin,admit:()=>budget.admit(),now},fetchImpl);
@@ -160,20 +186,31 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
    return json(res,ok?200:503,{status:ok?'ok':'misconfigured',checks:{storage:storage?'ok':'error',storageMode:config.storage,aiRequestsPerMinute:config.aiPerMinute,config:config.missing.length?{missing:config.missing}:'ok',ai,aiRequestsToday:`${budget.used()}/${budget.limit}`,activeRooms:rooms.active()},commit:config.commit});
   }
   if(config.missing.length)return send(res,503,page(null,'This demo isn’t configured yet. The site owner needs to set its demo passphrase and session secret.'),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
-  if(path==='/demo-gate'&&req.method==='GET')return send(res,200,page(null,null,url.searchParams.get('ended')==='1'),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
+  if(path==='/demo-gate'&&req.method==='GET')return send(res,200,page(null,null,url.searchParams.get('ended')==='1',url.searchParams.get('step')==='passphrase'?'passphrase':'welcome'),'text/html; charset=utf-8',{'Cache-Control':'no-store'});
   if(path==='/demo-gate'&&req.method==='POST'){
    if(!sameOrigin(req))return fail(res,403,'ORIGIN_NOT_ALLOWED');
    if(!gateTries(ip(req))){log('warn','gate_rate_limited');return send(res,429,page('Too many attempts. Wait 15 minutes, then try again.',null),'text/html; charset=utf-8');}
    let f:URLSearchParams;try{f=await form(req);}catch{return fail(res,413,'PAYLOAD_TOO_LARGE');}
-   if(!passOk(f.get('passphrase')??''))return send(res,401,page('That passphrase isn’t right.',null),'text/html; charset=utf-8');
-   const wanted=(f.get('room')??'').trim().toUpperCase();
+   const wanted=(f.get('room')??'').trim().toUpperCase().slice(0,11);
+   if(!passOk(f.get('passphrase')??''))return send(res,401,page('That passphrase isn’t right.',null,false,'passphrase',wanted),'text/html; charset=utf-8');
    let room;
-   if(wanted){room=ROOM_CODE.test(wanted)?rooms.get(wanted):null;if(!room)return send(res,404,page('That room code doesn’t exist or has expired. Leave it empty to start a new room.',null),'text/html; charset=utf-8');}
+   if(wanted){room=ROOM_CODE.test(wanted)?rooms.get(wanted):null;if(!room)return send(res,404,page('That room code doesn’t exist or has expired. Leave it empty to start your own room.',null,false,'passphrase',wanted),'text/html; charset=utf-8');}
    else{try{room=rooms.create();}catch(e){if(e instanceof RoomLimitError){log('warn','room_limit_reached');return send(res,503,page('The demo is at capacity right now. Join an existing room with its code, or try again later.',null),'text/html; charset=utf-8');}throw e;}
     log('info','room_created');}
-   return send(res,303,'','text/plain',{Location:'/','Set-Cookie':roomCookie(room.code,room.expires),'Cache-Control':'no-store'});
+   // Straight to persona selection: the welcome screen was the gate's first step.
+   return send(res,303,'','text/plain',{Location:'/login','Set-Cookie':roomCookie(room.code,room.expires),'Cache-Control':'no-store'});
   }
   if(path==='/demo-gate/room'&&req.method==='GET'){const code=roomOf(req),r=code?rooms.get(code):null;return r?json(res,200,{room:r.code,expiresAt:r.expires,fictional:true,storage:config.storage,aiProvider:config.provider}):fail(res,401,'DEMO_GATE_REQUIRED');}
+  // A fresh, empty room for someone already in the demo (they passed the gate). Others in the old room are unaffected;
+  // the persona sign-in is cleared so the new room starts at persona selection.
+  if(path==='/demo-gate/new-room'&&req.method==='POST'){
+   if(!sameOrigin(req))return fail(res,403,'ORIGIN_NOT_ALLOWED');
+   if(!roomOf(req))return fail(res,401,'DEMO_GATE_REQUIRED');
+   if(!gateTries(ip(req))){log('warn','gate_rate_limited');return fail(res,429,'RATE_LIMITED');}
+   let room;try{room=rooms.create();}catch(e){if(e instanceof RoomLimitError){log('warn','room_limit_reached');return fail(res,503,'ROOM_LIMIT');}throw e;}
+   log('info','room_created');
+   return json(res,201,{room:room.code,expiresAt:room.expires},{'Set-Cookie':[roomCookie(room.code,room.expires),`portal_demo_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${config.secure?'; Secure':''}`]});
+  }
   if(path==='/demo-gate/leave'&&req.method==='POST'){
    if(!sameOrigin(req))return fail(res,403,'ORIGIN_NOT_ALLOWED');
    return json(res,200,{},{'Set-Cookie':[`${ROOM_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${config.secure?'; Secure':''}`,`portal_demo_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${config.secure?'; Secure':''}`]});
@@ -187,12 +224,15 @@ export async function startProduction(config:ProductionConfig,{now=()=>Date.now(
   if(apiPath){
    // Per-room limits: requests per minute, and model-backed requests per day.
    if(!(req.method==='POST'?writes:reads)(room))return fail(res,429,'RATE_LIMITED');
-   if(req.method==='POST'&&path.endsWith('/handoff-analyses')&&!analyses(room))return fail(res,429,'ANALYSIS_LIMIT');
+   // A PDF upload starts an analysis too, so it counts against the same daily allowance.
+   if(req.method==='POST'&&(path.endsWith('/handoff-analyses')||path.endsWith('/handoff-documents'))&&!analyses(room))return fail(res,429,'ANALYSIS_LIMIT');
    if(req.method==='POST'&&path.endsWith('/aika-questions')&&!questions(room))return fail(res,429,'AIKA_QUESTION_LIMIT');
    return await session(req,res,()=>fail(res,404,'NOT_FOUND'));
   }
   if(path.startsWith('/api/'))return fail(res,404,'NOT_FOUND');
   if(req.method!=='GET'&&req.method!=='HEAD')return fail(res,405,'METHOD_NOT_ALLOWED');
+  // The gate already showed the welcome screen: inside a room, the Portal starts at persona selection.
+  if(path==='/')return send(res,303,'','text/plain',{Location:'/login','Cache-Control':'no-store'});
   // The built Portal: files under dist, otherwise the app shell (client-side routes).
   const target=resolve(dist,'.'+decodeURIComponent(path));
   if(target.startsWith(dist+sep)&&existsSync(target)&&statSync(target).isFile()){

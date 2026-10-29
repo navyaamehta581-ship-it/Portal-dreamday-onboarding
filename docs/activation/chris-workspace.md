@@ -6,14 +6,14 @@ Chris (operator persona) turns scattered customer information into a reviewed te
 
 | Step | Where | What happens |
 |---|---|---|
-| 1. Choose a customer | Header | Only customers listed for Chris's persona. Switching waits while there are unsaved edits. |
-| 2. Add information | **Customer Context** | Entries in seven categories: Conversational Transcript, CRM Record, My Notes, Account Preparation, Technical Requirements, Repository Observation, Integration Tools. Chris can add, edit and remove entries. **Save information** stores them on the server (revisioned); a reload brings them back. |
-| 3. Analyze customer | Customer Context | Starts a background analysis of the *saved* information. Unsaved edits are saved first. The page polls the run's status and stays usable. |
+| 1. Choose a customer | Header | Only customers listed for Chris's persona. Switching waits while there are unsaved draft edits. |
+| 2. Upload a PDF | **Customer Context** | The only way in: drop or choose one PDF. The server reads its text, structures it into customer information (see [customer-pdf.md](customer-pdf.md)) and saves it (revisioned). There are no entry fields. |
+| 3. Analysis | Customer Context | Starts by itself after the upload, on the information read from the PDF. The page polls the run's status and stays usable. **Analyze again** appears only after a failure or a rule-based fallback. |
 | 4. Review and edit | **Onboarding Draft** | A structured, editable draft: engineering problem (summary, challenges, systems, contradictions, developer-checkable unknowns), known facts, stakeholders, technical goals, milestones and questions for the customer. **Save draft** stores it (revisioned). |
 | 5. Submit | Onboarding Draft | **Mark ready for Champion review** (after confirming). The server checks completeness and privacy. The draft is then locked; **Withdraw to make changes** unlocks it. |
 
 Status labels:
-- **Not started**, **Draft** (information saved), **Analyzing**, **Analysis ready**, **Submitted for Champion review**, **Published to developers**.
+- **Not started**, **Draft** (information read from a PDF), **Analyzing**, **Analysis ready**, **Submitted for Champion review**, **Published to developers**.
 - Dream Day adds **Changes requested**, **Resubmitted for Champion review**, **Approved** and **Approved · Published to developers** (see [dream-day.md](dream-day.md)).
 
 ## Analysis progress
@@ -79,7 +79,8 @@ Operator-only routes, all refused for developer tokens:
 | Route | Purpose |
 |---|---|
 | `GET handoff` | Drafts, saved information and the current run |
-| `POST handoff-workspace` | Save information (`expectedRevision`) |
+| `POST handoff-documents` | Upload the PDF (raw `application/pdf` body): read, save, start the analysis |
+| `POST handoff-workspace` | Save information as JSON (kept for API compatibility; the Portal no longer uses it) |
 | `POST`/`GET handoff-analyses` | Start a run / read its status |
 | `POST handoff-reviews` | Save the draft (`expectedRevision`) |
 | `POST handoff-submissions` | `submit` (with `reviewRevision` and `confirmed: true`) or `withdraw` |

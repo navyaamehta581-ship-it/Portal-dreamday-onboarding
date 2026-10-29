@@ -4,7 +4,7 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest';
 import {OperatorWorkspace} from './OperatorWorkspace';
 import {activationClient,ActivationRequestError} from '../activation/client';
 import {byLabel,click,fixtureState,flush,mockApi,mount,type} from '../activation/testing';
-import type {AnalysisJob,HandoffOverview,HandoffRecord,ReviewDraft,SourceInput} from '../../../../contracts/activation/v1/handoff';
+import type {AnalysisJob,DocumentReport,HandoffOverview,HandoffRecord,ReviewDraft,SourceInput} from '../../../../contracts/activation/v1/handoff';
 import type {Persona} from '../portal-app/session';
 import {interpretRuleBased} from '../../../../services/workflow-api/src/activation/handoff/interpret';
 import {proposeMilestones} from '../../../../services/workflow-api/src/activation/handoff/milestones';
@@ -50,90 +50,128 @@ it('routes the operator persona through the operator proxy without any token in 
  expect(window.location.pathname).toBe('/operator/progress');expect(text()).toContain('Activation at a glance');
 });
 
-it('offers only the customers authorized for this persona and holds the switch while edits are unsaved',async()=>{
+// Chris's PDF as the server describes it after reading.
+const REPORT:DocumentReport={fileName:'Aperture discovery.pdf',uploadedAt:'2026-10-29T10:00:00Z',pages:3,pagesRead:3,emptyPages:[],unreadablePages:[],notRead:null,truncated:false,removedLines:2,characters:420,
+ customer:{name:'Aperture Commerce',basis:'stated'},sections:[{label:'Discovery call (p. 1)',type:'conversation',basis:'heading',pages:'p. 1',chars:300},{label:'Internal notes (p. 2)',type:'chris_notes',basis:'heading',pages:'p. 2',chars:40},{label:'Opening (p. 3)',type:'account_prep',basis:'default',pages:'p. 3',chars:80}],
+ missing:[],complete:true};
+const pdf=(name='Aperture discovery.pdf',type='application/pdf',size=1200)=>{const f=new File([new Uint8Array(size)],name,{type});return f;};
+async function choosePdf(file:File){
+ const input=byLabel<HTMLInputElement>(host(),'Customer PDF')!;
+ Object.defineProperty(input,'files',{value:[file],configurable:true});
+ await act(async()=>{input.dispatchEvent(new Event('change',{bubbles:true}));});await flush();
+}
+async function dropPdf(file:File){
+ const zone=host().querySelector('.pt-drop')!;
+ const drop=new Event('drop',{bubbles:true,cancelable:true});Object.defineProperty(drop,'dataTransfer',{value:{files:[file]}});
+ await act(async()=>{zone.dispatchEvent(drop);});await flush();
+}
+const uploaded=(report=REPORT,j=job({}))=>({workspace:{revision:1,updatedAt:'2026-10-29T10:00:00Z',sources:SOURCES,document:report},job:j,report});
+
+it('offers only the customers authorized for this persona',async()=>{
  await open();
  const select=byLabel<HTMLSelectElement>(host(),'Customer account')!;
  expect(Array.from(select.options).map(o=>o.value)).toEqual(['north','lumen']);
- await type(byLabel<HTMLTextAreaElement>(host(),'Information 1 text')!,'Draft notes');
- expect(select.disabled).toBe(true);expect(text()).toContain('Save or discard your changes before switching customer.');
- await click(host(),'Discard changes');expect(select.disabled).toBe(false);
  await type(select,'lumen');await flush();
  expect(activationClient).toHaveBeenLastCalledWith('fictional-lumen','','','/operator-api/lumen','chris');
 });
 
-it('adds, edits, categorizes, removes and saves information; saved entries come back after a reload',async()=>{
+it('one way in: a PDF upload area replaces every other way of entering customer information',async()=>{
  await open();
- expect(text()).toContain('Not started');
- const categories=Array.from(byLabel<HTMLSelectElement>(host(),'Information 1 category')!.options).map(o=>o.textContent);
- expect(categories).toEqual(['Conversational Transcript','CRM Record','My Notes','Account Preparation','Technical Requirements','Repository Observation','Integration Tools']);
- await type(byLabel<HTMLTextAreaElement>(host(),'Information 1 text')!,SOURCES[0].text);
- await type(byLabel(host(),'Information 1 name')!,'Discovery call');
- await click(host(),'Add information');await click(host(),'Add information');
- await type(byLabel<HTMLSelectElement>(host(),'Information 2 category')!,'integration_tools');
- await type(byLabel<HTMLTextAreaElement>(host(),'Information 2 text')!,'Docs live in Confluence.');
- await click(host(),'Remove information 3');
- expect(host().querySelector('[aria-label="Information 3 text"]')).toBeNull();
- expect(text()).toContain('Unsaved changes');
- api.saveWorkspace.mockImplementation(async(_rev:number,sources:SourceInput[])=>({revision:1,updatedAt:'2026-10-29T10:00:00Z',sources}));
- await click(host(),'Save information');await flush();
- const [rev,saved]=api.saveWorkspace.mock.calls[0];
- expect(rev).toBe(0);expect(saved.map((s:SourceInput)=>[s.type,s.label,s.text])).toEqual([['conversation','Discovery call',SOURCES[0].text],['integration_tools','','Docs live in Confluence.']]);
- expect(text()).not.toContain('Unsaved changes');expect(text()).toMatch(/Saved \d/);
- // Reload: the server returns the saved entries.
- await m!.unmount();api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:'2026-10-29T10:00:00Z',sources:saved}}));await open();
- expect(byLabel<HTMLTextAreaElement>(host(),'Information 2 text')!.value).toBe('Docs live in Confluence.');expect(text()).toContain('Draft');
+ expect(text()).toContain('Not started');expect(text()).toContain('Drop the customer’s PDF here');
+ for(const old of ['Information 1 text','Information 1 name','Information 1 category'])expect(byLabel(host(),old)).toBeNull();
+ for(const old of ['Add information','Save information','Analyze customer','Discard changes'])expect(button(old)).toBeUndefined();
+ expect(host().querySelector('textarea')).toBeNull();
+ const input=byLabel<HTMLInputElement>(host(),'Customer PDF')!;
+ expect(input.type).toBe('file');expect(input.accept).toBe('application/pdf,.pdf');
+ expect(text()).toContain('Analysis starts automatically');
 });
 
-it('analysis: saves first, shows real stages and elapsed time, stays editable while running, ignores repeated clicks, then offers the draft',async()=>{
- api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:'2026-10-29T10:00:00Z',sources:SOURCES}}));
+it('choosing or dropping a PDF uploads it once and starts the analysis with no other click',async()=>{
  await open();
- // Controlled clock from here on: polling and the elapsed timer advance only when the test says so.
+ let release!:(v:ReturnType<typeof uploaded>)=>void;
+ api.uploadDocument.mockReturnValue(new Promise(r=>{release=r;}));
+ await choosePdf(pdf());
+ expect(api.uploadDocument).toHaveBeenCalledTimes(1);
+ const [file,name]=api.uploadDocument.mock.calls[0];expect(file).toBeInstanceOf(File);expect(name).toBe('Aperture discovery.pdf');
+ expect(host().querySelector('.pt-drop [role=status]')!.textContent).toContain('Reading Aperture discovery.pdf');
+ // While it's being read, another file is ignored.
+ await dropPdf(pdf('second.pdf'));expect(api.uploadDocument).toHaveBeenCalledTimes(1);
+ expect(api.startAnalysis).not.toHaveBeenCalled();expect(api.saveWorkspace).not.toHaveBeenCalled();
+ await act(async()=>{release(uploaded(REPORT,job({stage:'interpreting'})));});await flush();
+ expect(host().querySelector('[aria-label="Analysis progress"]')!.textContent).toMatch(/Interpreting customer context \(in progress\)/);
+ expect(text()).toContain('Aperture discovery.pdf');expect(text()).toContain('Fully read');expect(text()).toContain('customer: Aperture Commerce');
+ expect(text()).toContain('An analysis is running. You can upload a new PDF when it finishes.');
+ expect(byLabel<HTMLInputElement>(host(),'Customer PDF')!.disabled).toBe(true);
+ // How it was read: each section, its category and why; an uncertain one says so.
+ const how=Array.from(host().querySelectorAll('details summary')).find(s=>s.textContent?.startsWith('How the document was read'))!.parentElement!.textContent!;
+ expect(how).toContain('Conversational Transcript');expect(how).toContain('category from its heading');expect(how).toContain('category uncertain');
+ expect(how).toContain('2 repeated header, footer or page-number lines were left out');
+ // Dropping works the same way.
+ await m!.unmount();api.uploadDocument.mockClear();api.uploadDocument.mockResolvedValue(uploaded());await open();
+ await dropPdf(pdf('dropped.pdf'));expect(api.uploadDocument).toHaveBeenCalledTimes(1);expect(api.uploadDocument.mock.calls[0][1]).toBe('dropped.pdf');
+});
+
+it('the polled analysis finishes into the existing results and the draft',async()=>{
+ api.uploadDocument.mockResolvedValue(uploaded());await open();
  vi.useFakeTimers({toFake:['setInterval','clearInterval','Date']});
- let release!:(v:{job:AnalysisJob;duplicate:boolean})=>void;
- api.startAnalysis.mockReturnValue(new Promise(r=>{release=r;}));
- // A fast double click on the same button: the second click must not start a second run.
- const analyzeButton=button('Analyze customer')!;
- await act(async()=>{analyzeButton.click();analyzeButton.click();});await act(async()=>{analyzeButton.click();});
- expect(api.startAnalysis).toHaveBeenCalledTimes(1);expect(api.startAnalysis).toHaveBeenCalledWith(1);
- await act(async()=>{release({job:job({stage:'interpreting',stageDetail:'part 1 of 2'}),duplicate:false});});await flush();
- const progress=host().querySelector('[aria-label="Analysis progress"]')!.textContent!;
- expect(progress).toMatch(/Preparing information \(finished\)/);expect(progress).toMatch(/Interpreting customer context · part 1 of 2 \(in progress\)/);
- expect(progress).toMatch(/Generating technical onboarding plan \(not started\)/);expect(progress).toContain('may take 1–2 minutes');expect(progress).not.toMatch(/%/);
- expect(button('Analyzing…')!.disabled).toBe(true);
- // The page stays usable: Chris keeps typing while the server works, and the clock runs.
- await type(byLabel<HTMLTextAreaElement>(host(),'Information 2 text')!,'Extra note while waiting');
- expect(byLabel<HTMLTextAreaElement>(host(),'Information 2 text')!.value).toBe('Extra note while waiting');
- api.analysisStatus.mockResolvedValue({job:job({stage:'planning',elapsedMs:61000})});
- await tick(1600);
- expect(host().querySelector('[aria-label="Analysis progress"]')!.textContent).toMatch(/Generating technical onboarding plan \(in progress\)/);
- // Between polls the clock keeps running locally from the server's last elapsed time.
- api.analysisStatus.mockReturnValue(new Promise(()=>undefined));
- await tick(3000);expect(text()).toMatch(/Elapsed 1:0[3-5]/);
- expect(api.startAnalysis).toHaveBeenCalledTimes(1);
- api.analysisStatus.mockResolvedValue({job:job({status:'succeeded',stage:'preparing_review',elapsedMs:83000,draft:1,interpreter:'hosted_model',modelOk:true})});
- api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:'2026-10-29T10:00:00Z',sources:SOURCES},drafts:[record()],analysis:job({status:'succeeded',draft:1,interpreter:'hosted_model',modelOk:true,elapsedMs:83000})}));
+ await choosePdf(pdf());
+ api.analysisStatus.mockResolvedValue({job:job({status:'succeeded',stage:'preparing_review',elapsedMs:41000,draft:1,interpreter:'hosted_model',modelOk:true})});
+ api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:'2026-10-29T10:00:00Z',sources:SOURCES,document:REPORT},drafts:[record()],analysis:job({status:'succeeded',draft:1,interpreter:'hosted_model',modelOk:true,elapsedMs:41000})}));
  await tick(1600);await flush();
- expect(text()).toContain('Analysis ready · produced by the AI model');expect(text()).toContain('Your information changed after this analysis.');
- expect(byLabel<HTMLTextAreaElement>(host(),'Information 2 text')!.value).toBe('Extra note while waiting');// unsaved typing survives the refresh
+ expect(text()).toContain('Analysis ready · produced by the AI model');expect(button('Analyze again')).toBeUndefined();
+ expect(text()).toContain('Upload a new PDF to replace this information');
+ await click(host(),'Review the onboarding draft');expect(window.location.pathname).toBe('/operator/draft');
 });
 
-it('analysis failures and model fallback are explicit; the information is kept',async()=>{
- api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},analysis:job({status:'failed',error:'ANALYSIS_FAILED',elapsedMs:5000})}));
+it('wrong files are refused before upload; server refusals explain what to do',async()=>{
  await open();
- expect(host().querySelector('[role=alert]')!.textContent).toContain('The analysis stopped unexpectedly. Your information is saved');
- expect(byLabel<HTMLTextAreaElement>(host(),'Information 1 text')!.value).toBe(SOURCES[0].text);
+ await choosePdf(pdf('notes.docx','application/vnd.openxmlformats-officedocument.wordprocessingml.document'));
+ expect(api.uploadDocument).not.toHaveBeenCalled();expect(host().querySelector('[role=alert]')!.textContent).toContain('That file isn’t a PDF');
+ await choosePdf(pdf('huge.pdf','application/pdf',8*1024*1024+1));
+ expect(api.uploadDocument).not.toHaveBeenCalled();expect(host().querySelector('[role=alert]')!.textContent).toContain('larger than 8 MB');
+ const refuse=async(code:string,status:number,details:unknown=null)=>{api.uploadDocument.mockRejectedValueOnce(new ActivationRequestError(code,status,details));await choosePdf(pdf());return host().querySelector('[role=alert]')!.textContent!;};
+ expect(await refuse('PDF_NO_TEXT',422,{pages:4,emptyPages:4})).toMatch(/No text could be read from this PDF \(4 pages\)\. It looks like a scan/);
+ expect(await refuse('PDF_ENCRYPTED',422)).toContain('password-protected');
+ expect(await refuse('PDF_INVALID',422)).toContain('damaged or incomplete');
+ expect(await refuse('PDF_TIMEOUT',422)).toContain('took too long');
+ expect(await refuse('ANALYSIS_LIMIT',429)).toContain('analysis limit');
+ expect(await refuse('AWAITING_CHAMPION_REVIEW',409)).toContain('Withdraw it');
+ expect(await refuse('ACTIVATION_UNAVAILABLE',0)).toContain('didn’t reach the server');
+ expect(text()).toContain('Not started');
+});
+
+it('a partly read PDF is never presented as complete: pages, limits, missing topics and a different customer are flagged',async()=>{
+ const partial:DocumentReport={...REPORT,pages:70,pagesRead:60,emptyPages:[2,3],notRead:{from:61,to:70},complete:false,missing:['people','goals'],customer:{name:'Globex Corporation',basis:'stated'}};
+ api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES,document:partial},drafts:[record()],analysis:job({status:'succeeded',draft:1,interpreter:'rule_based',modelOk:null})}));
+ await open();
+ expect(text()).toContain('Partly read');expect(text()).toContain('60 of 70 pages read');
+ expect(text()).toContain('Not everything in this PDF was read.');expect(text()).toContain('Pages 2, 3 had no readable text (probably scanned images).');
+ expect(text()).toContain('Pages 61–70 are beyond the 60-page limit');
+ expect(text()).toContain('Not found in the document: people and their roles; goals, problems or needs.');
+ expect(text()).toContain('This PDF names Globex Corporation, but you’re working on Aperture.');
+ expect(text()).toContain('This analysis is based on a partly read PDF');
+ await click(host(),'Onboarding Draft');expect(text()).toContain('This draft comes from a partly read PDF (Aperture discovery.pdf)');
+});
+
+it('analysis failures and model fallback are explicit; the information read from the PDF is kept',async()=>{
+ api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES,document:REPORT},analysis:job({status:'failed',error:'ANALYSIS_FAILED',elapsedMs:5000})}));
+ await open();
+ expect(host().querySelector('[aria-label="Analysis"] [role=alert]')!.textContent).toContain('The analysis stopped unexpectedly. The information read from your PDF is saved');
+ expect(text()).toContain('Aperture discovery.pdf');
+ api.startAnalysis.mockResolvedValue({job:job({}),duplicate:false});
+ await click(host(),'Analyze again');await flush();expect(api.startAnalysis).toHaveBeenCalledWith(1);
  await m!.unmount();
  const fallback=record({understanding:{...record().understanding,model:{provider:'ollama',model:'qwen3:1.7b',ok:false,error:'MODEL_UNAVAILABLE',durationMs:1,chunks:0,discarded:0}}});
- api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES},drafts:[fallback],analysis:job({status:'succeeded',draft:1,interpreter:'rule_based',modelOk:false,modelError:'MODEL_UNAVAILABLE'})}));
+ api.handoffOverview.mockResolvedValue(overview({workspace:{revision:1,updatedAt:null,sources:SOURCES,document:REPORT},drafts:[fallback],analysis:job({status:'succeeded',draft:1,interpreter:'rule_based',modelOk:false,modelError:'MODEL_UNAVAILABLE'})}));
  await open();
  expect(text()).toContain('The AI model wasn’t available (MODEL_UNAVAILABLE), so this draft comes from rule-based analysis, not the model.');
  await click(host(),'Onboarding Draft');
  expect(text()).toContain('Rule-based fallback · model unavailable (MODEL_UNAVAILABLE)');expect(text()).toContain('It was not generated by the model.');
  expect(text()).not.toContain('AI suggestion');expect(text()).toContain('Rule-based suggestion');
- // Starting while the server is unreachable shows an error instead of hanging.
+ // Retrying while the server is unreachable shows an error instead of hanging.
  await click(host(),'Customer Context');api.startAnalysis.mockRejectedValue(new ActivationRequestError('ACTIVATION_API_UNREACHABLE',502));
  await click(host(),'Analyze again');await flush();
- expect(host().querySelector('[aria-label="Analysis"] [role=alert]')!.textContent).toContain('ACTIVATION_API_UNREACHABLE');
+ expect(host().querySelector('[aria-label="Analysis"] [role=alert]')!.textContent).toContain('activation API isn’t reachable');
 });
 
 it('review: edits several milestones, reorders, removes and adds, and saves the structure the server expects',async()=>{

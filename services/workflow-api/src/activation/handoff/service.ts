@@ -1,7 +1,7 @@
 /** Handoff pipeline: sources → understanding → proposed milestones (draft) → Chris's reviewed
  * publication → developer-safe context/plan admitted through the existing activation store. */
 import {randomUUID} from 'node:crypto';
-import type {AnalysisJob,AnalysisStage,ChampionReview,HandoffRecord,MilestoneDraft,ReviewEvent,SourceInput,SourceType,Understanding,Workspace} from '../../../../../contracts/activation/v1/handoff.ts';
+import type {AnalysisJob,AnalysisStage,ChampionReview,DocumentReport,HandoffRecord,MilestoneDraft,ReviewEvent,SourceInput,SourceType,Understanding,Workspace} from '../../../../../contracts/activation/v1/handoff.ts';
 import type {ActivationPlan,CustomerContext,EvidenceRecord} from '../../../../../contracts/activation/v1/types.ts';
 import {validateContract} from '../../../../../contracts/activation/v1/validate.mjs';
 import capabilities from '../capabilities.json' with {type:'json'};
@@ -86,6 +86,22 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
   if(b.expectedRevision!==current.revision)fail('REVISION_CONFLICT');
   const next:Workspace={revision:current.revision+1,updatedAt:new Date(now()).toISOString(),sources};
   deps.handoffs.saveWorkspace(p,next);return next;
+ }
+ /** Chris's PDF, already extracted and structured: it replaces the saved information and the analysis starts at
+  * once. Checked before anything is saved, so an upload never changes information under review or mid-analysis. */
+ function documentAllowed(p:Principal){
+  if(published(p))fail('ALREADY_PUBLISHED');
+  const current=latest(p);
+  if(current&&!chrisEditable(current.status))fail(blockedFor(current.status));
+  if(jobs.get(jobKey(p))?.job.status==='running')fail('ANALYSIS_RUNNING');
+ }
+ function saveDocument(p:Principal,document:{sources:SourceInput[];report:DocumentReport}){
+  documentAllowed(p);
+  const sources=parseWorkspaceSources(document.sources);
+  const saved=deps.handoffs.workspace(p);
+  const next:Workspace={revision:saved.revision+1,updatedAt:new Date(now()).toISOString(),sources,document:document.report};
+  deps.handoffs.saveWorkspace(p,next);
+  return {workspace:next,job:startAnalysis(p,{workspaceRevision:next.revision}).job};
  }
 
  // ---- Analysis runs in the background; the browser polls its status. One run per customer at a time.
@@ -256,7 +272,7 @@ export function createHandoffService(deps:{handoffs:HandoffStore;store:()=>Activ
    return state;}
   finally{deps.release(p);}
  }
- return {draft,publish,saveWorkspace,startAnalysis,analysisStatus,saveReview,submission,championView,saveChampionReview,championDecision,
+ return {draft,publish,saveWorkspace,documentAllowed,saveDocument,startAnalysis,analysisStatus,saveReview,submission,championView,saveChampionReview,championDecision,
   overview:(p:Principal)=>({drafts:deps.handoffs.all(p),workspace:workspace(p),analysis:analysisStatus(p)}),published:(p:Principal)=>deps.handoffs.published(p)};
 }
 export type HandoffService=ReturnType<typeof createHandoffService>;

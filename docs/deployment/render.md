@@ -10,6 +10,7 @@ One Render **free** web service runs the whole prototype from `./Dockerfile`, as
 |---|---|---|
 | Render web service | `plan: free` | $0. No payment method is needed for a free web service. |
 | Storage | SQLite in `/tmp/spotify-portal-demo`, inside the container | $0. No disk is declared. |
+| PDF reading | pdf.js (Mozilla, open source), installed in the image; runs inside the service | $0. No document-processing service. A worker thread with a 192 MB memory cap and a 20 s limit; one PDF at a time. |
 | AI | Gemini API free tier (`gemini-2.5-flash`), optional | $0 when the key's Google Cloud project has **no billing enabled**. |
 
 Nothing in `render.yaml` or the server turns on a paid service. Keep billing off on the key's Google project: with billing off, Google refuses requests above the free quota rather than charging for them.
@@ -21,22 +22,22 @@ Nothing in `render.yaml` or the server turns on a paid service. Keep billing off
   - **redeploys** (every manual deploy starts a new container);
   - **restarts** (crash, config change, or a Render maintenance move).
 - **This is said to visitors.**
-  - The gate has a "Temporary demo data" notice.
-  - The room bar at the bottom left says "Temporary data: lost if the service restarts, redeploys or sleeps".
+  - The welcome screen, the passphrase step and persona selection all show a "Temporary demo data" notice.
+  - Inside the Portal, the **Fictional demo** menu in the top bar repeats it, next to the room code.
   - Someone whose room disappeared is sent back to the gate with "Your previous demo room is no longer available… Enter again to start a fresh room", rather than an error or an empty Portal that looks broken.
 - **For a live presentation:** open the URL a minute or two beforehand to wake the service. Run the whole walkthrough in one sitting, so it doesn't sleep in between.
 - **AI is paced to the free tier.**
   - `PORTAL_AI_REQUESTS_PER_MINUTE=8` and `PORTAL_AI_DAILY_REQUEST_LIMIT=200` keep the service below Gemini's free-tier quotas. Google publishes them per model and project and changes them from time to time; check the current numbers in AI Studio and lower these values if needed.
   - If Google still answers `429`, the server waits for the `retryDelay` Google gives before trying again.
   - When AI is limited or unavailable, Chris's analysis falls back to rule-based results that say so, and AiKA says it's unavailable. Customer information is always saved.
-- **The public demo is fictional only.** The fictional customer is Aperture Commerce, and the repository data is labelled sample data. On the free tier, Google may use prompts and responses to improve its products, and people may review them. Don't enter real customer information. The gate and room bar say so.
+- **The public demo is fictional only.** The fictional customer is Aperture Commerce, and the repository data is labelled sample data. On the free tier, Google may use prompts and responses to improve its products, and people may review them. Don't enter real customer information. The entry screens and the **Fictional demo** menu say so.
 
 ## What runs
 
 ```
 visitor ─HTTPS─▶ Render ─▶ production server (services/workflow-api/src/production.ts)
                              ├─ /healthz          health check (Render)
-                             ├─ /demo-gate        passphrase gate → demo room
+                             ├─ /demo-gate        welcome → passphrase → demo room (then /login: persona selection)
                              ├─ /portal-auth, /portal-api, /operator-api → Portal session layer → activation API (loopback only)
                              └─ everything else   built Portal frontend
 ```
@@ -100,8 +101,8 @@ If the passphrase or the secret is missing or too short, the server still starts
   - `"status":"ok"`, `"storage":"ok"` and `"storageMode":"ephemeral"`;
   - `"ai":"gemini:gemini-2.5-flash"`, or `not_configured` without a key;
   - `"aiRequestsPerMinute":8`.
-- `https://<your-service>.onrender.com/` should open the gate with the temporary-data notice. Enter the passphrase, then choose **Get started** and a persona.
-- To check real AI: as Chris, add information and select **Analyze customer**.
+- `https://<your-service>.onrender.com/` should open the welcome screen with the fictional-data and temporary-data notices. Choose **Get started**, enter the passphrase, then choose a persona.
+- To check real AI: as Chris, upload the fictional sample PDF (link under the upload area). The analysis starts by itself.
   - The banner should say "produced by the AI model".
   - If it says rule-based, the banner names the reason code. For example, `MODEL_RATE_LIMITED` means the free quota is in use, and `AI_DAILY_LIMIT` means the service's own daily cap was reached.
 
@@ -109,10 +110,10 @@ If the passphrase or the secret is missing or too short, the server still starts
 
 | Task | How |
 |---|---|
-| Share | Send the URL and the passphrase. For a shared session, also send a room code (bottom-left bar), and say it lasts only while the service is awake. |
+| Share | Send the URL and the passphrase. For a shared session, also send a room code (top bar → **Fictional demo** → copy), and say it lasts only while the service is awake. |
 | Before presenting | Open `/healthz` a minute or two early to wake the service. |
 | Deploy changes | Merge to `main`, then go to Render → service → **Manual Deploy → Deploy latest commit**. **All rooms are cleared.** |
-| Reset one demo | Select **Leave room**, then enter again for a fresh room. |
+| Reset one demo | Top bar → **Fictional demo** → **Start a new room**: an empty room, back at persona selection. Others in the old room keep their work. **Leave demo** returns to the welcome screen. |
 | Reset everything | Render → service → **Manual Deploy → Restart service**, or wait for it to sleep. Free services start with empty storage. |
 | Change limits or model | Render → service → **Environment**, then save. The service restarts, and rooms are cleared. |
 | Rotate the passphrase | Change `PORTAL_DEMO_PASSPHRASE`. This restarts the service, so rooms are cleared too. |
@@ -140,10 +141,10 @@ npm run test:production --prefix prototypes/v1   # browser test against the prod
     - AI pacing per minute and per day;
     - Gemini request handling, including free-tier `429` backoff, against a stand-in.
   - A browser test against the production server:
-    - the notices on the gate and room bar;
+    - the entry flow (welcome → passphrase → persona) with the notices on each step, and the top-bar demo menu (room code, new room, leave) on desktop and phone widths;
     - a process restart keeping work;
     - a redeploy with empty storage ending the room honestly.
-  - The Dockerfile's steps reproduced without Docker.
+  - The Dockerfile's steps reproduced without Docker, from a build context filtered by `.dockerignore` (the frontend stage, `npm ci` of the runtime's one package, then a PDF upload against the server started from only the runtime files). An earlier, unfiltered reproduction missed two build failures that a real `docker build` found; both are fixed in the Dockerfile and `.dockerignore`.
 - **Not verified:**
   - a real `docker build`;
   - a Render deploy, or Render's free-plan behaviour (sleep and wake time);

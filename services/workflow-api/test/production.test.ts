@@ -8,6 +8,7 @@ import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {configFromEnv,startProduction} from '../src/production.ts';
+import {aperturePdf} from './support/sample-pdf.mjs';
 
 const SECRET='s'.repeat(48),PASS='correct horse battery';
 const CUSTOMER='fictional-aperture-commerce';
@@ -73,7 +74,7 @@ test('gate, rooms and personas: isolated rooms, a shareable code, sessions that 
   assert.equal((await a.call(op('handoff'))).status,401);
   assert.equal((await a.call('/demo-gate',{method:'POST',form:{passphrase:'wrong passphrase'}})).status,401);
   assert.equal((await a.call('/demo-gate',{method:'POST',form:{passphrase:PASS},headers:{Origin:'https://evil.example'}})).status,403);
-  const entered=await a.enter();assert.equal(entered.status,303);assert.equal(entered.headers.get('location'),'/');
+  const entered=await a.enter();assert.equal(entered.status,303);assert.equal(entered.headers.get('location'),'/login','straight to persona selection');
   const roomA=(await a.call('/demo-gate/room')).json.room;assert.match(roomA,/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);
   // Chris saves customer information in room A.
   assert.equal((await a.signIn('chris')).status,200);
@@ -192,6 +193,67 @@ test('free tier: the Blueprint uses the free plan with no disk and temporary sto
  assert.equal(c.storage,'ephemeral');assert.equal(c.dataDir,join(tmpdir(),'spotify-portal-demo'));assert.equal(c.aiPerMinute,8);assert.equal(c.aiDailyLimit,200);
  assert.equal(configFromEnv({PORTAL_STORAGE:'persistent',PORTAL_DATA_DIR:'/srv/data'}).storage,'persistent');
  assert.throws(()=>configFromEnv({PORTAL_STORAGE:'disk'}));
+});
+
+test('entry: welcome, then passphrase, then persona selection; a fresh room from inside the Portal',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'prod-'));
+ try{
+  const app=await boot(dir);
+  const a=client(app.origin);
+  const welcome=await a.call('/demo-gate');
+  assert.match(welcome.text,/Portal is ready for you/);assert.match(welcome.text,/href="\/demo-gate\?step=passphrase">Get started/);
+  assert.doesNotMatch(welcome.text,/name="passphrase"/,'the passphrase is the second step');
+  assert.match(welcome.text,/Every customer, person and repository here is invented/);assert.match(welcome.text,/Temporary demo data/);
+  assert.doesNotMatch(welcome.text,/<script/i,'no scripts: the gate works under the strict CSP');
+  const step=await a.call('/demo-gate?step=passphrase');
+  assert.match(step.text,/name="passphrase"/);assert.match(step.text,/Join a shared room/);assert.match(step.text,/Temporary demo data/);
+  // A wrong passphrase keeps the room code that was typed.
+  const wrong=await a.call('/demo-gate',{method:'POST',form:{passphrase:'nope',room:'K7M2Q-9XRTB'}});
+  assert.equal(wrong.status,401);assert.match(wrong.text,/value="K7M2Q-9XRTB"/);assert.match(wrong.text,/<details open>/);
+  await a.enter();
+  assert.equal((await a.call('/')).headers.get('location'),'/login','no second welcome screen inside a room');
+  const first=(await a.call('/demo-gate/room')).json.room;
+  await a.signIn('chris');
+  await a.call(op('handoff-workspace'),{method:'POST',body:JSON.stringify({expectedRevision:0,sources:[{type:'conversation',label:'Call',text:'Maya Chen: we want payments-api in the Catalog.'}]})});
+  // A fresh room: needs a room already, same origin; signs the persona out; the old room keeps its work.
+  const outsider=client(app.origin);
+  assert.equal((await outsider.call('/demo-gate/new-room',{method:'POST'})).status,401,'only from inside the demo');
+  assert.equal((await a.call('/demo-gate/new-room',{method:'POST',headers:{Origin:'https://evil.example'}})).status,403);
+  const fresh=await a.call('/demo-gate/new-room',{method:'POST'});
+  assert.equal(fresh.status,201);assert.notEqual(fresh.json.room,first);
+  assert.equal((await a.call('/demo-gate/room')).json.room,fresh.json.room);
+  assert.equal((await a.call('/portal-auth/session')).status,401,'choose a persona again in the new room');
+  await a.signIn('chris');assert.equal((await a.call(op('handoff'))).json.workspace.revision,0,'the new room starts empty');
+  const back=client(app.origin);await back.enter(first);await back.signIn('chris');
+  assert.equal((await back.call(op('handoff'))).json.workspace.revision,1,'the old room keeps its work');
+  await app.close();
+ }finally{rmSync(dir,{recursive:true,force:true});}
+});
+
+test('Chris’s PDF through the whole hosted path: session layer pass-through, room isolation, operator only, daily allowance',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'prod-'));
+ try{
+  const app=await boot(dir);
+  const a=client(app.origin);await a.enter();await a.signIn('chris');
+  const post=(c:ReturnType<typeof client>,bytes:Uint8Array,type='application/pdf',origin=app.origin)=>fetch(app.origin+op('handoff-documents'),{method:'POST',body:new Blob([bytes as Uint8Array<ArrayBuffer>]),
+   headers:{'Content-Type':type,'X-File-Name':encodeURIComponent('Aperture discovery.pdf'),Origin:origin,Cookie:[...c.jar].map(([k,v])=>`${k}=${v}`).join('; ')}}).then(async r=>({status:r.status,json:await r.json()}));
+  const r=await post(a,aperturePdf());
+  assert.equal(r.status,202,JSON.stringify(r.json));assert.equal(r.json.report.fileName,'Aperture discovery.pdf');assert.equal(r.json.workspace.sources.length,6);
+  for(let i=0;i<100&&(await a.call(op('handoff-analyses'))).json.job.status==='running';i++)await new Promise(x=>setTimeout(x,10));
+  assert.equal((await a.call(op('handoff'))).json.drafts.length,1,'analyzed in the room');
+  // Another room sees none of it; another persona can't upload; a cross-site page can't either.
+  const b=client(app.origin);await b.enter();await b.signIn('chris');
+  assert.equal((await b.call(op('handoff'))).json.workspace.revision,0);
+  const maya=client(app.origin);await maya.enter();await maya.signIn('maya');
+  assert.equal((await post(maya,aperturePdf())).status,403);
+  assert.equal((await post(a,aperturePdf(),'application/pdf','https://evil.example')).status,403);
+  assert.equal((await post(a,aperturePdf(),'text/plain')).json.error.code,'PDF_REQUIRED');
+  // Uploads count against the room's 15 analyses a day (refused files included: the limit protects the server).
+  const c=client(app.origin);await c.enter();await c.signIn('chris');
+  const codes=[];for(let i=0;i<16;i++)codes.push((await post(c,Buffer.from('not a pdf'))).json.error.code);
+  assert.deepEqual(codes,[...Array(15).fill('NOT_A_PDF'),'ANALYSIS_LIMIT']);
+  await app.close();
+ }finally{rmSync(dir,{recursive:true,force:true});}
 });
 
 test('free tier: visitors are told data is temporary; a restart that clears storage ends rooms honestly',async()=>{

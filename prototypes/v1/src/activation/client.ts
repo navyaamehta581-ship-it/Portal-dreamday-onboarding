@@ -1,6 +1,6 @@
 import type { ActivationState } from '../../../../contracts/activation/v1/state';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types';
-import type { AikaCapability, AikaCapabilityId, AikaJob, AnalysisJob, Insights, ChampionReview, RepositoryEvidence, RepositoryInspection, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
+import type { AikaCapability, AikaCapabilityId, AikaJob, AnalysisJob, DocumentReport, Insights, ChampionReview, RepositoryEvidence, RepositoryInspection, TeamProgress, HandoffOverview, HandoffRecord, MilestoneDraft, ReviewDraft, ReviewItem, ReviewMilestone, SourceInput, SourceType, Workspace } from '../../../../contracts/activation/v1/handoff';
 
 /** One change per request, as the server accepts it. */
 export type MilestoneChange={action:{index:number;status:'not_started'|'started'|'blocked'|'completed'}}|{note:{kind:'update'|'blocker'|'question'|'response';text:string;evidence?:string|null;replyTo?:string}}|{resolve:string}|{status:'in_progress'|'ready_for_review'|'completed'};
@@ -38,6 +38,13 @@ export function activationClient(customerId:string,token:string,base='',apiPrefi
   return {
     handoffOverview:()=>call<HandoffOverview>('/handoff'),
     saveWorkspace:(expectedRevision:number,sources:SourceInput[])=>call<Workspace>('/handoff-workspace',{expectedRevision,sources}),
+    /** Chris's PDF, sent as-is; the server extracts, structures and starts the analysis. */
+    async uploadDocument(file:Blob,name:string):Promise<{workspace:Workspace;job:AnalysisJob;report:DocumentReport}>{
+      const response=await fetch(root+'/handoff-documents',{method:'POST',headers:{...headers(false),'Content-Type':'application/pdf','X-File-Name':encodeURIComponent(name.slice(0,120))},body:file,cache:'no-store',signal:AbortSignal.timeout(120000)});
+      const data=await response.json().catch(()=>null);
+      if(!response.ok)throw new ActivationRequestError(data?.error?.code??'ACTIVATION_UNAVAILABLE',response.status,data?.error?.details??null);
+      return data;
+    },
     // Analysis runs on the server; starting returns at once and the status is polled.
     startAnalysis:(workspaceRevision:number)=>call<{job:AnalysisJob;duplicate:boolean}>('/handoff-analyses',{workspaceRevision}),
     analysisStatus:()=>call<{job:AnalysisJob|null}>('/handoff-analyses'),

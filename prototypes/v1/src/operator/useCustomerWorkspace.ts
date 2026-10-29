@@ -1,16 +1,17 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
-import type {AnalysisJob,HandoffOverview,HandoffRecord,ReviewDraft,SourceInput,SourceType} from '../../../../contracts/activation/v1/handoff';
+import type {AnalysisJob,HandoffOverview,HandoffRecord,ReviewDraft,SourceType} from '../../../../contracts/activation/v1/handoff';
 import {ActivationRequestError,type activationClient} from '../activation/client';
 
 /** The seven information categories, in the order Chris sees them. */
 export const CATEGORIES:[SourceType,string][]=[['conversation','Conversational Transcript'],['crm','CRM Record'],['chris_notes','My Notes'],['account_prep','Account Preparation'],
  ['technical_requirements','Technical Requirements'],['repository','Repository Observation'],['integration_tools','Integration Tools']];
 export type ReviewIssue={path:string;label:string;reason:string};
-export type WorkspaceError={scope:'load'|'sources'|'analysis'|'review'|'submit';code:string;issues?:ReviewIssue[]};
-const newId=(prefix:string)=>`${prefix}-${Math.random().toString(36).slice(2,10)}`;
-const blank=():SourceInput=>({id:newId('info'),type:'conversation',label:'',text:''});
+export type WorkspaceError={scope:'load'|'upload'|'analysis'|'review'|'submit';code:string;issues?:ReviewIssue[];details?:unknown};
+/** The server's limit; checked here too so an oversized file fails at once, not after uploading. */
+export const PDF_MAX_BYTES=8*1024*1024;
 const codeOf=(e:unknown)=>e instanceof Error?e.message:'ACTIVATION_UNAVAILABLE';
 const issuesOf=(e:unknown)=>e instanceof ActivationRequestError?((e.details as {issues?:ReviewIssue[]}|null)?.issues):undefined;
+const detailsOf=(e:unknown)=>e instanceof ActivationRequestError?e.details:undefined;
 
 /** Drop empty list entries before saving; Chris may leave blank lines while editing. */
 export function tidyReview(r:ReviewDraft):ReviewDraft{
@@ -22,25 +23,23 @@ export function tidyReview(r:ReviewDraft):ReviewDraft{
   milestones:r.milestones.map(m=>({...m,title:m.title.trim(),description:m.description.trim(),system:m.system.trim(),actions:lines(m.actions),completionCriteria:lines(m.completionCriteria)}))};
 }
 
-/** Chris's workspace for one customer: saved information, the background analysis, and the editable review.
- * Unsaved edits live only in this tab; everything saved lives on the server and survives a reload. */
+/** Chris's workspace for one customer: the uploaded PDF's information, the background analysis it starts, and the
+ * editable review. Unsaved review edits live only in this tab; everything saved lives on the server and survives a reload. */
 export function useCustomerWorkspace(api:ReturnType<typeof activationClient>|null){
  const [overview,setOverview]=useState<HandoffOverview|null>(null);
- const [sources,setSourcesState]=useState<SourceInput[]>([]),[sourcesDirty,setSourcesDirty]=useState(false);
  const [review,setReviewState]=useState<ReviewDraft|null>(null),[reviewDirty,setReviewDirty]=useState(false);
- const [busy,setBusy]=useState<''|'load'|'sources'|'analysis'|'review'|'submit'>('load');
+ const [busy,setBusy]=useState<''|'load'|'upload'|'analysis'|'review'|'submit'>('load');
  const [error,setError]=useState<WorkspaceError|null>(null);
  const [analysis,setAnalysis]=useState<AnalysisJob|null>(null);
  // Elapsed time comes from the server at each poll and ticks locally in between.
  const [clock,setClock]=useState<{elapsedMs:number;at:number}|null>(null),[,tick]=useState(0);
- const starting=useRef(false),dirty=useRef({sources:false,review:false});
- dirty.current={sources:sourcesDirty,review:reviewDirty};
+ const starting=useRef(false),dirty=useRef({review:false});
+ dirty.current={review:reviewDirty};
 
  const latest=overview?.drafts.at(-1)??null;
  const adopt=useCallback((o:HandoffOverview)=>{
   setOverview(o);setAnalysis(o.analysis);if(o.analysis)setClock({elapsedMs:o.analysis.elapsedMs,at:Date.now()});
-  // Never overwrite edits Chris hasn't saved.
-  if(!dirty.current.sources)setSourcesState(o.workspace.sources.length?o.workspace.sources:[blank()]);
+  // Never overwrite review edits Chris hasn't saved.
   if(!dirty.current.review)setReviewState(o.drafts.at(-1)?.review??null);
  },[]);
  const load=useCallback(async()=>{
@@ -49,7 +48,7 @@ export function useCustomerWorkspace(api:ReturnType<typeof activationClient>|nul
   catch(e){setError({scope:'load',code:codeOf(e)});}
   finally{setBusy(b=>b==='load'?'':b);}
  },[api,adopt]);
- useEffect(()=>{setOverview(null);setSourcesState([]);setSourcesDirty(false);setReviewState(null);setReviewDirty(false);setAnalysis(null);setError(null);setBusy('load');void load();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{setOverview(null);setReviewState(null);setReviewDirty(false);setAnalysis(null);setError(null);setBusy('load');void load();},[api]); // eslint-disable-line react-hooks/exhaustive-deps
 
  const running=analysis?.status==='running';
  useEffect(()=>{
@@ -64,29 +63,35 @@ export function useCustomerWorkspace(api:ReturnType<typeof activationClient>|nul
  },[api,running,load]);
  // Leaving with unsaved edits asks first; saved work is never lost.
  useEffect(()=>{
-  if(!sourcesDirty&&!reviewDirty)return;
+  if(!reviewDirty)return;
   const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};
   window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);
- },[sourcesDirty,reviewDirty]);
+ },[reviewDirty]);
 
  const replace=(record:HandoffRecord)=>setOverview(o=>o&&{...o,drafts:o.drafts.map(d=>d.draft===record.draft?record:d)});
- const editSources=(next:SourceInput[])=>{setSourcesState(next);setSourcesDirty(true);};
- async function saveSources():Promise<number|null>{
-  if(!api||!overview||busy==='sources')return null;
-  setBusy('sources');setError(null);
-  try{const w=await api.saveWorkspace(overview.workspace.revision,sources);setOverview({...overview,workspace:w});setSourcesState(w.sources.length?w.sources:[blank()]);setSourcesDirty(false);return w.revision;}
-  catch(e){setError({scope:'sources',code:codeOf(e)});return null;}
-  finally{setBusy('');}
+ /** Chris's one way in: a PDF. The server reads it, saves what it found and starts the analysis in one step. */
+ async function upload(file:File){
+  if(!api||!overview||busy==='upload'||running)return;
+  setError(null);
+  const pdf=file.type==='application/pdf'||(!file.type&&/\.pdf$/i.test(file.name));
+  if(!pdf){setError({scope:'upload',code:'NOT_A_PDF'});return;}
+  if(!file.size){setError({scope:'upload',code:'PDF_REQUIRED'});return;}
+  if(file.size>PDF_MAX_BYTES){setError({scope:'upload',code:'PDF_TOO_LARGE'});return;}
+  setBusy('upload');
+  try{
+   const r=await api.uploadDocument(file,file.name);
+   setOverview(o=>o&&{...o,workspace:r.workspace,analysis:r.job});setAnalysis(r.job);setClock({elapsedMs:r.job.elapsedMs,at:Date.now()});
+  }catch(e){setError({scope:'upload',code:codeOf(e),details:detailsOf(e)});}
+  finally{setBusy(b=>b==='upload'?'':b);}
  }
+ /** Runs the analysis again on the information already read from the PDF (after a failure or a model fallback). */
  async function analyze(){
   // One click, one run: repeated clicks are ignored here and the server returns the run already in progress.
   if(!api||!overview||starting.current||running)return;
   starting.current=true;setError(null);
   try{
-   const revision=sourcesDirty?await saveSources():overview.workspace.revision;
-   if(revision===null)return;
    setBusy('analysis');
-   const {job}=await api.startAnalysis(revision);setAnalysis(job);setClock({elapsedMs:job.elapsedMs,at:Date.now()});
+   const {job}=await api.startAnalysis(overview.workspace.revision);setAnalysis(job);setClock({elapsedMs:job.elapsedMs,at:Date.now()});
   }catch(e){setError({scope:'analysis',code:codeOf(e)});}
   finally{starting.current=false;setBusy(b=>b==='analysis'?'':b);}
  }
@@ -103,13 +108,9 @@ export function useCustomerWorkspace(api:ReturnType<typeof activationClient>|nul
   catch(e){setError({scope:'submit',code:codeOf(e),issues:issuesOf(e)});}
   finally{setBusy('');}
  }
- return {overview,latest,sources,sourcesDirty,review,reviewDirty,busy,error,analysis,running,starting:starting.current||busy==='analysis',
+ return {overview,latest,sources:overview?.workspace?.sources??[],document:overview?.workspace?.document??null,review,reviewDirty,busy,error,analysis,running,starting:starting.current||busy==='analysis',
   elapsedMs:clock?(running?clock.elapsedMs+Date.now()-clock.at:clock.elapsedMs):0,
-  setSource:(i:number,patch:Partial<SourceInput>)=>editSources(sources.map((s,j)=>j===i?{...s,...patch}:s)),
-  addSource:()=>editSources([...sources,blank()].slice(0,12)),
-  removeSource:(i:number)=>editSources(sources.length>1?sources.filter((_,j)=>j!==i):[blank()]),
-  discardSources:()=>{if(overview){setSourcesState(overview.workspace.sources.length?overview.workspace.sources:[blank()]);setSourcesDirty(false);}},
-  saveSources,analyze,
+  upload,analyze,
   setReview:(next:ReviewDraft)=>{setReviewState(next);setReviewDirty(true);},
   discardReview:()=>{setReviewState(latest?.review??null);setReviewDirty(false);},
   saveReview,

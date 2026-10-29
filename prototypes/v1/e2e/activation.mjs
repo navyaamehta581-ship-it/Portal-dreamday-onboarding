@@ -10,6 +10,7 @@ import {createServer as createHttpServer} from 'node:http';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
 const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE_PATH??'playwright');
+const {makePdf}=await import('../../../services/workflow-api/test/support/pdf.mjs');
 const frontend=fileURLToPath(new URL('..',import.meta.url)),repo=resolve(frontend,'../..');
 const directory=mkdtempSync(join(tmpdir(),'spotify-handoff-e2e-'));
 const children=[];let browser;
@@ -111,11 +112,13 @@ try{
  // Chris: information → analysis → review → (Aperture) submission for Champion review → labelled direct publication.
  async function prepare(account,notes){
   await op.getByLabel('Customer account').selectOption(account);await op.getByRole('tab',{name:'Customer Context'}).click();
-  await op.getByLabel('Information 1 text').fill(notes);await op.getByLabel('Information 1 name').fill('Discovery call');
-  await op.getByRole('button',{name:'Add information'}).click();
-  await op.getByLabel('Information 2 category').selectOption('integration_tools');await op.getByLabel('Information 2 text').fill('Docs live in Confluence; CI runs in GitHub Actions.');
-  await op.getByRole('button',{name:'Save information'}).click();await op.getByText(/^Saved \d/).waitFor();
-  await op.getByRole('button',{name:'Analyze customer'}).click();
+  // One way in: a PDF. No entry fields, no save or analyze buttons.
+  for(const old of ['Information 1 text','Information 1 name'])assert.equal(await op.getByLabel(old).count(),0,`no ${old}`);
+  for(const old of ['Add information','Save information','Analyze customer'])assert.equal(await op.getByRole('button',{name:old}).count(),0,`no ${old}`);
+  const pdf=makePdf([{lines:[{text:'Discovery call',size:14,bold:true},...notes.split('\n').map(text=>({text})),{text:''},{text:'Tools and integrations',size:14,bold:true},{text:'Docs live in Confluence; CI runs in GitHub Actions.'}]}],{compress:true});
+  await op.getByLabel('Customer PDF').setInputFiles({name:`${account} discovery.pdf`,mimeType:'application/pdf',buffer:pdf});
+  // Analysis starts by itself; the document summary says what was read and how.
+  await op.getByText(`${account} discovery.pdf`).waitFor();await op.getByText('Fully read').waitFor();
   await op.getByRole('button',{name:'Review the onboarding draft'}).waitFor({timeout:20000});
   await op.getByRole('button',{name:'Review the onboarding draft'}).click();
   await op.getByLabel('Onboarding milestones').waitFor();
@@ -205,6 +208,11 @@ try{
  assert.deepEqual(mayaLeaks,[],'Dream Day responses carry no operator-only information');
  assert.equal((await api(north,'champion-decisions',champToken,{draft:1,reviewRevision:99,decision:'approve',confirmed:true})).status,409,'no second approval');
  await op.reload();await op.getByText('Champion approval complete: approved by Maya Chen in Dream Day').waitFor();
+ // A scanned PDF (images only) is refused with an explanation; nothing is analyzed, and a text PDF then works.
+ await op.getByLabel('Customer account').selectOption('lumen');await op.getByRole('tab',{name:'Customer Context'}).click();
+ await op.getByLabel('Customer PDF').setInputFiles({name:'scan.pdf',mimeType:'application/pdf',buffer:makePdf([{image:true},{image:true}])});
+ await op.getByRole('alert').getByText(/No text could be read from this PDF \(2 pages\)\. It looks like a scan/).waitFor();
+ assert.equal(await op.getByRole('button',{name:'Review the onboarding draft'}).count(),0,'nothing analyzed');
  await prepare('lumen',LUMEN);
  await addPeople([['Sam Okafor','Developer']]);
  await op.getByRole('button',{name:'Save draft'}).click();await op.getByLabel('Draft status').getByText(/^Saved/).waitFor();
@@ -517,7 +525,7 @@ try{
  const entry=await (await browser.newContext({viewport:{width:390,height:844}})).newPage();watch(entry);await entry.goto(url+'/login');await entry.getByRole('heading',{name:'Sign in to Portal'}).waitFor();
  for(const page of [op,other,maya,entry]){await page.setViewportSize({width:390,height:844});await page.waitForTimeout(200);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'no horizontal overflow');}
  assert.deepEqual(errors,[]);
- console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: saved information, background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress → Phase 6: Maya sees attention and summary, answers Jordan’s question, reviews Alex’s milestone without completing it, requests follow-up; Alex replies; review persists; coordination refused for developers, Chris, the shared token, another customer and stale revisions; Chris sees the same numbers read-only → Phase 7: Alex inspects checkout-api read-only (GitHub test double, GET only, server-side token), evidence with provenance and limits beside his actions, nothing completed; AiKA cites the observation and drops an uncited claim; slash-command menu narrows retrieval to /repository, /docs refused; contextual AiKA panel; Insights for Alex, Maya and Chris; Jordan’s focus is discoverability; Maya sees evidence vs reported work and a rate limit keeps earlier evidence labelled; Chris read-only; Lumen sample data labelled and never calls GitHub; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
+ console.log('PASS: one entry → persona sign-in (Chris, Maya, Alex, Jordan, Sam, Priya) → Chris: PDF upload only (no entry fields), scanned PDF refused with an explanation, automatic background analysis, edited multi-milestone draft (survives reload), submitted → Dream Day: Maya assigns Alex and Jordan, requests changes; Chris revises and resubmits; Maya approves; bypass, Chris and developer approvals refused; Lumen approved by its own Champion → Alex: personalized onboarding, question + blocker replan, direction + team plan (survives refresh), GitHub fail-closed, typed operator URL refused → Chris follow-up → Maya: approved plan in Team overview, reload keeps persona → Jordan: only his approved work, no Dream Day → Phase 5: Alex and Jordan work separately with attributed, revision-checked updates that survive refresh; blockers block review; dependent work never completes early; shared/operator/cross-customer credentials refused; AiKA via a local stub model gets approved context only, labels answers, removes claimed inspections, reports failure; Maya and Chris see consolidated progress → Phase 6: Maya sees attention and summary, answers Jordan’s question, reviews Alex’s milestone without completing it, requests follow-up; Alex replies; review persists; coordination refused for developers, Chris, the shared token, another customer and stale revisions; Chris sees the same numbers read-only → Phase 7: Alex inspects checkout-api read-only (GitHub test double, GET only, server-side token), evidence with provenance and limits beside his actions, nothing completed; AiKA cites the observation and drops an uncited claim; slash-command menu narrows retrieval to /repository, /docs refused; contextual AiKA panel; Insights for Alex, Maya and Chris; Jordan’s focus is discoverability; Maya sees evidence vs reported work and a rate limit keeps earlier evidence labelled; Chris read-only; Lumen sample data labelled and never calls GitHub; role denial at session layer and API, no browser tokens, two-customer isolation, sign-out, mobile overflow.');
 }catch(error){console.error(error);throw error;}finally{
  await browser?.close();for(const child of children.reverse()){if(child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(()=>{child.kill('SIGKILL');r();},3000))]);}}
  stubOllama.close();stubGitHub.close();rmSync(directory,{recursive:true,force:true});

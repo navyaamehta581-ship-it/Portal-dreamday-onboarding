@@ -1,6 +1,6 @@
 # Persona entry and routing (Phase 2)
 
-One entry URL serves every persona: `/` (Welcome) → **Get started** → `/login` (persona sign-in) → that persona's Portal.
+One entry URL serves every persona: `/` (Welcome) → **Get started** → `/login` (persona sign-in) → that persona's Portal. On the hosted demo the welcome screen is served by the gate: welcome → passphrase → `/login` → Portal, and the room lives in the top bar's **Fictional demo** menu (see [../deployment/render.md](../deployment/render.md)).
 
 | Persona | Role | Starts at | What opens |
 |---|---|---|---|

@@ -40,7 +40,7 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
  useEffect(()=>{if(session.error==='NOT_FOUND')setNeedsPublish(true);if(session.state)setNeedsPublish(false);},[session.error,session.state]);
  // Choosing the customer already open changes nothing; another customer starts from a clean draft and reloads.
  // Unsaved edits are never dropped silently: switching customer waits until they're saved or discarded.
- const dirty=ws.sourcesDirty||ws.reviewDirty;
+ const dirty=ws.reviewDirty;
  const change=(id:string)=>{if(id===customerId||dirty)return;setNeedsPublish(false);setCustomerId(id);};
  const {state,busy,error}=session;
  const ready=!!state||needsPublish;
@@ -79,7 +79,7 @@ export function OperatorWorkspace({persona,user,onPersonaChanged,notice}:{person
     {ready&&<>
      <div className="pt-tabs" role="tablist" aria-label="Customer onboarding sections">{TABS.map(([id,label,suffix])=><button key={id} role="tab" id={'op-tab-'+id} aria-selected={tab===id} aria-controls="operator-panel" onClick={()=>navigate('/operator'+suffix)}>{label}</button>)}</div>
      <div className="pt-tabpanel" role="tabpanel" id="operator-panel" aria-labelledby={'op-tab-'+tab}>
-      {tab==='context'&&<InformationTab ws={ws} locked={!!state}/>}
+      {tab==='context'&&<InformationTab ws={ws} locked={!!state} customer={customer?.label??''}/>}
       {tab==='draft'&&<ReviewTab ws={ws} state={state}/>}
       {tab==='progress'&&<ProgressTab state={state} work={work} repos={repos}/>}
       {/* Integrator tools only for a published customer: nothing here can publish around Dream Day. */}

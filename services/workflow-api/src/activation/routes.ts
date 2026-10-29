@@ -3,6 +3,7 @@ import type { ActivationStore, Principal } from './store.ts';
 import type { CustomerContext, ActivationPlan, ProgressUpdate, BlockerUpdate } from '../../../../contracts/activation/v1/types.ts';
 import type {HandoffService} from './handoff/service.ts';
 import {developerState} from './handoff/project.ts';
+import {uploadDocument} from './document/upload.ts';
 import type {WorkService} from './handoff/work.ts';
 import type {AikaService} from './handoff/aika.ts';
 import type {RepositoryService} from './repository.ts';
@@ -20,7 +21,7 @@ export type ActivationOptions={handoff?:HandoffService;isOperator?:(request:Inco
   /** Phase 8: onboarding insights computed from stored records. */
   insights?:InsightsService;prepareGitHub?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>;store:ActivationStore; authorize:(request:IncomingMessage,customerId:string)=>Principal|null; reportProgress?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; reportBlocker?:(principal:Principal,input:unknown)=>import('../../../../contracts/activation/v1/state.ts').ActivationState; intake?:(principal:Principal,input:unknown)=>Promise<import('../../../../contracts/activation/v1/state.ts').ActivationState>; initialPlan?:(principal:Principal,context:CustomerContext)=>ActivationPlan|null};
 export async function activationRoute(request:IncomingMessage,response:ServerResponse,path:string,options:ActivationOptions,readJson:(r:IncomingMessage)=>Promise<unknown>) {
-  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions|aika-capabilities|repository-evidence|repository-inspections|insights)$/.exec(path);
+  const match=/^\/api\/activation\/v1\/customers\/([A-Za-z0-9_-]{1,200})\/(state|progress|blockers|intake|blocker-reports|progress-reports|github-preparations|setup-approvals|handoff|handoff-drafts|handoff-publications|handoff-workspace|handoff-documents|handoff-analyses|handoff-reviews|handoff-submissions|champion-review|champion-reviews|champion-decisions|milestone-work|milestone-updates|milestone-coordination|aika-questions|aika-capabilities|repository-evidence|repository-inspections|insights)$/.exec(path);
   if(!match)return false;
   response.setHeader('Access-Control-Expose-Headers','ETag');
   const send=(status:number,value:unknown)=>{response.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});response.end(JSON.stringify(value));};
@@ -89,6 +90,7 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
       if(route==='GET handoff'){send(200,h.overview(p));return true;}
       if(route==='POST handoff-drafts'){send(201,await h.draft(p,await readJson(request)));return true;}
       if(route==='POST handoff-workspace'){send(200,h.saveWorkspace(p,await readJson(request)));return true;}
+      if(route==='POST handoff-documents'){send(202,await uploadDocument(h,p,request));return true;}
       if(route==='GET handoff-analyses'){send(200,{job:h.analysisStatus(p)});return true;}
       if(route==='POST handoff-analyses'){const r=h.startAnalysis(p,await readJson(request));send(r.duplicate?200:202,r);return true;}
       if(route==='POST handoff-reviews'){send(200,h.saveReview(p,await readJson(request)));return true;}
@@ -131,7 +133,7 @@ export async function activationRoute(request:IncomingMessage,response:ServerRes
     send(request.method==='POST'&&(match[2]==='state'||match[2]==='handoff-publications')?201:200,operator?{...state,...(published?{handoff:published}:{})}:developerState(state,published,champion?{role:'champion',actor}:{role:'developer',actor:viewer.name}));
   } catch(error) {
     const code=error&&typeof error==='object'&&'code' in error?String(error.code):'INTERNAL_ERROR';
-    const statuses:Record<string,number>={NO_APPROVED_PLAN:404,AIKA_CAPABILITY_FORBIDDEN:403,REVIEW_NOT_READY:409,ALREADY_REVIEWED:409,NOT_ASSIGNEE:403,DEVELOPER_IDENTITY_REQUIRED:403,MILESTONE_NOT_READY:409,INVALID_EVIDENCE_REFERENCE:400,AIKA_UNAVAILABLE:503,CHAMPION_APPROVAL_REQUIRED:403,CHAMPION_REQUIRED:403,NOT_UNDER_REVIEW:409,ALREADY_APPROVED:409,COMMENT_REQUIRED:400,ALREADY_PUBLISHED:409,AWAITING_CHAMPION_REVIEW:409,NOT_LATEST_DRAFT:409,REVIEW_INCOMPLETE:400,CONFIDENTIAL_CONTENT:400,FORBIDDEN:403,NOT_FOUND:404,REVISION_CONFLICT:409,IDEMPOTENCY_CONFLICT:409,INVALID_TRANSITION:409,REPLAN_PENDING:409,ADAPTER_UNAVAILABLE:503,INVALID_REQUEST:400,INVALID_EVIDENCE:400,CAPABILITY_UNAVAILABLE:400,UNSUPPORTED_VERSION:400,UNSUPPORTED_MEDIA_TYPE:415,PAYLOAD_TOO_LARGE:413,INVALID_JSON:400};
+    const statuses:Record<string,number>={NO_APPROVED_PLAN:404,AIKA_CAPABILITY_FORBIDDEN:403,REVIEW_NOT_READY:409,ALREADY_REVIEWED:409,NOT_ASSIGNEE:403,DEVELOPER_IDENTITY_REQUIRED:403,MILESTONE_NOT_READY:409,INVALID_EVIDENCE_REFERENCE:400,AIKA_UNAVAILABLE:503,CHAMPION_APPROVAL_REQUIRED:403,CHAMPION_REQUIRED:403,NOT_UNDER_REVIEW:409,ALREADY_APPROVED:409,COMMENT_REQUIRED:400,ALREADY_PUBLISHED:409,AWAITING_CHAMPION_REVIEW:409,NOT_LATEST_DRAFT:409,REVIEW_INCOMPLETE:400,CONFIDENTIAL_CONTENT:400,FORBIDDEN:403,NOT_FOUND:404,REVISION_CONFLICT:409,IDEMPOTENCY_CONFLICT:409,INVALID_TRANSITION:409,REPLAN_PENDING:409,ADAPTER_UNAVAILABLE:503,INVALID_REQUEST:400,PDF_REQUIRED:415,NOT_A_PDF:415,PDF_TOO_LARGE:413,PDF_INVALID:422,PDF_ENCRYPTED:422,PDF_UNREADABLE:422,PDF_NO_TEXT:422,PDF_TIMEOUT:422,PDF_BUSY:503,ANALYSIS_RUNNING:409,INVALID_EVIDENCE:400,CAPABILITY_UNAVAILABLE:400,UNSUPPORTED_VERSION:400,UNSUPPORTED_MEDIA_TYPE:415,PAYLOAD_TOO_LARGE:413,INVALID_JSON:400};
     const details=statuses[code]&&error&&typeof error==='object'&&'details' in error?{details:(error as {details:unknown}).details}:{};
     send(statuses[code]??500,{error:{code:statuses[code]?code:'INTERNAL_ERROR',...details}});
   }
